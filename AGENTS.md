@@ -25,6 +25,7 @@ Test mit Meldung.
 | `mypy` | Typen im ganzen Paket | `mypy --python-executable "$(which python)"` |
 | `bandit` | Sicherheitsscan, nur neue Hinweise zählen | `bandit -q -r aquaticy -ll -ii -b tools/bandit-baseline.json` |
 | `ui-js` | JavaScript der Oberfläche | siehe `tools/pruefung.py` |
+| `worker` | Cloudflare-Worker: `erzeugt.js` aktuell, Worker-Tests | `cd worker && npm test` |
 | `pytest` | alle Tests, auch der Rundgang im Browser | `python -m pytest -q` |
 
 Kein Schritt braucht Netz, Modell oder API-Schlüssel. Die Tests arbeiten mit
@@ -50,6 +51,8 @@ Vor jedem Commit: `python tools/pruefung.py` muss mit 0 enden.
 - `tests/` – je Fassung eine Datei (`test_v1122.py` für 11.2.2), dazu Dateien je Thema.
   `tests/ollama_nachbau.py` ist ein nachgebautes Ollama: Damit lassen sich lokale Modelle
   (ohne Denk-Modus, ohne Werkzeuge, zu wenig Speicher) ohne echtes Ollama prüfen.
+- `worker/` – die Cloudflare-Fassung (JavaScript, `worker/README.md`). `worker/src/erzeugt.js`
+  kommt aus `tools/worker_bauen.py` und wird nie von Hand geändert.
 - `tools/` – `pruefung.py` (Prüfkette), `rundgang.py` (Oberfläche im Browser),
   `bandit-baseline.json` (geprüfte, bekannte Hinweise), Benchmarks.
 

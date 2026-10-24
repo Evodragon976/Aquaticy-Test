@@ -23,6 +23,12 @@ $ aquaticy
 > davon nur die, die sonntags offen haben
 ```
 
+> **Cloudflare-Fassung:** Dieses Repo läuft auch als Cloudflare Worker – ohne Server,
+> ohne Datenbank und ohne Setup. Repo im Cloudflare-Dashboard verbinden oder
+> `npx wrangler deploy` ausführen, fertig. Mehr in [`worker/README.md`](worker/README.md).
+>
+> [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Evodragon976/Aquaticy-Test)
+
 ---
 
 ## Inhalt

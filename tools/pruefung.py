@@ -14,6 +14,8 @@ Schritte:
 * ``bandit``  -- Sicherheitsscan. Bekannte, gepruefte Hinweise stehen in
   ``tools/bandit-baseline.json``; nur NEUE zaehlen als Fehler.
 * ``ui-js``   -- das JavaScript der Oberflaeche (``node --check``)
+* ``worker``  -- der Cloudflare-Worker: ``worker/src/erzeugt.js`` aktuell
+  (``tools/worker_bauen.py --pruefen``) und seine Tests (``node --test``)
 * ``pytest``  -- die Testsuite, einschliesslich Rundgang im Browser
 
 Kein Schritt braucht Netz, Modell oder Schluessel. Fehlt ein Werkzeug, wird
@@ -39,7 +41,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SCHRITTE = ("ruff", "mypy", "bandit", "ui-js", "pytest")
+SCHRITTE = ("ruff", "mypy", "bandit", "ui-js", "worker", "pytest")
 #: So viele Zeilen der Ausgabe stehen bei einem Fehler im Bericht.
 AUSZUG = 40
 
@@ -69,10 +71,11 @@ def _werkzeug(name: str) -> list[str] | None:
     return [pfad] if pfad else None
 
 
-def _lauf(schritt: str, befehl: list[str], timeout: float = 3600) -> tuple[int, str, float]:
+def _lauf(schritt: str, befehl: list[str], timeout: float = 3600,
+          cwd: Path = REPO) -> tuple[int, str, float]:
     start = time.monotonic()
     try:
-        fertig = subprocess.run(befehl, cwd=REPO, capture_output=True, text=True,
+        fertig = subprocess.run(befehl, cwd=cwd, capture_output=True, text=True,
                                 timeout=timeout, check=False)
     except subprocess.TimeoutExpired as exc:
         ausgabe = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
@@ -151,6 +154,28 @@ def ui_js() -> Ergebnis:
                     else "Syntaxfehler im JavaScript", [] if code == 0 else _auszug(text))
 
 
+def worker() -> Ergebnis:
+    befehl = [sys.executable, str(REPO / "tools" / "worker_bauen.py"), "--pruefen"]
+    code, text, dauer = _lauf("worker", befehl)
+    if code != 0:
+        return Ergebnis("worker", "fehler", round(dauer, 1), " ".join(befehl),
+                        "worker/src/erzeugt.js ist veraltet", _auszug(text))
+    node = shutil.which("node")
+    if node is None:
+        return Ergebnis("worker", "uebersprungen", round(dauer, 1),
+                        zusammenfassung="node ist nicht installiert")
+    tests = sorted(str(p.relative_to(REPO / "worker"))
+                   for p in (REPO / "worker" / "test").glob("*.test.js"))
+    befehl = [node, "--import", "./test/register.mjs", "--test", *tests]
+    code, text, zweite = _lauf("worker", befehl, cwd=REPO / "worker")
+    zahl = re.search(r"^# pass (\d+)", text, re.M)
+    return Ergebnis("worker", "ok" if code == 0 else "fehler", round(dauer + zweite, 1),
+                    "node --test worker/test",
+                    f"erzeugt.js aktuell, {zahl.group(1) if zahl else '?'} Tests bestanden"
+                    if code == 0 else "Worker-Tests fehlgeschlagen",
+                    [] if code == 0 else _auszug(text))
+
+
 def _junit(pfad: Path) -> tuple[dict[str, int], list[dict[str, str]]]:
     zahlen = {"tests": 0, "fehlschlaege": 0, "fehler": 0, "uebersprungen": 0}
     liste: list[dict[str, str]] = []
@@ -216,7 +241,8 @@ def main(argv: list[str] | None = None) -> int:
         if schritt == "pytest":
             ergebnis = pytest(args.tests)
         else:
-            ergebnis = {"ruff": ruff, "mypy": mypy, "bandit": bandit, "ui-js": ui_js}[schritt]()
+            ergebnis = {"ruff": ruff, "mypy": mypy, "bandit": bandit, "ui-js": ui_js,
+                        "worker": worker}[schritt]()
         ergebnisse.append(ergebnis)
         zeichen = {"ok": "✓", "fehler": "✗", "uebersprungen": "–"}[ergebnis.status]
         print(f"  {zeichen} {schritt}: {ergebnis.zusammenfassung} ({ergebnis.dauer_s} s)")

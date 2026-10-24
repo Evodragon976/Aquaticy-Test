@@ -13,3 +13,7 @@ sessions/
 exports/*
 !exports/.gitkeep
 uv.lock
+
+# Cloudflare-Worker (worker/)
+.wrangler/
+worker/node_modules/

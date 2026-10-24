@@ -1,0 +1,34 @@
+# Aquaticy als Cloudflare-Worker -- ohne Setup (worker/README.md).
+#
+# Cloudflare findet diese Datei von selbst: im Dashboard "Workers & Pages -> Create ->
+# Import a repository" dieses Repo waehlen (oder den Knopf "Deploy to Cloudflare" im
+# README). Gebaut wird nichts: Python, tools/worker_bauen.py und npm install sind dafuer
+# nicht noetig -- alles, was der Worker braucht, liegt fertig im Repo.
+#
+# Lokal:   npx wrangler dev
+# Online:  npx wrangler deploy
+# Freiwillig (nie in diese Datei, nur als Secret):
+#   npx wrangler secret put MISTRAL_API_KEY      # Antworten mit Sprachmodell
+#   npx wrangler secret put NVIDIA_NIM_API_KEY   # dasselbe ueber NVIDIA
+#   npx wrangler secret put BRAVE_API_KEY        # Websuche
+name = "aquaticy"
+main = "worker/src/index.js"
+compatibility_date = "2026-07-01"
+workers_dev = true
+
+# Die Oberflaeche und die Bilder sind dieselben Dateien wie in der App -- eingebunden.
+rules = [
+  { type = "Text", globs = ["**/*.html"], fallthrough = false },
+  { type = "Data", globs = ["**/*.png"], fallthrough = false },
+]
+
+# Hoechstens 20 Fragen je Minute und Verbindung: schuetzt die KI-Schluessel vor
+# Dauerfeuer. Keine Datenbank -- Cloudflare zaehlt nur kurz im Speicher mit.
+[[ratelimits]]
+name = "BEGRENZER"
+namespace_id = "4404"
+simple = { limit = 20, period = 60 }
+
+# Keine Protokolle mit Fragen darin: Workers Logs bleiben aus.
+[observability]
+enabled = false

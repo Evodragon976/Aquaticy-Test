@@ -631,6 +631,11 @@ body:not(.code-mode) .only-code{display:none}
 body.code-mode .only-normal{display:none}
 body.pro-mode .only-standard{display:none}
 body:not(.pro-mode) .only-pro{display:none}
+/* Cloudflare-Fassung (worker/): was es dort nicht gibt, ist nicht zu sehen. */
+body.worker #modes, body.worker #btn-coworker, body.worker #btn-settings, body.worker #clip,
+body.worker .side-search, body.worker .side-title, body.worker #recents,
+body.worker #btn-model .caret, body.worker .only-pro, body.worker .only-code{display:none !important}
+body.worker #btn-model{pointer-events:none}
 .pro-hinweis{color:var(--text-2);font-weight:500;margin-top:2px}
 .picker-effort{padding:11px 16px;border-top:1px solid var(--line)}
 .eff-head{font-size:calc(13px * var(--fs))}
@@ -2988,6 +2993,11 @@ const MODI = ["normal", "pro", "code"];
 // seit 9.5.14 vom Server (aquaticy/webview.py) -- mit der Seite ausgeliefert.
 const TEXTE = (typeof window.__AQUATICY_TEXTS__ === "object" && window.__AQUATICY_TEXTS__)
   || { suggestions: {}, greetings: {}, roles: {}, verdicts: {} };
+// Die Cloudflare-Fassung (worker/) hat keinen Speicher: der Verlauf des offenen Chats
+// lebt nur hier in der Seite und geht mit jeder Frage mit (hoechstens zehn Nachrichten).
+const WORKER = window.__AQUATICY_WORKER__ === true;
+let workerVerlauf = [];
+if (WORKER) $("#btn-model").setAttribute("tabindex", "-1");
 const PLATZHALTER = {
   normal: "Frag etwas …",
   pro: "Frag etwas Größeres …",
@@ -4347,6 +4357,7 @@ async function ask(text){
   const attachments = pending;
   pending = []; drawFiles();
   addUser(text, attachments); input.value = ""; input.style.height = "auto"; markiereBefehl();
+  const frageFuerVerlauf = text;
   noteChat(text.trim() || "Angehängte Datei");
   const { steps, bubble } = addBot();
   await verfolge(() => {
@@ -4361,10 +4372,17 @@ async function ask(text){
         // Standardmodus das Nachschlagen still mitgenommen, ohne dass ein
         // Schalter dafuer sichtbar waere.
         online: mode === "code" ? true : online,
+        ...(WORKER ? { lang: sprache, history: workerVerlauf.slice(-10) } : {}),
       }),
       signal: running.signal,
     });
   }, steps, bubble, text);
+  if (WORKER){
+    const antwort = (bubble.innerText || "").trim();
+    workerVerlauf.push({ role: "user", content: frageFuerVerlauf });
+    if (antwort) workerVerlauf.push({ role: "assistant", content: antwort.slice(0, 4000) });
+    workerVerlauf = workerVerlauf.slice(-10);
+  }
 }
 
 // Nach einem Fehler: dieselbe Frage mit einem Klick noch einmal (9.5.32).
@@ -5321,6 +5339,7 @@ async function neuerChat({ leiste = true } = {}){
     return;
   }
   thread.innerHTML = "";
+  workerVerlauf = [];
   document.body.classList.remove("chat-compact", "chat-details-open");
   document.body.classList.add("start");
   greet();
@@ -10322,7 +10341,8 @@ function grussSatz(satz, gruss, name){
 
 function rotateSuggestions(){
   const modus = MODI.includes(mode) ? mode : "normal";
-  const list = sprache === "en" ? VORSCHLAEGE_EN[modus === "code" ? "code" : "normal"]
+  const list = sprache === "en"
+    ? ((TEXTE.suggestions_en || {})[modus] || VORSCHLAEGE_EN[modus === "code" ? "code" : "normal"])
     : (TEXTE.suggestions[modus] || TEXTE.suggestions.normal || []);
   if (!list.length) return;
   const target = modus === "code" ? $("#chips-code") : $("#chips");

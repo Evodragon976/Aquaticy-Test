@@ -1,0 +1,13 @@
+{
+  "name": "aquaticy-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --import ./test/register.mjs --test \"test/*.test.js\"",
+    "dev": "wrangler dev --config ../wrangler.toml",
+    "deploy": "wrangler deploy --config ../wrangler.toml"
+  },
+  "devDependencies": {
+    "wrangler": "4.152.0"
+  }
+}
