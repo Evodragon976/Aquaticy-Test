@@ -264,8 +264,11 @@ test("Jede Frage bekommt eine Antwort -- auch ohne Treffer und ohne Netz", async
 });
 
 test("Gespraech: Witze, Befinden, 'was gibt's neues'", async () => {
-  assert.match(plauderei("erzähl mir einen Witz"), /\?/);
-  assert.match(plauderei("tell me a joke", { sprache: "en" }), /\?/);
+  // Jeder Witz, nicht nur einer: alle Zufallswerte durchgehen
+  for (const z of [0, 0.3, 0.6, 0.99]) {
+    assert.ok(plauderei("erzähl mir einen Witz", { zufall: () => z }).length > 20);
+    assert.ok(plauderei("tell me a joke", { sprache: "en", zufall: () => z }).length > 20);
+  }
   assert.match(plauderei("ich bin so müde"), /Pause/);
   assert.match(plauderei("mir ist traurig"), /0800 111 0 111/);
   assert.equal(plauderei("ich bin Lehrer"), "");
