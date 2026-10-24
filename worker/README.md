@@ -56,6 +56,20 @@ Konten, Gedächtnis, Coworker, virtual machine, Heimnetz und Add-ons brauchen Sp
 einen eigenen Rechner. Dafür gibt es die App (`aquaticy web`). Der Chat lebt nur in der
 geöffneten Seite. Die Einstellungen der Oberfläche liegen in einem Cookie in deinem Browser.
 
+## Sicherheit und Grenzen
+
+- **Webseiten** liest der Worker mit den Regeln der App (`netguard.py`): nur öffentliche
+  Ziele, jeder Name wird per DNS-over-HTTPS geprüft, auch vor jeder Weiterleitung;
+  höchstens 1,5 MB.
+- **Oberfläche** mit derselben Content-Security-Policy (Nonce) wie die App. Schlüssel gehen
+  nie an den Browser. Höchstens 20 Fragen je Minute und Verbindung, Anfragen höchstens 64 KB.
+- Der Verlauf kommt aus dem Browser. Wer ihn fälscht, ändert nur den eigenen Zusammenhang;
+  der Prüfer sieht ihn mit.
+- Eine Seite aus der Frage wird vor der Rechtsprüfung gelesen. Das Modell schreibt aber erst
+  nach einem klaren „zulässig“.
+- Die Tagesschau erlaubt 60 Abrufe je Stunde. Der Worker hält Antworten dafür fünf Minuten im
+  Zwischenspeicher von Cloudflare; einen gemeinsamen Zähler gibt es ohne Speicher nicht.
+
 ## Für Entwickler
 
 - `worker/src/` – der Worker. `index.js` ist der Einstieg, `server.js` die Weiche,
