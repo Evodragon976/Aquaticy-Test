@@ -13,7 +13,8 @@ import ICON32 from "../../aquaticy/static/favicon-32.png";
 import ICON64 from "../../aquaticy/static/favicon-64.png";
 import LOGO from "../../aquaticy/static/logo.png";
 import { DATEN } from "./erzeugt.js";
-import { festeAntwort, nichtsGefunden, webseiteAntwort, wissenSuchen } from "./antworten.js";
+import { festeAntwort, folgefrageAufloesen, nichtsGefunden, webseiteAntwort, wissenSuchen }
+  from "./antworten.js";
 import { absage, anbieter, antworte, pruefe } from "./ki.js";
 import { RECHTLICHES } from "./rechtliches.js";
 
@@ -61,11 +62,14 @@ const VORSCHLAEGE = {
     "Was ist ein schwarzes Loch?", "Wann ist Ostern?", "100 Euro in Dollar",
     "Wer war Marie Curie?", "Was sind 15 % von 240?", "Wie hoch ist die Zugspitze?",
     "Nachrichten über Sport", "Welcher Tag ist heute?", "Wie funktioniert eine Wärmepumpe?",
-    "Wann ist der nächste Feiertag?"],
+    "Wann ist der nächste Feiertag?", "Wie viele Tage bis Weihnachten?", "100 km in Meilen",
+    "Wie spät ist es in Tokio?", "Was heißt Schmetterling auf Englisch?", "Erzähl mir einen Fun Fact",
+    "Wann geht heute die Sonne unter?"],
   en: ["What's the weather like this weekend?", "What's the latest news?",
     "What is a black hole?", "When is Easter?", "100 euros in dollars", "Who was Marie Curie?",
     "What is 15 % of 240?", "How tall is Mount Everest?", "What day is it today?",
-    "How does a heat pump work?"],
+    "How does a heat pump work?", "How many days until Christmas?", "100 km in miles",
+    "What time is it in Tokyo?", "Tell me a fun fact"],
 };
 const TEXTE = { ...DATEN.texte,
   suggestions: { normal: VORSCHLAEGE.de, pro: VORSCHLAEGE.de, code: VORSCHLAEGE.de },
@@ -226,21 +230,24 @@ export async function frageBeantworten(daten, env, kontext, senden) {
     senden({ type: "chunk", text: sprache === "en" ? "Write me a question." : "Schreib mir eine Frage." });
     return;
   }
+  // "Wie alt ist er?" nach "Wer ist ...?": fuer die Antwort ohne Modell die ganze Frage.
+  // Das Modell bekommt die Frage, wie sie war -- es sieht den Verlauf selbst.
+  const ganz = folgefrageAufloesen(frage, verlauf);
   // Eine Adresse in der Frage: die Seite lesen (Regeln wie netguard, robots.txt).
-  const seite = await webseiteAntwort(frage, k);
+  const seite = await webseiteAntwort(ganz, k);
   if (seite?.schritt) senden(seite.schritt);
   if (seite && !seite.material) {
     senden({ type: "chunk", text: seite.text });
     return;
   }
-  const fest = seite ? null : await festeAntwort(frage, k);
+  const fest = seite ? null : await festeAntwort(ganz, k);
   if (fest) {
     if (fest.schritt) senden(fest.schritt);
     senden({ type: "chunk", text: fest.text });
     return;
   }
   // Ohne Modell: Wikipedia und Netz. Mit Modell dienen sie als Material fuer die Antwort.
-  const wissen = seite || await wissenSuchen(frage, sprache, k);
+  const wissen = seite || await wissenSuchen(ganz, sprache, k);
   if (!seite && wissen.schritt) senden(wissen.schritt);
   // Mit Schluessel: erst pruefen, dann das Modell antworten lassen.
   for (const a of anbieter(env)) {
@@ -326,14 +333,27 @@ function hilfe(en) {
       + "- Knowledge: *What is a black hole?*, *How tall is Mount Everest?*\n"
       + "- Weather: *weather in Hamburg tomorrow*\n- News: *latest news*, *news about sport*\n"
       + "- Exchange rates: *100 euros in dollars*\n- Holidays: *When is Easter?*\n"
-      + "- Maths: *15 % of 240*, *square root of 2*\n- Read a page: paste an https:// address\n\n"
+      + "- Maths: *15 % of 240*, *square root of 2*, *sin 30*\n"
+      + "- Units: *100 km in miles*, *30 degrees in fahrenheit*\n"
+      + "- Dates: *How many days until Christmas?*, *What day was 9 Nov 1989?*\n"
+      + "- World time and sun: *time in Tokyo*, *sunset in London*\n"
+      + "- Translate: *translate cat to German*\n- Fun: *roll a die*, *tell me a joke*, *fun fact*\n"
+      + "- Follow-ups work: *Who is …?* then *How old is he?*\n"
+      + "- Read a page: paste an `https://` address\n\n"
       + "Commands: /help, /clear (new chat)."
     : "**Frag einfach** – in deinen Worten, Tippfehler sind kein Problem. Zum Beispiel:\n\n"
       + "- Wissen: *Was ist ein schwarzes Loch?*, *Wie hoch ist die Zugspitze?*\n"
       + "- Wetter: *Wetter morgen in Hamburg*\n- Nachrichten: *Was gibt es Neues?*, "
       + "*Nachrichten über Sport*\n- Kurse: *100 Euro in Dollar*\n"
-      + "- Feiertage: *Wann ist Ostern?*\n- Rechnen: *15 % von 240*, *Wurzel aus 2*\n"
-      + "- Seite lesen: eine https://-Adresse einfügen\n\nBefehle: /help, /clear (neuer Chat).";
+      + "- Feiertage: *Wann ist Ostern?*\n- Rechnen: *15 % von 240*, *Wurzel aus 2*, *sin 30*\n"
+      + "- Prozente und MwSt: *200 plus 19 %*, *119 € brutto in netto*\n"
+      + "- Einheiten: *100 km in Meilen*, *30 Grad in Fahrenheit*\n"
+      + "- Daten: *Wie viele Tage bis Weihnachten?*, *Welcher Wochentag war der 9.11.1989?*\n"
+      + "- Weltzeit und Sonne: *Wie spät ist es in Tokio?*, *Sonnenuntergang in Hamburg*\n"
+      + "- Übersetzen: *Was heißt Hund auf Englisch?*\n"
+      + "- Zum Spaß: *Würfel*, *Erzähl mir einen Witz*, *Fun Fact*\n"
+      + "- Folgefragen gehen: erst *Wer ist …?*, dann *Wie alt ist er?*\n"
+      + "- Seite lesen: eine `https://`-Adresse einfügen\n\nBefehle: /help, /clear (neuer Chat).";
 }
 
 // -- Weiche ---------------------------------------------------------------------

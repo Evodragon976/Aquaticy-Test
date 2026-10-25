@@ -9,8 +9,11 @@ import { DATEN } from "./erzeugt.js";
 import * as dienste from "./dienste.js";
 import { erlaubteFehler, abstand, falten, musterFalten, woerter, woerterAusMuster,
   Wortschatz } from "./sprache.js";
-import { ABSCHLUSS, EINSTIEG, besterSatz, eine, kernSaetze, saetze } from "./stil.js";
+import { ABSCHLUSS, EINSTIEG, besterSatz, eine, inhaltsWoerter, kernSaetze, saetze }
+  from "./stil.js";
 import { seiteAbrufen } from "./abruf.js";
+import { datumAntwort, einheitenAntwort, gespraechMehr, prozentAntwort, sonneAntwort,
+  uebersetzenAntwort, weltzeitAntwort, zufallAntwort } from "./mehr.js";
 
 // -- Feste Antworten ----------------------------------------------------------
 // Was die App kann, kann diese Fassung nur zum Teil. Diese Arten bekommen deshalb
@@ -238,6 +241,8 @@ function gespraech(text, sprache, zufall) {
     const m = /^(?:ich\s+bin|mir\s+ist|bin|i\s+am|i'm|im)\s+(?:so\s+|sehr\s+|total\s+|echt\s+|voll\s+|ziemlich\s+)?(.{2,30})$/.exec(kern);
     const treffer = m && BEFINDEN.find(([muster]) => muster.test(m[1]));
     if (treffer) return { art: "befinden", text: treffer[1][sprache === "en" ? 1 : 0] };
+    const mehr = gespraechMehr(kern, sprache, zufall);
+    if (mehr) return { art: "gespraech", text: mehr };
   }
   return null;
 }
@@ -277,13 +282,23 @@ const RECHEN_VORN = /^(?:was\s+(?:ist|ergibt|gibt|sind|macht)|wie\s*viel\s+(?:is
 
 /** Ein Rechenausdruck aus normalem Text -- oder "" wenn es keiner ist. */
 export function rechenAusdruck(text) {
-  let t = falten(text).trim().replace(/[?!=]+\s*$/, "").trim();
+  // "!" am Ende bleibt, wenn es direkt an einer Zahl haengt: "5!" ist die Fakultaet
+  let t = falten(text).trim().replace(/(?:[?=]|(?<!\d)!)+\s*$/, "").trim();
   t = t.replace(RECHEN_VORN, "");
   // "15 % von 80": eigenes Zeichen, damit die Antwort es wieder so zeigen kann
   t = t.replace(/(\d+(?:[.,]\d+)?)\s*(?:%|prozent|percent)\s*(?:von|of)\s*(\d+(?:[.,]\d+)?)/g,
     "$1%$2");
   t = t.replace(/(?:quadrat)?wurzel\s+(?:aus|von)\s+(\d+(?:[.,]\d+)?)|square\s+root\s+of\s+(\d+(?:[.,]\d+)?)|sqrt\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?|√\s*(\d+(?:[.,]\d+)?)/g,
     (_, a, b, c, d) => `sqrt(${a || b || c || d})`);
+  // Funktionen und Konstanten: "sinus von 30", "log 100", "pi mal 2", "5 fakultaet"
+  t = t
+    .replace(/\b(?:sinus|sin)\s*(?:von|of)?\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?(?:\s*grad)?/g, "sin($1)")
+    .replace(/\b(?:kosinus|cosinus|cos)\s*(?:von|of)?\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?(?:\s*grad)?/g, "cos($1)")
+    .replace(/\b(?:tangens|tan)\s*(?:von|of)?\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?(?:\s*grad)?/g, "tan($1)")
+    .replace(/\b(?:logarithmus|log|lg)\s*(?:von|of)?\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?/g, "log($1)")
+    .replace(/\b(?:ln|natuerlicher\s+logarithmus)\s*(?:von|of)?\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?/g, "ln($1)")
+    .replace(/\b(?:fakultaet\s+von|factorial\s+of)\s+(\d+)|\b(\d+)\s+fakultaet\b/g, (_, a, b) => `${a || b}!`)
+    .replace(/π|\bpi\b/g, "pi");
   t = t
     .replace(/\bgeteilt\s+durch\b|\bdurch\b|\bdivided\s+by\b|÷|\s:\s/g, "/")
     .replace(/\bmal\b|\btimes\b|\bmultipliziert\s+mit\b|×|\bx\b/g, "*")
@@ -293,12 +308,16 @@ export function rechenAusdruck(text) {
   // Dezimalkomma: "3,5" -> "3.5"; Tausenderpunkte ("1.000") nur ohne weitere Stellen
   t = t.replace(/(\d)\.(\d{3})(?!\d)/g, "$1$2").replace(/(\d),(\d)/g, "$1.$2");
   t = t.replace(/\s+/g, "");
-  if (!/^[\d.+\-*/^()%sqrt]+$/.test(t) || !/\d/.test(t)) return "";
-  if (!/[+\-*/^%]|sqrt/.test(t.replace(/^-/, ""))) return "";
+  const ohneNamen = t.replace(/sqrt|sin|cos|tan|log|ln|pi/g, "");
+  if (!/^[\d.+\-*/^()%!]+$/.test(ohneNamen) || !/\d|pi/.test(t)) return "";
+  if (!/[+\-*/^%!]|sqrt|sin|cos|tan|log|ln/.test(t.replace(/^-/, ""))) return "";
   return t;
 }
 
-/** Rechnet einen Ausdruck aus + - * / ^ ( ) und sqrt() -- ohne eval. */
+/** Winkelfunktionen: 0,49999999999999994 ist gemeint als 0,5. */
+const runde = (x) => Math.round(x * 1e12) / 1e12;
+
+/** Rechnet + - * / ^ ! ( ), sqrt, sin/cos/tan (Grad), log, ln und pi -- ohne eval. */
 export function rechne(ausdruck) {
   let i = 0;
   const s = ausdruck;
@@ -312,11 +331,20 @@ export function rechne(ausdruck) {
   function faktor() {
     if (s[i] === "-") { i++; return -faktor(); }
     if (s[i] === "+") { i++; return faktor(); }
-    if (s.startsWith("sqrt", i)) {
-      i += 4;
+    const name = /^(sqrt|sin|cos|tan|log|ln|pi)/.exec(s.slice(i));
+    if (name) {
+      i += name[1].length;
+      if (name[1] === "pi") return Math.PI;
       const w = faktor();
-      if (w < 0) fehler();
-      return Math.sqrt(w);
+      const bogen = (w * Math.PI) / 180;   // Winkel in Grad, wie man sie meist meint
+      switch (name[1]) {
+        case "sqrt": if (w < 0) fehler(); return Math.sqrt(w);
+        case "sin": return runde(Math.sin(bogen));
+        case "cos": return runde(Math.cos(bogen));
+        case "tan": if (Math.abs(((w % 180) + 180) % 180 - 90) < 1e-9) fehler(); return runde(Math.tan(bogen));
+        case "log": if (w <= 0) fehler(); return Math.log10(w);
+        default: if (w <= 0) fehler(); return Math.log(w);
+      }
     }
     if (s[i] === "(") {
       i++;
@@ -328,7 +356,14 @@ export function rechne(ausdruck) {
     return zahlLesen();
   }
   function potenz() {
-    const basis = faktor();
+    let basis = faktor();
+    while (s[i] === "!") {
+      i++;
+      if (!Number.isInteger(basis) || basis < 0 || basis > 170) fehler();
+      let f = 1;
+      for (let n = 2; n <= basis; n++) f *= n;
+      basis = f;
+    }
     if (s[i] === "^") { i++; return basis ** potenz(); }
     return basis;
   }
@@ -365,7 +400,7 @@ function rechenAntwort(text, sprache) {
     const schoen = ausdruck.replace(/\./g, sprache === "en" ? "." : ",")
       .replace(/\*/g, " × ").replace(/\//g, " : ").replace(/\+/g, " + ")
       .replace(/(?<=\d|\))-/g, " − ").replace(/\^/g, " ^ ")
-      .replace(/%/g, sp(sprache, " % von ", " % of "));
+      .replace(/%/g, sp(sprache, " % von ", " % of ")).replace(/pi/g, "π").replace(/sqrt/g, "√");
     const satz = eine(sp(sprache, ["Das ergibt", "Das macht", "Ergebnis:", "Gerechnet:"],
       ["That's", "The result is", "That makes"]), `rechnen:${sprache}`);
     return { text: `${satz} **${ergebnis}**${satz.endsWith(":") ? "" : "."}\n\n`
@@ -798,6 +833,84 @@ async function nachrichtenAntwort(text, w, kern, sprache, kontext) {
 const WISSEN_VORN = /^(?:(?:und\s+)?(?:was|wer|wo|wann|wie|welche[rs]?|warum|wieso|weshalb)\s+(?:ist|sind|war|waren|wurde|liegt|liegen|lebt|lebte|bedeutet|heisst|macht|hat|gibt\s+es)|was\s+weisst\s+du\s+(?:ueber|von)|erzaehl(?:e)?\s+(?:mir\s+)?(?:etwas\s+|was\s+)?(?:ueber|von)|erklaer(?:e)?(?:\s+mir)?|infos?\s+(?:zu|ueber)|wie\s+(?:hoch|gross|alt|lang|schwer|tief|weit|breit)\s+(?:ist|sind|war)|wie\s+funktionier(?:t|en)|wie\s+viele\s+einwohner\s+(?:hat|haben)|was\s+versteht\s+man\s+unter|definition(?:\s+von)?|what\s+(?:is|are|was|were)|who\s+(?:is|are|was|were)|where\s+is|tell\s+me\s+about|explain|how\s+does|how\s+do)\s+/;
 const ARTIKEL = /^(?:der|die|das|ein|eine|einen|den|dem|des|the|a|an)\s+/i;
 
+/** Passt ein Artikeltitel zum Thema der Frage? Ein gemeinsames Wort (oder fast) genuegt. */
+export function passtZu(thema) {
+  const gesucht = inhaltsWoerter(thema);
+  return (titel) => {
+    if (!gesucht.length) return true;
+    const im = inhaltsWoerter(String(titel).replace(/\([^)]*\)/g, " "));
+    return gesucht.some((a) => im.some((b) => a === b
+      || (a.length >= 5 && b.length >= 5 && a.slice(0, 5) === b.slice(0, 5))
+      || (Math.min(a.length, b.length) >= 6 && abstand(a, b, 2) <= 2)));
+  };
+}
+
+// -- Folgefragen ----------------------------------------------------------------
+const PRONOMEN = /\b(er|sie|ihn|ihm|he|she|him)\b/i;
+const DORT = /\b(dort|dorthin|da\s+drueben|there)\b/i;
+const TAGWORT = /^(?:heute|morgen|uebermorgen|am\s+wochenende|naechste\s+woche|diese\s+woche|am\s+(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)|today|tomorrow|(?:on\s+the\s+)?weekend|next\s+week)$/;
+
+function wetterFrage(text) {
+  const kern = normalisieren(WORTSCHATZ.verbessern(text));
+  return Boolean(enthaelt(woerter(kern), STICH.wetter)) || /wie\s+(?:warm|kalt)/.test(kern);
+}
+
+/** Eine Folgefrage mit der Frage davor zu einer ganzen Frage machen. */
+function aufloesen(text, vorher) {
+  const roh = String(text || "").trim().replace(/[?!.]+$/, "");
+  const vorspann = Boolean(WISSEN_VORN.exec(falten(String(vorher).trim().replace(/[?!.]+$/, ""))));
+  const wetter = wetterFrage(vorher);
+  const m = /^(?:und|aber|and|what\s+about|how\s+about)\s+(?:(?:was|wie)\s+ist\s+(?:es\s+)?mit\s+)?(.+)$/iu.exec(roh)
+    || /^(?:was\s+ist\s+mit|wie\s+sieht\s+es\s+(?:mit|in)|what\s+about)\s+(.+?)(?:\s+aus)?$/iu.exec(roh);
+  if (m && roh.split(/\s+/).length <= 7) {
+    const rest = m[1].trim();
+    if (wetter) {
+      const ort = ortAus(vorher);
+      if (TAGWORT.test(falten(rest))) return ort ? `Wetter ${rest} in ${ort}` : `Wetter ${rest}`;
+      if (ort && DORT.test(rest)) return `Wetter ${rest.replace(DORT, () => `in ${ort}`)}`;
+      const tag = /\b(heute|morgen|übermorgen|uebermorgen|am\s+wochenende|today|tomorrow)\b/iu
+        .exec(vorher);
+      return `Wetter ${tag ? `${tag[1]} ` : ""}in ${rest.replace(/^(?:in|im|für|fuer|bei)\s+/iu, "")}`;
+    }
+    if (vorspann) {
+      const thema = themaAus(vorher);
+      const vonTeil = /^.*\b(?:von|vom|der|des|of)\s+(.+)$/iu.exec(thema);
+      const alt = vonTeil ? vonTeil[1] : thema;
+      const neu = rest.replace(ARTIKEL, "").replace(/^(?:in|von|of)\s+/iu, "");
+      if (alt && String(vorher).includes(alt)) {
+        return String(vorher).replace(/[?!.]+$/, "").replace(alt, () => neu);
+      }
+    }
+    return text;
+  }
+  if (roh.split(/\s+/).length <= 8) {
+    if (wetter && DORT.test(roh)) {
+      const ort = ortAus(vorher);
+      if (ort) return roh.replace(DORT, () => `in ${ort}`);
+    }
+    if (vorspann && PRONOMEN.test(roh)) {
+      const thema = themaAus(vorher);
+      if (thema && thema.split(/\s+/).length <= 5) return roh.replace(PRONOMEN, () => thema);
+    }
+  }
+  return text;
+}
+
+/**
+ * Folgefragen aufloesen: "Wie alt ist er?" nach "Wer ist Olaf Scholz?" wird zu
+ * "Wie alt ist Olaf Scholz?", "und morgen?" nach einer Wetterfrage zur Wetterfrage fuer
+ * morgen. Der Verlauf kommt aus der Seite; nur die Fragen des Nutzers zaehlen.
+ */
+export function folgefrageAufloesen(text, verlauf = []) {
+  const fragen = (Array.isArray(verlauf) ? verlauf : [])
+    .filter((e) => e && e.role === "user" && typeof e.content === "string")
+    .map((e) => e.content).slice(-5);
+  if (!fragen.length) return text;
+  let vorher = fragen[0];
+  for (const f of fragen.slice(1)) vorher = aufloesen(f, vorher);
+  return aufloesen(text, vorher);
+}
+
 /** Das Thema einer Wissensfrage, im Original geschrieben ("Was ist der Eiffelturm?"). */
 export function themaAus(text) {
   const original = String(text || "").trim().replace(/[?!.]+$/, "").trim();
@@ -820,7 +933,14 @@ async function wissenAntwort(text, sprache, kontext) {
   const thema = themaAus(text);
   if (!/[\p{L}\p{N}]/u.test(thema)) return null;
   const schritt = { type: "search", query: `Wikipedia: ${thema}` };
-  const artikel = await dienste.wikipedia(thema, sprache, kontext.holen);
+  const passt = passtZu(thema);
+  let artikel = await dienste.wikipedia(thema, sprache, kontext.holen, passt);
+  if (!artikel?.passend) {
+    // Nichts Passendes: in der anderen Wikipedia nachsehen (Namen, Fachbegriffe)
+    const andere = await dienste.wikipedia(thema, sprache === "en" ? "de" : "en", kontext.holen,
+      passt);
+    if (andere?.passend || !artikel) artikel = andere || artikel;
+  }
   if (!artikel) return { schritt, text: "" };
   const einleitung = saetze(artikel.text);
   let kern = "";
@@ -838,6 +958,13 @@ async function wissenAntwort(text, sprache, kontext) {
   const teile = kern
     ? [kern, "", sp(sprache, `Etwas mehr dazu: ${rest}`, `A bit more context: ${rest}`)]
     : [eine(EINSTIEG[sprache], `einstieg:${sprache}`) + rest];
+  if (!artikel.passend) {
+    teile.unshift(sp(sprache, `Genau zu „${thema}“ finde ich nichts. Am nächsten kommt **${artikel.titel}**:`,
+      `I can't find “${thema}” exactly. The closest match is **${artikel.titel}**:`), "");
+  } else if (artikel.sprache !== sprache) {
+    teile.push("", sp(sprache, "*(Das steht so nur in der englischen Wikipedia.)*",
+      "*(This is only in the German Wikipedia.)*"));
+  }
   teile.push("", sp(sprache, `Quelle: [Wikipedia: ${artikel.titel}](${artikel.link})`,
     `Source: [Wikipedia: ${artikel.titel}](${artikel.link})`));
   const schluss = eine(ABSCHLUSS[sprache], `abschluss:${sprache}`);
@@ -924,11 +1051,23 @@ export async function festeAntwort(text, kontext) {
   if (kurz) return { text: kurz, art: "plauderei" };
   const kern = normalisieren(WORTSCHATZ.verbessern(text));
   const w = woerter(kern);
-  const rechnung = rechenAntwort(text, sprache);
-  if (rechnung) return { ...rechnung, art: "rechnen" };
+  for (const [art, antwort] of [
+    ["prozent", () => prozentAntwort(text, sprache)],
+    ["einheiten", () => einheitenAntwort(text, sprache)],
+    ["rechnen", () => rechenAntwort(text, sprache)],
+    ["datum", () => datumAntwort(text, sprache, k.jetzt)],
+    ["zufall", () => zufallAntwort(text, sprache, k.zufall)],
+  ]) {
+    const fund = antwort();
+    if (fund) return { ...fund, art };
+  }
+  const weltzeit = await weltzeitAntwort(text, sprache, k);
+  if (weltzeit) return { ...weltzeit, art: "weltzeit" };
   const zeit = zeitAntwort(w, kern, sprache, k);
   if (zeit) return { ...zeit, art: "zeit" };
   for (const [art, schritt] of [
+    ["uebersetzen", () => uebersetzenAntwort(text, sprache, k)],
+    ["sonne", () => sonneAntwort(text, sprache, k)],
     ["wetter", () => wetterAntwort(text, w, kern, sprache, k)],
     ["kurse", () => kursAntwort(w, kern, sprache, k)],
     ["feiertage", () => feiertagAntwort(w, kern, sprache, k)],
@@ -941,8 +1080,9 @@ export async function festeAntwort(text, kontext) {
 }
 
 /** Jede Frage bekommt eine Antwort: feste Regeln, Dienste, Wikipedia, sonst ein ehrliches Nein. */
-export async function beantworte(text, kontext = {}) {
+export async function beantworte(roh, kontext = {}) {
   const sprache = kontext.sprache === "en" ? "en" : "de";
+  const text = folgefrageAufloesen(roh, kontext.verlauf);
   const seite = await webseiteAntwort(text, kontext);
   if (seite) return { ...seite, art: "webseite" };
   const fest = await festeAntwort(text, kontext);

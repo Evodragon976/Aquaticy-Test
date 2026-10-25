@@ -118,6 +118,10 @@ body.collapsed aside{margin-left:-260px}
 .ban-info{background:none;border:0;padding:0 2px;cursor:pointer;color:var(--err);
   font:700 calc(11px * var(--fs))/1.2 inherit;text-decoration:underline;text-underline-offset:2px}
 .ban-info[hidden]{display:none}
+/* Aquaticy-Test: gelbe Plakette "Test Version" unter der Versionsnummer. */
+.test-ver{align-self:stretch;text-align:center;white-space:nowrap;border-radius:999px;
+  padding:2px 9px;font:700 calc(11px * var(--fs))/1.3 var(--sans);color:var(--intern-fg);
+  background:var(--intern-bg);border:1px solid var(--intern-line)}
 .ban-info:focus-visible{outline:2px solid var(--err);outline-offset:2px;border-radius:3px}
 .ban-dot{background:var(--err)!important}
 .ban-facts{margin:10px 0 4px;display:grid;grid-template-columns:auto 1fr;gap:6px 14px;
@@ -1747,6 +1751,8 @@ html.vv,html.vv body{height:var(--app-h)}
     </span>
     <span class="ver-stack">
       <span class="ver" id="version">…</span>
+      <!-- Nur in Aquaticy-Test: gelb unter der Versionsnummer. -->
+      <span class="test-ver" id="test-ver">Test Version</span>
       <!-- Ai-guard (9.5.24): nur sichtbar, wenn das Konto gesperrt ist. -->
       <button type="button" class="ban-info" id="ban-info" hidden
               aria-haspopup="dialog">Info</button>
@@ -5841,6 +5847,7 @@ const EN = {
 "Stell Aquaticy ein, wie du willst. Alles gilt sofort und wird gespeichert.": "Set up Aquaticy how you like. Everything applies right away and is saved.",
 "‹ Zurück": "‹ Back",
 "Testversion. Nicht für jeden Tag gedacht. Hier kann noch etwas nicht gehen.": "Test version. Not meant for every day. Some things may not work yet.",
+"Test Version": "Test version",
 "Pro sucht gründlicher und braucht länger.": "Pro searches more carefully and takes longer.",
 "KI-Konten": "AI accounts",
 "Mit Google": "With Google",

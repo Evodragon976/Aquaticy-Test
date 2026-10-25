@@ -65,8 +65,37 @@ export async function ort(name, sprache = "de", holen = fetch) {
   if (!treffer || typeof treffer.latitude !== "number") return null;
   return {
     name: [treffer.name, treffer.admin1, treffer.country].filter(Boolean).join(", "),
+    kurzname: String(treffer.name || ""),
     breite: treffer.latitude, laenge: treffer.longitude,
+    zeitzone: typeof treffer.timezone === "string" ? treffer.timezone : "",
   };
+}
+
+/** Sonnenaufgang und -untergang der naechsten Tage (Ortszeit, "2026-10-25T07:12"). */
+export async function sonne(platz, holen = fetch) {
+  const daten = await holeJson(adresse(Q.wetter, {
+    latitude: platz.breite, longitude: platz.laenge, daily: "sunrise,sunset",
+    timezone: "auto", forecast_days: 3,
+  }), { cache: 3600, holen });
+  const t = daten?.daily;
+  if (!t?.time) return null;
+  return t.time.map((datum, i) => ({ datum, auf: String(t.sunrise?.[i] || ""),
+    unter: String(t.sunset?.[i] || "") }));
+}
+
+/** Uebersetzt kurzen Text ueber MyMemory (ohne Schluessel). `null`, wenn das nicht ging. */
+export async function uebersetzen(text, von, nach, holen = fetch) {
+  if (!/^[a-z]{2}$/.test(von) || !/^[a-z]{2}$/.test(nach)) return null;
+  const daten = await holeJson(adresse("https://api.mymemory.translated.net/get", {
+    q: kurz(text, 450), langpair: `${von}|${nach}`,
+  }), { cache: 86400, holen });
+  const ergebnis = daten?.responseData?.translatedText;
+  if (Number(daten?.responseStatus) !== 200 || typeof ergebnis !== "string") return null;
+  // MyMemory meldet Grenzen und Fehler als "uebersetzten" Text in Grossbuchstaben
+  if (!ergebnis.trim() || /MYMEMORY WARNING|QUERY LENGTH LIMIT|INVALID LANGUAGE/i.test(ergebnis)) {
+    return null;
+  }
+  return kurz(ergebnis, 600);
 }
 
 export async function wetter(platz, holen = fetch) {
@@ -139,27 +168,38 @@ export async function feiertage(jahr, land = "DE", holen = fetch) {
 }
 
 // -- Wikipedia ----------------------------------------------------------------
-export async function wikipedia(begriff, sprache = "de", holen = fetch) {
+/**
+ * Der beste Wikipedia-Artikel zu *begriff*. Passt kein Titel zum Begriff (siehe `passt`),
+ * kommt der erste brauchbare Artikel mit `passend: false` -- der Aufrufer entscheidet.
+ */
+export async function wikipedia(begriff, sprache = "de", holen = fetch, passt = () => true) {
   const lang = sprache === "en" ? "en" : "de";
   const basis = Q.wikipedia.replace("{sprache}", lang);
   const suche = await holeJson(adresse(`${basis}/w/rest.php/v1/search/page`, {
-    q: kurz(begriff, 200), limit: 3,
+    q: kurz(begriff, 200), limit: 4,
   }), { cache: 3600, holen });
   const seiten = (suche?.pages || []).filter((s) => s && (s.key || s.title));
-  for (const seite of seiten.slice(0, 3)) {
+  let ersatz = null;
+  for (const seite of seiten.slice(0, 4)) {
     const schluessel = String(seite.key || seite.title);
+    const titel = String(seite.title || schluessel);
+    if (ersatz && !passt(titel)) continue;      // nur noch nach einem passenden suchen
     const artikel = await holeJson(
       `${basis}/api/rest_v1/page/summary/${encodeURIComponent(schluessel)}`,
       { cache: 3600, holen });
     if (!artikel || artikel.type === "disambiguation" || !artikel.extract) continue;
-    return {
+    const fund = {
       titel: String(artikel.title || schluessel),
+      beschreibung: kurz(artikel.description, 160),
       text: kurz(artikel.extract, 1500),
       link: sichererLink(artikel.content_urls?.desktop?.page)
         || `${basis}/wiki/${encodeURIComponent(schluessel)}`,
+      sprache: lang,
     };
+    if (passt(fund.titel)) return { ...fund, passend: true };
+    ersatz = ersatz || { ...fund, passend: false };
   }
-  return null;
+  return ersatz;
 }
 
 /** Der ganze Artikel als reiner Text (fuer Detailfragen wie "wie hoch ..."). */

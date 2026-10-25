@@ -54,6 +54,10 @@ test("Startseite: Nonce, CSP, Zustand, Worker-Kennung", async () => {
   assert.ok(html.includes(`<script nonce="${nonce}">window.__AQUATICY_STATE__`));
   assert.ok(html.includes("window.__AQUATICY_WORKER__ = true;"));
   assert.ok(html.includes('<body class="start worker">'));
+  // Aquaticy-Test: gelb "Test Version" unter der Versionsnummer, mit englischer Fassung
+  assert.ok(html.includes('<span class="test-ver" id="test-ver">Test Version</span>'));
+  assert.ok(html.includes('"Test Version": "Test version"'));
+  assert.ok(/\.test-ver\{[^}]*--intern-bg/.test(html));
   assert.equal(antwort.headers.get("X-Frame-Options"), "DENY");
   assert.equal(html.split("<script>").length, 1, "jedes Skript hat seine Nonce");
 });

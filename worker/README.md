@@ -33,6 +33,19 @@ fertig im Repo.
 - **Webseiten lesen**: eine `https://`-Adresse in die Frage schreiben. Dabei gelten dieselben
   Regeln wie in der App: nur öffentliche Adressen, `robots.txt` zählt, keine Anmeldung oder
   Bezahlschranke umgehen.
+- **Prozente und Mehrwertsteuer** („200 plus 19 %“, „119 € brutto in netto“), **Einheiten**
+  (Länge, Gewicht, Temperatur, Volumen, Fläche, Tempo, Zeit, Daten) und Rechnen mit
+  `sin`, `cos`, `log`, `π` und Fakultät.
+- **Daten**: Tage bis Weihnachten, Ostern oder einem Datum, Wochentag eines Datums,
+  Tage seit einem Datum.
+- **Weltzeit** („Wie spät ist es in Tokio?“) und **Sonnenauf- und -untergang**.
+- **Übersetzen** kurzer Texte (MyMemory, maschinell).
+- **Zum Spaß**: Würfel, Münze, Zufallszahl, „Soll ich A oder B?“, Witze, Fun Facts,
+  Mutmacher und Ideen fürs Essen.
+- **Folgefragen**: erst „Wer ist Olaf Scholz?“, dann „Wie alt ist er?“; nach einer
+  Wetterfrage reicht „und morgen?“ oder „und in Berlin?“.
+- Passt kein Wikipedia-Artikel zum Thema, sucht er in der anderen Sprache. Sonst sagt er
+  ehrlich, was am nächsten kommt.
 - Jede Frage bekommt eine Antwort. Findet er nichts, sagt er das ehrlich.
 
 ## Freiwillig: Schlüssel
@@ -75,6 +88,7 @@ geöffneten Seite. Die Einstellungen der Oberfläche liegen in einem Cookie in d
 - `worker/src/` – der Worker. `index.js` ist der Einstieg, `server.js` die Weiche,
   `antworten.js` das Antwortsystem, `sprache.js` die Tippfehler, `stil.js` die
   Formulierungen, `dienste.js` die Datenquellen, `abruf.js` das Lesen von Webseiten,
+  `mehr.js` Prozente, Einheiten, Daten, Weltzeit, Sonne, Zufall und Übersetzen,
   `ki.js` die Sprachmodelle.
 - `worker/src/erzeugt.js` kommt aus dem Python-Paket (feste Antworten, Rechtsrahmen,
   Texte). Nach Änderungen dort: `python tools/worker_bauen.py`.

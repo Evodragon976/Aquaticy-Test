@@ -39,7 +39,12 @@ Aquaticy nutzt sie nur, wenn du nach dem Wetter fragst und keinen Ort nennst. Ge
 wird sie nicht.</li>
 <li><strong>Nachschlagen:</strong> Je nach Frage geht nur der Suchbegriff an einen dieser
 Dienste: Wikipedia (Thema), Open-Meteo (Ortsname), tagesschau.de (Thema),
-frankfurter.dev (Währungen), date.nager.at (Jahr und Land).</li>
+frankfurter.dev (Währungen), date.nager.at (Jahr und Land), DuckDuckGo (Thema),
+MyMemory (der Text, den du übersetzen lässt). Fügst du eine Adresse ein, ruft Aquaticy
+diese Seite ab; den Namen der Seite prüft es dafür bei Cloudflare-DNS.</li>
+<li><strong>Folgefragen:</strong> Damit „Wie alt ist er?“ klappt, schickt die Seite bis zu
+zehn Nachrichten des offenen Chats mit. Aquaticy nutzt sie nur für diese Antwort und
+speichert sie nicht.</li>
 <li><strong>KI-Modell:</strong> Hat der Betreiber einen Schlüssel für Mistral AI (EU) oder
 NVIDIA (USA) hinterlegt, gehen deine Frage und bis zu zehn Nachrichten davor aus dem
 offenen Chat an diesen Anbieter. Das Modell prüft die Frage erst gegen den Rechtsrahmen
@@ -68,7 +73,12 @@ Aquaticy only uses it when you ask about the weather without naming a place. It 
 stored.</li>
 <li><strong>Looking things up:</strong> depending on the question, only the search term goes
 to one of these services: Wikipedia (topic), Open-Meteo (place name), tagesschau.de (topic),
-frankfurter.dev (currencies), date.nager.at (year and country).</li>
+frankfurter.dev (currencies), date.nager.at (year and country), DuckDuckGo (topic), MyMemory
+(the text you ask to translate). If you paste an address, Aquaticy fetches that page and
+checks its name with Cloudflare DNS.</li>
+<li><strong>Follow-up questions:</strong> so that “How old is he?” works, the page sends up to
+ten messages of the open chat along. Aquaticy uses them only for this answer and doesn't
+store them.</li>
 <li><strong>AI model:</strong> if the operator has added a key for Mistral AI (EU) or NVIDIA
 (USA), your question and up to ten earlier messages from the open chat go to that provider.
 The model first checks the question against the legal rules, then answers. Fixed answers
