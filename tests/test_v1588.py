@@ -25,5 +25,16 @@ def test_every_extra_can_be_installed_with_pillow_13() -> None:
     assert not any(d.lower().startswith("term-image") for paket in extras.values() for d in paket)
 
 
+def test_vercelignore_keeps_what_the_wheel_includes() -> None:
+    """hatchling bricht ab, wenn eine force-include-Datei fehlt ("Forced include not found")."""
+    import pathspec
+
+    daten = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    fest = daten["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    regeln = (ROOT / ".vercelignore").read_text(encoding="utf-8").splitlines()
+    spec = pathspec.PathSpec.from_lines("gitwildmatch", regeln)
+    assert fest and not [quelle for quelle in fest if spec.match_file(quelle)]
+
+
 def test_the_readme_explains_vercel() -> None:
     assert "### Vercel" in (ROOT / "README.md").read_text(encoding="utf-8")
