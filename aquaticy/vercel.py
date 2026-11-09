@@ -10,8 +10,8 @@ Anders als am eigenen Rechner:
 * **Anmeldung:** Einzelkonto. Den Einrichtungscode liest niemand im Terminal -- er kommt aus
   ``AQUATICY_ULTRA_CODE`` (Umgebungsvariable bei Vercel, 14 Zeichen). Ohne ihn startet nichts.
 * **Daten:** liegen in /tmp und werden nach jeder Aenderung verschluesselt im privaten
-  Blob-Speicher gesichert (``vercel_blob.py``). Ohne ``AQUATICY_VERCEL_SECRET`` und Blob-Token
-  gibt es keine Sicherung: Beim naechsten Kaltstart ist dann alles weg.
+  Blob-Speicher gesichert (``vercel_blob.py``). Ohne ``AQUATICY_VERCEL_SECRET`` und einen
+  verbundenen Speicher gibt es keine Sicherung: Beim naechsten Kaltstart ist dann alles weg.
 * **Aus:** virtual machine, WhatsApp/Signal, Secure Pro, Coworker-Zeitplan, Werkstatt,
   Plugins, Heimnetz-Dienste, Server-Verbund, lokale Modelle und deren Upgrades. Das braucht
   einen Rechner, der dauerhaft laeuft.
@@ -42,6 +42,8 @@ BLOCKED = ("/api/cluster", "/api/messenger/", "/api/addons/qr", "/api/werkstatt"
 BLOCKED_TEXT = "Das gibt es auf Vercel nicht. Dafür brauchst du Aquaticy auf deinem Rechner."
 HOP_BY_HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade",
               "proxy-connection", "expect"}
+#: Nur fuer den Blob-Speicher -- geht nicht an web.Handler weiter.
+PRIVATE_HEADERS = {"x-vercel-oidc-token"}
 
 _STATE: dict[str, Any] = {"error": "", "web": None, "handler": None, "stand": None}
 _START_LOCK = threading.Lock()
@@ -187,7 +189,7 @@ def _raw_request(environ: dict[str, Any], body: bytes) -> bytes:
         else:
             continue
         wert = str(value)
-        if name.lower() in HOP_BY_HOP or name.lower() == "content-length":
+        if name.lower() in HOP_BY_HOP | PRIVATE_HEADERS or name.lower() == "content-length":
             continue
         if "\r" in wert or "\n" in wert:
             continue
@@ -223,6 +225,11 @@ def save_if_changed() -> None:
 def app(environ: dict[str, Any],
         start_response: Callable[[str, list[tuple[str, str]]], Any]) -> Iterable[bytes]:
     """WSGI-Einstieg fuer Vercel (pyproject: ``[tool.vercel] entrypoint``)."""
+    from aquaticy import vercel_blob
+
+    oidc = str(environ.get("HTTP_X_VERCEL_OIDC_TOKEN") or "").strip()
+    if oidc:
+        vercel_blob.OIDC_TOKEN = oidc
     fehler = start()
     if fehler:
         return _plain(start_response, "503 Service Unavailable", fehler)

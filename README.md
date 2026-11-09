@@ -285,7 +285,7 @@ Pro und Code, Gedächtnis, Notizen und die Modellwahl (`aquaticy/vercel.py`, ein
 |---|---|
 | `AQUATICY_ULTRA_CODE` | Pflicht. Der Einrichtungscode für dein Konto: 14 Zeichen, mit Buchstabe, Ziffer und Sonderzeichen. Ohne ihn startet nichts. |
 | `AQUATICY_VERCEL_SECRET` | Schlüssel für die Sicherung, mindestens 32 Zeichen. Gut aufheben: Ohne ihn lässt sich die Sicherung nicht mehr öffnen. |
-| `BLOB_READ_WRITE_TOKEN` | Kommt von selbst, wenn du deinen **privaten** Blob-Speicher mit dem Projekt verbindest (*Storage → Connect*). Ein anderes Token geht als `AQUATICY_BLOB_TOKEN`. |
+| `BLOB_STORE_ID` | Kommt von selbst, wenn du deinen **privaten** Blob-Speicher mit dem Projekt verbindest (*Storage → Connect*). Aquaticy meldet sich dann wie das Blob-SDK über OIDC an. Ältere Speicher liefern stattdessen `BLOB_READ_WRITE_TOKEN`; ein eigenes Token geht als `AQUATICY_BLOB_TOKEN`. |
 | `NVIDIA_NIM_API_KEY` oder `MISTRAL_API_KEY` | Das Sprachmodell. Die Schlüssel kannst du auch später in den Einstellungen eintragen. |
 
 Danach öffnest du die Seite, legst mit dem Einrichtungscode dein Konto an und meldest dich an.
@@ -299,7 +299,8 @@ Steht `AQUATICY_MODEL` bei Vercel, gilt immer dieses Modell.
 
 **Deine Daten.** Eine Vercel-Funktion vergisst alles beim nächsten Kaltstart. Deshalb sichert
 Aquaticy seinen Datenordner nach jeder Änderung verschlüsselt im privaten Blob-Speicher. Beim
-Start holt es ihn zurück. Ohne `AQUATICY_VERCEL_SECRET` und Token gibt es keine Sicherung.
+Start holt es ihn zurück. Ohne `AQUATICY_VERCEL_SECRET` und verbundenen Speicher gibt es keine
+Sicherung.
 Passt der Schlüssel nicht zur Sicherung, startet Aquaticy nicht. So überschreibt es deine
 Daten nie mit einem leeren Stand.
 

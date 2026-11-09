@@ -17,6 +17,10 @@ Protokoll wie im offiziellen SDK ``@vercel/blob`` 2.8.2: Hochladen per PUT an
 ``https://vercel.com/api/blob/?pathname=...``, Lesen per GET an
 ``https://<store>.private.blob.vercel-storage.com/<pathname>``, jeweils mit dem Token.
 
+Anmeldung in derselben Reihenfolge wie das SDK: ``AQUATICY_BLOB_TOKEN``, sonst OIDC (das Token
+schickt Vercel bei jeder Anfrage im Kopf ``x-vercel-oidc-token``, dazu ``BLOB_STORE_ID`` vom
+Verbinden des Speichers), sonst ``BLOB_READ_WRITE_TOKEN``.
+
 Grenze: Laufen gleichzeitig mehrere Instanzen, gewinnt die zuletzt gespeicherte. Fuer ein
 Einzelkonto reicht das; fuer viele gleichzeitige Nutzer braeuchte es eine Datenbank.
 """
@@ -45,19 +49,36 @@ class BlobError(RuntimeError):
     """Der Blob-Speicher antwortet nicht wie erwartet."""
 
 
-def token() -> str:
-    """Das Lese- und Schreib-Token des privaten Speichers."""
-    return (os.environ.get("AQUATICY_BLOB_TOKEN") or os.environ.get("BLOB_READ_WRITE_TOKEN")
-            or "").strip()
+#: Das OIDC-Token der laufenden Anfrage -- setzt vercel.py aus ``x-vercel-oidc-token``.
+OIDC_TOKEN = ""
 
 
 def store_id(wert: str) -> str:
     """Aus ``vercel_blob_rw_<store>_<geheim>`` die Kennung des Speichers."""
     teile = wert.split("_")
-    kennung = teile[3] if len(teile) > 4 else ""
+    return _checked_store(teile[3] if len(teile) > 4 else "")
+
+
+def _checked_store(kennung: str) -> str:
+    kennung = kennung.strip().removeprefix("store_")
     if not kennung.isalnum() or len(kennung) > 64:
-        raise BlobError("Das Blob-Token hat ein unbekanntes Format.")
+        raise BlobError("Die Kennung des Blob-Speichers hat ein unbekanntes Format.")
     return kennung
+
+
+def credentials() -> tuple[str, str] | None:
+    """(Bearer-Token, Speicher-Kennung) wie im SDK -- oder None (nichts eingerichtet)."""
+    eigenes = os.environ.get("AQUATICY_BLOB_TOKEN", "").strip()
+    if eigenes:
+        return eigenes, store_id(eigenes)
+    oidc = (OIDC_TOKEN or os.environ.get("VERCEL_OIDC_TOKEN", "")).strip()
+    speicher = os.environ.get("BLOB_STORE_ID", "").strip()
+    if oidc and speicher:
+        return oidc, _checked_store(speicher)
+    lese_schreib = os.environ.get("BLOB_READ_WRITE_TOKEN", "").strip()
+    if lese_schreib:
+        return lese_schreib, store_id(lese_schreib)
+    return None
 
 
 def secret_key() -> bytes | None:
@@ -71,7 +92,7 @@ def secret_key() -> bytes | None:
 
 
 def enabled() -> bool:
-    return bool(token() and secret_key())
+    return bool(secret_key() and credentials())
 
 
 def _sqlite_copy(datei: Path, ziel: Path) -> bool:
@@ -141,25 +162,26 @@ def unpack(daten: bytes, data_dir: Path) -> int:
     return anzahl
 
 
-def _headers(wert: str) -> dict[str, str]:
+def _headers(wert: str, speicher: str) -> dict[str, str]:
     return {"authorization": f"Bearer {wert}", "x-api-version": API_VERSION,
-            "x-vercel-blob-store-id": store_id(wert)}
+            "x-vercel-blob-store-id": speicher}
 
 
 def restore(data_dir: Path, client: Any = None) -> int:
     """Holt die letzte Sicherung zurueck. Returns: Zahl der Dateien (0: keine Sicherung)."""
     from cryptography.fernet import Fernet, InvalidToken
 
-    schluessel, wert = secret_key(), token()
-    if not schluessel or not wert:
+    schluessel, zugang = secret_key(), credentials()
+    if not schluessel or not zugang:
         return 0
     import httpx
 
+    wert, speicher = zugang
     eigener = client is None
     client = client or httpx.Client(timeout=30, follow_redirects=False)
     try:
         antwort = client.get(
-            f"https://{store_id(wert)}.private.blob.vercel-storage.com/{PATHNAME}",
+            f"https://{speicher}.private.blob.vercel-storage.com/{PATHNAME}",
             params={"cache": "0"}, headers={"authorization": f"Bearer {wert}"})
     finally:
         if eigener:
@@ -179,11 +201,12 @@ def save(data_dir: Path, client: Any = None) -> bool:
     """Sichert den Datenordner verschluesselt. False: nicht eingerichtet."""
     from cryptography.fernet import Fernet
 
-    schluessel, wert = secret_key(), token()
-    if not schluessel or not wert:
+    schluessel, zugang = secret_key(), credentials()
+    if not schluessel or not zugang:
         return False
     import httpx
 
+    wert, speicher = zugang
     with _LOCK:
         daten = Fernet(schluessel).encrypt(pack(data_dir))
         eigener = client is None
@@ -191,7 +214,7 @@ def save(data_dir: Path, client: Any = None) -> bool:
         try:
             antwort = client.put(
                 f"{API_URL}/", params={"pathname": PATHNAME}, content=daten,
-                headers={**_headers(wert), "x-vercel-blob-access": "private",
+                headers={**_headers(wert, speicher), "x-vercel-blob-access": "private",
                          "x-add-random-suffix": "0", "x-allow-overwrite": "1",
                          "x-content-type": "application/octet-stream"})
         finally:

@@ -1,7 +1,9 @@
 # Aquaticy-Test: Vercel braucht nur das Paket -- Tests, Worker und Container bleiben draussen.
 tests/
 tools/
-docker/
+# docker/: nur, was das Wheel nicht braucht (pyproject: force-include)
+docker/searxng/
+docker/workshop-blender.Dockerfile
 exports/
 aquaticy-box
 aquaticy-sandbox

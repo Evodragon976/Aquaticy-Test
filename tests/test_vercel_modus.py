@@ -16,6 +16,17 @@ TOKEN = "vercel_blob_rw_AbCdEf123_geheimerTeil"
 SECRET = "x" * 40
 
 
+@pytest.fixture(autouse=True)
+def _no_vercel_credentials(monkeypatch):
+    """Keine Zugangsdaten aus der Umgebung des Rechners, auf dem die Tests laufen."""
+    from aquaticy import vercel_blob
+
+    for name in ("AQUATICY_BLOB_TOKEN", "BLOB_READ_WRITE_TOKEN", "BLOB_STORE_ID",
+                 "VERCEL_OIDC_TOKEN", "AQUATICY_VERCEL_SECRET"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(vercel_blob, "OIDC_TOKEN", "")
+
+
 @pytest.fixture
 def blob_env(monkeypatch):
     monkeypatch.setenv("AQUATICY_BLOB_TOKEN", TOKEN)
@@ -60,6 +71,49 @@ def test_store_id_from_token():
         vercel_blob.store_id("kaputt")
     with pytest.raises(vercel_blob.BlobError):
         vercel_blob.store_id("vercel_blob_rw_../x_y")
+
+
+def test_credentials_follow_the_sdk_order(monkeypatch):
+    from aquaticy import vercel_blob
+
+    assert vercel_blob.credentials() is None
+    monkeypatch.setenv("BLOB_READ_WRITE_TOKEN", TOKEN)
+    assert vercel_blob.credentials() == (TOKEN, "AbCdEf123")
+    monkeypatch.setenv("BLOB_STORE_ID", "store_4FlvBGIR3Zq")
+    assert vercel_blob.credentials() == (TOKEN, "AbCdEf123")
+    monkeypatch.setattr(vercel_blob, "OIDC_TOKEN", "oidc-jwt")
+    assert vercel_blob.credentials() == ("oidc-jwt", "4FlvBGIR3Zq")
+    monkeypatch.setenv("AQUATICY_BLOB_TOKEN", "vercel_blob_rw_Eigen1_x")
+    assert vercel_blob.credentials() == ("vercel_blob_rw_Eigen1_x", "Eigen1")
+    monkeypatch.delenv("AQUATICY_BLOB_TOKEN")
+    monkeypatch.setenv("BLOB_STORE_ID", "store_../böse")
+    with pytest.raises(vercel_blob.BlobError):
+        vercel_blob.credentials()
+
+
+def test_save_and_restore_with_oidc(monkeypatch, tmp_path):
+    from aquaticy import vercel_blob
+
+    monkeypatch.setenv("AQUATICY_VERCEL_SECRET", SECRET)
+    monkeypatch.setenv("BLOB_STORE_ID", "store_4FlvBGIR3Zq")
+    monkeypatch.setattr(vercel_blob, "OIDC_TOKEN", "oidc-jwt")
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "x.txt").write_text("1", encoding="utf-8")
+    blob = FakeBlob()
+    gelesen: list[httpx.Request] = []
+
+    def mitlesen(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            gelesen.append(request)
+        return blob(request)
+
+    client = httpx.Client(transport=httpx.MockTransport(mitlesen))
+    assert vercel_blob.save(tmp_path / "a", client=client)
+    assert blob.puts[0].headers["authorization"] == "Bearer oidc-jwt"
+    assert blob.puts[0].headers["x-vercel-blob-store-id"] == "4FlvBGIR3Zq"
+    assert vercel_blob.restore(tmp_path / "b", client=client) == 1
+    assert gelesen[0].url.host == "4flvbgir3zq.private.blob.vercel-storage.com"
+    assert gelesen[0].headers["authorization"] == "Bearer oidc-jwt"
 
 
 def test_no_backup_without_long_secret(monkeypatch, tmp_path):
@@ -205,6 +259,18 @@ def test_server_only_features_are_off(vercel_app, monkeypatch):
         status, _, inhalt = call(vercel_app.app, pfad)
         assert status.startswith("404"), pfad
         assert "Vercel" in json.loads(inhalt)["error"]
+
+
+def test_oidc_header_reaches_the_blob_code_but_not_the_app(vercel_app, monkeypatch):
+    from aquaticy import vercel_blob
+
+    monkeypatch.setenv("AQUATICY_ULTRA_CODE", "Ab3-defghijklm")
+    status, _, _ = call(vercel_app.app, "/", headers={"x-vercel-oidc-token": "jwt-1"})
+    assert status.startswith("200")
+    assert vercel_blob.OIDC_TOKEN == "jwt-1"
+    roh = vercel_app._raw_request({"REQUEST_METHOD": "GET", "PATH_INFO": "/",
+                                   "HTTP_X_VERCEL_OIDC_TOKEN": "jwt-1"}, b"")
+    assert b"jwt-1" not in roh
 
 
 def test_loopback_and_unknown_addresses_are_refused(vercel_app, monkeypatch):
