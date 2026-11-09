@@ -198,7 +198,8 @@ def vercel_app(monkeypatch, tmp_path):
     home = tmp_path / "home"
     monkeypatch.setattr(vercel, "HOME", home)
     for name in ("HOME", "AQUATICY_DATA_DIR", "AQUATICY_VERCEL", "AQUATICY_ENABLE_PLAYWRIGHT",
-                 "AQUATICY_ACCOUNTS", "AQUATICY_MODEL"):
+                 "AQUATICY_ACCOUNTS", "AQUATICY_MODEL", "AQUATICY_ULTRA_CODE",
+                 "AQUATICY_PRO_CODE"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.delenv("AQUATICY_BLOB_TOKEN", raising=False)
@@ -206,7 +207,7 @@ def vercel_app(monkeypatch, tmp_path):
     monkeypatch.delenv("VERCEL", raising=False)
     monkeypatch.setattr(vercel, "_STATE", {"error": "", "web": None, "handler": None,
                                            "stand": None})
-    for name in ("AUTH", "AIGUARD", "TOKEN"):
+    for name in ("AUTH", "AIGUARD", "TOKEN", "account_quota"):
         monkeypatch.setattr(web, name, getattr(web, name))
     config.reset_settings_cache()
     yield vercel
@@ -230,41 +231,54 @@ def call(app, path: str, method: str = "GET", ip: str = "198.51.100.7",
     return str(antwort["status"]), antwort["headers"], inhalt
 
 
-def test_without_setup_code_nothing_starts(vercel_app, monkeypatch):
-    monkeypatch.delenv("AQUATICY_ULTRA_CODE", raising=False)
-    status, _, inhalt = call(vercel_app.app, "/")
-    assert status.startswith("503")
-    assert "AQUATICY_ULTRA_CODE" in inhalt.decode()
-
-
-def test_setup_code_hint_names_the_problem_without_the_code(vercel_app):
-    hinweis = vercel_app.ultra_code_hint
-    assert "fehlt" in hinweis("")
-    assert "13 statt 14" in hinweis("Ab3-defghijkl")
-    assert "nicht erlaubt" in hinweis("Ab3_defghijklm")
-    assert "mindestens einen Buchstaben" in hinweis("Ab3defghijklmn")
-    assert "Ab3_defghijklm" not in hinweis("Ab3_defghijklm")
-    assert "! @ # $ % & * + - = ?" in hinweis("")
-
-
-def test_full_app_runs_with_setup_code(vercel_app, monkeypatch):
+def test_starts_without_any_code_as_account_system(vercel_app):
     from aquaticy import web
 
-    monkeypatch.setenv("AQUATICY_ULTRA_CODE", "Ab3-defghijklm")
     status, kopf, inhalt = call(vercel_app.app, "/")
     assert status.startswith("200")
     assert "text/html" in kopf["Content-Type"]
     assert b"Aquaticy" in inhalt
     assert "Connection" not in kopf
-    assert web.AUTH is not None and web.AUTH.single
-    assert web.AUTH.ultra_code == "Ab3-defghijklm"
+    assert web.AUTH is not None and not web.AUTH.single
     status, _, inhalt = call(vercel_app.app, "/api/auth/status")
     assert status.startswith("200")
-    assert json.loads(inhalt)["authenticated"] is False
+    daten = json.loads(inhalt)
+    assert daten["authenticated"] is False and daten["single"] is False
+
+
+def test_first_account_ultra_then_pro_without_code(vercel_app):
+    from aquaticy import web
+
+    _, _, inhalt = call(vercel_app.app, "/api/auth/status")
+    assert json.loads(inhalt)["auto_plan"] is True
+    eins = web.AUTH.register("ana@example.org", "ein-langes-Passwort-42", "normal",
+                             terms_accepted=True, terms_version="1", ip="198.51.100.7")
+    zwei = web.AUTH.register("bo@example.org", "ein-langes-Passwort-42", "ultra", "egal",
+                             terms_accepted=True, terms_version="1", ip="198.51.100.8")
+    assert (eins.plan, zwei.plan) == ("ultra", "pro")
+    # Pro bleibt sperrbar und darf nichts abschalten, was an Ultra haengt (Sicherheit).
+    assert eins.ultra and not zwei.ultra
+    assert web.AUTH.owner().id == eins.id
+
+
+def test_pro_accounts_have_no_token_limit(vercel_app, tmp_path):
+    from aquaticy import web
+
+    call(vercel_app.app, "/")
+    assert web.account_quota(tmp_path, None) is None
+
+
+def test_wrong_codes_at_vercel_do_not_stop_the_page(vercel_app, monkeypatch):
+    from aquaticy import web
+
+    monkeypatch.setenv("AQUATICY_ULTRA_CODE", "Ab3-defghijklm")
+    monkeypatch.setenv("AQUATICY_PRO_CODE", "zu-lang-und-falsch")
+    assert call(vercel_app.app, "/")[0].startswith("200")
+    assert web.AUTH.ultra_code == "Ab3-defghijklm"
+    assert len(web.AUTH.pro_code) == 9 and web.AUTH.pro_code != "ZU-LANG-UND-FALSCH"
 
 
 def test_server_only_features_are_off(vercel_app, monkeypatch):
-    monkeypatch.setenv("AQUATICY_ULTRA_CODE", "Ab3-defghijklm")
     for pfad in ("/api/vm", "/api/messenger/native", "/api/cluster", "/api/werkstatt"):
         status, _, inhalt = call(vercel_app.app, pfad)
         assert status.startswith("404"), pfad
@@ -274,7 +288,6 @@ def test_server_only_features_are_off(vercel_app, monkeypatch):
 def test_oidc_header_reaches_the_blob_code_but_not_the_app(vercel_app, monkeypatch):
     from aquaticy import vercel_blob
 
-    monkeypatch.setenv("AQUATICY_ULTRA_CODE", "Ab3-defghijklm")
     status, _, _ = call(vercel_app.app, "/", headers={"x-vercel-oidc-token": "jwt-1"})
     assert status.startswith("200")
     assert vercel_blob.OIDC_TOKEN == "jwt-1"
@@ -284,7 +297,6 @@ def test_oidc_header_reaches_the_blob_code_but_not_the_app(vercel_app, monkeypat
 
 
 def test_loopback_and_unknown_addresses_are_refused(vercel_app, monkeypatch):
-    monkeypatch.setenv("AQUATICY_ULTRA_CODE", "Ab3-defghijklm")
     assert call(vercel_app.app, "/", ip="127.0.0.1")[0].startswith("400")
     assert call(vercel_app.app, "/", ip="kein-ip")[0].startswith("400")
     assert vercel_app.visitor_ip({"HTTP_X_REAL_IP": "2001:db8::1"}) == "2001:db8::1"
@@ -305,7 +317,7 @@ def test_preset_model_is_gemma_only_without_choice(vercel_app, monkeypatch):
 
 def test_readme_explains_vercel_mode():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
-    for wort in ("AQUATICY_ULTRA_CODE", "AQUATICY_VERCEL_SECRET", "BLOB_READ_WRITE_TOKEN",
+    for wort in ("Kontensystem", "AQUATICY_VERCEL_SECRET", "BLOB_READ_WRITE_TOKEN",
                  "Gemma 4"):
         assert wort in text
 

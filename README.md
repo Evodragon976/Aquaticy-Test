@@ -283,12 +283,19 @@ Pro und Code, Gedächtnis, Notizen und die Modellwahl (`aquaticy/vercel.py`, ein
 
 | Name | Wofür |
 |---|---|
-| `AQUATICY_ULTRA_CODE` | Pflicht. Der Einrichtungscode für dein Konto: 14 Zeichen, mit Buchstabe, Ziffer und Sonderzeichen. Ohne ihn startet nichts. |
 | `AQUATICY_VERCEL_SECRET` | Schlüssel für die Sicherung, mindestens 32 Zeichen. Gut aufheben: Ohne ihn lässt sich die Sicherung nicht mehr öffnen. |
 | `BLOB_STORE_ID` | Kommt von selbst, wenn du deinen **privaten** Blob-Speicher mit dem Projekt verbindest (*Storage → Connect*). Aquaticy meldet sich dann wie das Blob-SDK über OIDC an. Ältere Speicher liefern stattdessen `BLOB_READ_WRITE_TOKEN`; ein eigenes Token geht als `AQUATICY_BLOB_TOKEN`. |
-| `NVIDIA_NIM_API_KEY` oder `MISTRAL_API_KEY` | Das Sprachmodell. Die Schlüssel kannst du auch später in den Einstellungen eintragen. |
+| `NVIDIA_NIM_API_KEY` oder `MISTRAL_API_KEY` | Freiwillig. Das Sprachmodell für **alle** Konten. Ohne sie trägt jedes Konto seinen eigenen Schlüssel in der App ein. |
 
-Danach öffnest du die Seite, legst mit dem Einrichtungscode dein Konto an und meldest dich an.
+**Konten.** Hier läuft das Kontensystem, ohne Code. Das **erste Konto bekommt Ultra**, das
+bist du. **Jedes weitere bekommt Pro**, ohne Token-Grenze. Was in der App aus Sicherheitsgründen
+an Ultra hängt, bleibt bei dir: die Rechts-Leitplanken abschalten, eigene Adressen für Modell
+oder Suche, und nie vom Missbrauchsschutz gesperrt werden. Leg dein Konto also als Erstes an.
+
+**Achtung, Schlüssel.** Stehen Modell-Schlüssel bei Vercel, nutzt jedes Konto sie mit. Du zahlst
+dann für alle. Willst du das nicht, lass die Schlüssel bei Vercel weg: Dann trägt jedes Konto
+seinen eigenen ein. Solange der Vercel-Login als Schutz an ist (*Settings → Deployment
+Protection*), kommen nur Mitglieder deines Vercel-Teams auf die Seite.
 
 **Modelle.** Unter *Modelle und Verbindungen → Modell* wählst du jedes Modell von Mistral oder
 NVIDIA NIM.

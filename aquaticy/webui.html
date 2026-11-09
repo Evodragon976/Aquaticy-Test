@@ -3349,7 +3349,7 @@ function showAuth(card){
   authGate.hidden = false;
   requestAnimationFrame(() => card.querySelector("button, input, a")?.focus());
 }
-let einzelKonto = false, kontoEinrichten = false;
+let einzelKonto = false, kontoEinrichten = false, autoPlan = false;
 function anmeldeKarte(){
   setAuthMode(einzelKonto && !kontoEinrichten ? "login" : "register");
   showAuth(loginCard);
@@ -3359,13 +3359,16 @@ function setAuthMode(mode){
   const registering = authMode === "register";
   $("#tab-register").classList.toggle("active", registering);
   $("#tab-login").classList.toggle("active", !registering);
-  $("#plan-choice").hidden = !registering;
+  $("#plan-choice").hidden = !registering || autoPlan;
   $("#username-row").hidden = !registering;
   $("#auth-username").required = registering;
   $("#terms-row").hidden = !registering;
   $("#auth-terms").required = registering;
   $("#auth-submit").textContent = registering ? "Konto erstellen" : "Anmelden";
-  $("#auth-lead").textContent = registering
+  $("#auth-lead").textContent = registering && autoPlan
+    ? "Erstelle dein Konto. Das erste Konto hier bekommt Ultra, jedes weitere Pro. Einen Code "
+      + "brauchst du nicht."
+    : registering
     ? "Erstelle dein Konto. Deine Chats und Einstellungen sieht dann nur du."
     : "Melde dich an, um deine Chats und Einstellungen auf diesem Gerät zu öffnen.";
   $("#auth-password").autocomplete = registering ? "new-password" : "current-password";
@@ -3403,7 +3406,7 @@ function einzelKontoZeigen(registering){
 }
 function showProCode(){
   const wahl = document.querySelector('input[name="plan"]:checked')?.value;
-  const braucht = authMode === "register" && (wahl === "pro" || wahl === "ultra");
+  const braucht = !autoPlan && authMode === "register" && (wahl === "pro" || wahl === "ultra");
   $("#pro-code-row").hidden = !braucht;
   $("#auth-pro-code").required = braucht;
 
@@ -3612,6 +3615,7 @@ async function bootAuth(){
     const state = await (await api("/api/auth/status")).json();
     learningVersion = state.learning_version || "";
     einzelKonto = state.single === true;
+    autoPlan = state.auto_plan === true;
     kontoEinrichten = state.setup_needed === true;
     if (!state.consent){ showAuth(consentCard); return; }
     if (!state.authenticated){
@@ -5938,6 +5942,7 @@ const EN = {
 "Ablehnen": "Decline",
 "Zustimmen und weiter": "Agree and continue",
 "Willkommen bei Aquaticy": "Welcome to Aquaticy",
+"Erstelle dein Konto. Das erste Konto hier bekommt Ultra, jedes weitere Pro. Einen Code brauchst du nicht.": "Create your account. The first account here gets Ultra, every other one gets Pro. You need no code.",
 "Erstelle dein Konto. Deine Chats und Einstellungen sieht dann nur du.": "Create your account. Then only you can see your chats and settings.",
 "Registrieren": "Sign up",
 "Anmelden": "Sign in",

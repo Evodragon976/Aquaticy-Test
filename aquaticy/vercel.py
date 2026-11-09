@@ -7,8 +7,10 @@ aiguard, guardrails). Nichts davon wird hier abgeschwaecht.
 
 Anders als am eigenen Rechner:
 
-* **Anmeldung:** Einzelkonto. Den Einrichtungscode liest niemand im Terminal -- er kommt aus
-  ``AQUATICY_ULTRA_CODE`` (Umgebungsvariable bei Vercel, 14 Zeichen). Ohne ihn startet nichts.
+* **Anmeldung:** Kontensystem ohne Code. Das erste Konto bekommt Ultra (der Besitzer), jedes
+  weitere Pro -- ohne Token-Grenze. Was in der App an Ultra haengt, weil es Sicherheit
+  betrifft (Rechts-Leitplanken abschalten, eigene Adressen fuer Modell oder Suche, nie vom
+  Missbrauchsschutz gesperrt werden), bleibt beim Besitzer.
 * **Daten:** liegen in /tmp und werden nach jeder Aenderung verschluesselt im privaten
   Blob-Speicher gesichert (``vercel_blob.py``). Ohne ``AQUATICY_VERCEL_SECRET`` und einen
   verbundenen Speicher gibt es keine Sicherung: Beim naechsten Kaltstart ist dann alles weg.
@@ -57,7 +59,7 @@ def _prepare_env() -> None:
     os.environ["AQUATICY_DATA_DIR"] = str(HOME / ".aquaticy")
     os.environ["AQUATICY_VERCEL"] = "1"
     os.environ.setdefault("AQUATICY_ENABLE_PLAYWRIGHT", "0")
-    os.environ.setdefault("AQUATICY_ACCOUNTS", "0")
+    os.environ["AQUATICY_ACCOUNTS"] = "1"
 
 
 def _env_file() -> Path:
@@ -95,12 +97,7 @@ def start() -> str:
             return str(_STATE["error"])
         _prepare_env()
         from aquaticy import vercel_blob
-        from aquaticy.auth import valid_ultra_code
 
-        code = os.environ.get("AQUATICY_ULTRA_CODE", "").strip()
-        if not valid_ultra_code(code):
-            _STATE["error"] = ultra_code_hint(code)
-            return str(_STATE["error"])
         try:
             vercel_blob.restore(HOME)
         except Exception as exc:
@@ -114,11 +111,15 @@ def start() -> str:
             write_env_file({"AQUATICY_MODEL": modell}, _env_file())
         from aquaticy import web
         from aquaticy.aiguard import guard_for
-        from aquaticy.auth import AuthStore, pro_code_for
+        from aquaticy.auth import AuthStore, pro_code_for, ultra_code_for
         from aquaticy.config import get_settings
 
         data_dir = get_settings().data_dir
-        web.AUTH = AuthStore(data_dir, pro_code_for(data_dir), code, single=True)
+        web.AUTH = _auth_class(AuthStore)(
+            data_dir, upgrade_code(pro_code_for, "AQUATICY_PRO_CODE", data_dir),
+            upgrade_code(ultra_code_for, "AQUATICY_ULTRA_CODE", data_dir), single=False)
+        # Pro ohne Token-Grenze: ohne Kontingent rechnet die App wie bei Ultra.
+        web.account_quota = lambda profile, account=None: None
         web.AIGUARD = guard_for(data_dir)
         web.TOKEN = ""
         _STATE["web"] = web
@@ -127,23 +128,39 @@ def start() -> str:
         return ""
 
 
-def ultra_code_hint(code: str) -> str:
-    """Warum der Einrichtungscode nicht passt -- ohne den Code selbst zu zeigen."""
-    from aquaticy.auth import ULTRA_CODE_LEN, ULTRA_SPECIALS
+_FIRST_ACCOUNT = threading.Lock()
 
-    if not code:
-        grund = "AQUATICY_ULTRA_CODE fehlt."
-    elif len(code) != ULTRA_CODE_LEN:
-        grund = f"AQUATICY_ULTRA_CODE hat {len(code)} statt {ULTRA_CODE_LEN} Zeichen."
-    elif any(not (c.isalnum() or c in ULTRA_SPECIALS) for c in code):
-        grund = "AQUATICY_ULTRA_CODE enthält ein Zeichen, das nicht erlaubt ist."
-    else:
-        grund = "AQUATICY_ULTRA_CODE braucht mindestens einen Buchstaben, eine Ziffer und ein "
-        grund += "Sonderzeichen."
-    return (f"{grund} Erlaubt sind genau {ULTRA_CODE_LEN} Zeichen: Buchstaben, Ziffern und "
-            f"{' '.join(ULTRA_SPECIALS)} (mindestens je eins). Kein Leerzeichen, keine "
-            "Anführungszeichen. Ändere ihn bei Vercel unter Settings → Environment Variables "
-            "und starte ein neues Deployment.")
+
+def _auth_class(basis: type) -> type:
+    class VercelAuthStore(basis):
+        """Konten ohne Code: das erste Ultra, jedes weitere Pro."""
+
+        auto_plan = True
+
+        def register(self, email: str, password: str, plan: str, pro_code: str = "",
+                     **kwargs: Any) -> Any:
+            with _FIRST_ACCOUNT:
+                erstes = not self.accounts()
+                if erstes:
+                    return super().register(email, password, "ultra", self.ultra_code,
+                                            **kwargs)
+            return super().register(email, password, "pro", self.pro_code, **kwargs)
+
+    return VercelAuthStore
+
+
+def upgrade_code(lesen: Callable[[Path], str], name: str, data_dir: Path) -> str:
+    """Der interne Code fuer Pro oder Ultra: aus *name* -- passt der nicht, ein geheimer.
+
+    Niemand muss ihn eingeben (register setzt ihn selbst). Ein falsch eingetragener Wert bei
+    Vercel soll aber nicht die ganze Seite stoppen.
+    """
+    try:
+        return lesen(data_dir)
+    except ValueError:
+        print(f"  [Vercel] {name} passt nicht -- ich nehme einen geheimen Code.")
+        os.environ.pop(name, None)
+        return lesen(data_dir)
 
 
 def _handler_class(web: Any) -> type:

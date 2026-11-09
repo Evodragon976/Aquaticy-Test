@@ -5655,6 +5655,7 @@ class Handler(BaseHTTPRequestHandler):
                          "plan": account.plan} if account else None
                     ),
                     "single": bool(AUTH is not None and AUTH.single),
+                    "auto_plan": bool(getattr(AUTH, "auto_plan", False)),
                     "setup_needed": bool(AUTH is not None and AUTH.single
                                          and account is None and AUTH.owner() is None),
                 }
