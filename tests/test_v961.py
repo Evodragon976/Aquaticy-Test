@@ -15,12 +15,13 @@ def _ui() -> str:
 
 
 def test_version_label() -> None:
-    # Seit 10.0 nicht mehr 9.6.x -- geprueft wird die Form "Nummer Name".
+
     import re
 
     import aquaticy
 
-    assert re.fullmatch(r"\d+\.\d+(\.\d+)* \w+( \w+)?", aquaticy.VERSION_LABEL)
+    # Seit 15.0.0 darf der Name fehlen ("15.0.0").
+    assert re.fullmatch(r"\d+\.\d+(\.\d+)*( \w+)?( \w+)?", aquaticy.VERSION_LABEL)
 
 
 def test_page_is_gzipped_when_the_browser_accepts_it() -> None:

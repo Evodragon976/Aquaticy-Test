@@ -69,7 +69,9 @@ class Server:
             [sys.executable, "-c", "from aquaticy.cli import main; main()",
              "web", "--lan", "--no-open",
              "--port", str(self.port)],
-            env={**os.environ, "AQUATICY_DATA_DIR": str(self.root),
+            # Zwei Konten (Admin und User): seit 13.0.0 Luna nur mit eingeschaltetem
+            # Kontensystem, der Standard ist ein einziges Konto.
+            env={**os.environ, "AQUATICY_DATA_DIR": str(self.root), "AQUATICY_ACCOUNTS": "true",
                  "AQUATICY_MODEL": "ollama/unused-connect-test", "PYTHONUNBUFFERED": "1",
                  "LITELLM_LOCAL_MODEL_COST_MAP": "True"},
             stdin=subprocess.DEVNULL, stdout=self.log, stderr=subprocess.STDOUT,
@@ -147,7 +149,7 @@ def test_two_servers_connect_security_and_outage(tmp_path):
             assert response.status_code == 400
             action(ca, action="confirm", id=invite["id"], code=code)
             wait_for(lambda: b.state()["cluster"] and not b.state()["cluster"].get("joining"))
-            # Der beigetretene CLI-Prozess startet sich selbst neu.
+
             wait_for(lambda: cb.get("/api/auth/status").status_code == 200
                      and cb.get("/api/cluster").status_code == 401)
             b.login(cb)
@@ -157,7 +159,7 @@ def test_two_servers_connect_security_and_outage(tmp_path):
             assert b.store.account(a.admin.id) is not None
             assert b.store.account(b.admin.id) is None
 
-            # Das zweite angemeldete Konto muss nach dem Beitritt neu angemeldet werden.
+
             assert ordinary.get("/api/prefs").status_code == 401
             b.login(ordinary, "user@example.org")
             assert cb.post("/api/prefs", json={"theme": "dark"}).status_code == 200
@@ -167,7 +169,7 @@ def test_two_servers_connect_security_and_outage(tmp_path):
                            headers={"Origin": "https://evil.example"}).status_code == 403
             assert ca.get("/api/prefs").json()["theme"] == "dark"
 
-            # Unverschluesselte oder fremde RPC/Proxy-Nachrichten duerfen nichts bewirken.
+
             for path in ("/cluster/rpc", "/cluster/proxy"):
                 assert cb.post(path, json={"from": "0" * 32, "box": "AAAA"}).status_code == 403
             node_a = json.loads((a.root / "cluster" / "node.json").read_text())["id"]
@@ -186,14 +188,14 @@ def test_two_servers_connect_security_and_outage(tmp_path):
             assert response.status_code == 200
             assert response.json()["theme"] == "dark"
 
-            # Eine angemeldete Sitzung ist auf beiden Servern gueltig und wird widerrufen.
+
             with b.client() as shared:
                 shared.cookies.update(ca.cookies)
                 wait_for(lambda: shared.get("/api/prefs").status_code == 200)
                 assert ca.post("/api/auth/logout", json={}).status_code == 200
                 wait_for(lambda: shared.get("/api/prefs").status_code == 401)
 
-            # Tatsaechlichen Heimserver beenden: kein Zugriff auf eine veraltete Kopie.
+
             homes = a.state()["homes"]
             home = homes[a.admin.id]
             owner, entrance = (a, b) if home == node_a else (b, a)
@@ -206,7 +208,7 @@ def test_two_servers_connect_security_and_outage(tmp_path):
                 wait_for(lambda: client.get("/api/prefs").status_code == 200)
                 assert client.get("/api/prefs").json()["theme"] == "dark"
 
-            # Entfernen sperrt das Mitglied und wechselt den Verbundschluessel.
+
             a.login(ca)
             node_b = json.loads((b.root / "cluster" / "node.json").read_text())["id"]
             action(ca, action="remove", node=node_b)
@@ -307,7 +309,7 @@ def test_connect_in_browser_preserves_code_during_polling(tmp_path, scenario):
                 page.fill("#cluster-port", f"{b.port}oops")
                 page.click("#cluster-add")
                 playwright.expect(page.locator("#cluster-status")).to_contain_text(
-                    "Ungültiger Port", timeout=4000)
+                    "Diesen Port gibt es nicht. Nimm eine Zahl von 1 bis 65535.", timeout=4000)
                 pending_file = b.root / "cluster" / "pending.json"
                 assert not pending_file.exists() or not json.loads(pending_file.read_text())
                 browser.close()
@@ -326,8 +328,8 @@ def test_connect_in_browser_preserves_code_during_polling(tmp_path, scenario):
             page.click("#cluster-add")
             if scenario == "pending_invitation":
                 playwright.expect(page.locator("#cluster-add")).to_be_disabled()
-                # Auch eine inzwischen beantwortete Statusabfrage darf den Knopf
-                # waehrend der laufenden Einladung nicht wieder freigeben.
+
+
                 page.evaluate("verbundLaden()")
                 page.wait_for_timeout(500)
                 playwright.expect(page.locator("#cluster-add")).to_be_disabled()
@@ -351,7 +353,7 @@ def test_connect_in_browser_preserves_code_during_polling(tmp_path, scenario):
                     status=503, content_type="application/json",
                     body=json.dumps({"error": "Vorübergehend nicht erreichbar"}))
                     if route.request.method == "GET" else route.continue_())
-            # Die Statusabfrage laeuft alle drei Sekunden, auch beim Tippen.
+
             page.wait_for_timeout(4200)
             assert field.is_visible()
             assert field.input_value() == code

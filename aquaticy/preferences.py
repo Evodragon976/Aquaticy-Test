@@ -29,17 +29,15 @@ beim Menschen vor der Oberflaeche.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-#: Aussehen ist Sache des Browsers und steht in keiner `.env` -- deshalb
-#: dieser Sonderfall statt eines Schluessels.
 APPEARANCE = "aussehen"
 
-#: Dasselbe gilt fuer das Farbschema -- auch das kennt nur der Browser.
+
 PALETTE = "farbschema"
 
-#: Katalogname -> Name im Stilblock der Oberflaeche. Das Standardschema
-#: traegt dort keinen eigenen Namen: es sind die Werte in ``:root``.
+
 PALETTE_IDS: dict[str, str] = {
     "standard": "",
     "schlicht": "mono",
@@ -151,12 +149,13 @@ CATALOGUE: tuple[Preference, ...] = (
     Preference("modell", "AQUATICY_MODEL", "modell", "Hauptmodell", aliases=("ki", "llm")),
 )
 
-#: Was ausdruecklich NICHT im Gespraech geaendert wird, mit dem Grund dazu.
-#: Der Grund wandert in die Ablehnung -- eine blosse Absage waere nutzlos.
+
 PROTECTED: dict[str, str] = {
     "AQUATICY_HA_CONTROL": "ob ich im Haus schalten darf",
+    "AQUATICY_HA_DIRECT": "ob ich im Haus ohne Rückfrage schalten darf",
     "AQUATICY_GOOGLE": "ob ich Mail und Kalender lesen darf",
     "AQUATICY_GOOGLE_WRITE": "ob ich bei Google etwas aendern darf",
+    "AQUATICY_GOOGLE_DIRECT": "ob ich bei Google ohne Rückfrage etwas ändern darf",
     "AQUATICY_STORAGE_ACCESS": "was ich im Lager darf",
     "AQUATICY_STORAGE_URL": "welches Lager angebunden ist",
     "AQUATICY_LAN_ENABLED": "ob ich ins Heimnetz sehen darf",
@@ -173,13 +172,11 @@ PROTECTED: dict[str, str] = {
     "AQUATICY_GITHUB_TOKEN": "mit welchem Zugang ich GitHub lese",
     "AQUATICY_ADDONS": (
         "welche Add-ons installiert, eingeschaltet und angemeldet sind (GitHub, "
-        "WhatsApp, Signal, Telegram, Blender, Wetter, Feeds)"
+        "WhatsApp, Signal, Blender, Wetter, Feeds)"
     ),
 }
 
-#: Wie das Modell die geschuetzten Schalter sonst noch nennt. Ohne das kaeme
-#: auf "schalte den Rechtsrahmen aus" nur "kenne ich nicht" zurueck -- das
-#: stimmt, erklaert aber nicht, warum es trotzdem nicht geht.
+
 PROTECTED_ALIASES: dict[str, str] = {
     "AQUATICY_RECHTSRAHMEN": "AQUATICY_LEGAL_GUARD",
     "AQUATICY_LEITPLANKEN": "AQUATICY_LEGAL_GUARD",
@@ -209,7 +206,7 @@ PROTECTED_ALIASES: dict[str, str] = {
 _YES = frozenset({"an", "ein", "ja", "true", "1", "aktiv", "on", "yes"})
 _NO = frozenset({"aus", "nein", "false", "0", "inaktiv", "off", "no"})
 
-#: Woran ein heller bzw. dunkler Wunsch zu erkennen ist.
+
 _LIGHT = frozenset({"hell", "weiss", "weiß", "light", "tag", "hellmodus"})
 _DARK = frozenset({"dunkel", "schwarz", "dark", "nacht", "dunkelmodus"})
 
@@ -255,8 +252,7 @@ def coerce(preference: Preference, value: str) -> str:
         BadValue: Wenn der Wert nicht zu dieser Einstellung passt.
     """
     raw = str(value if value is not None else "").strip()
-    # Ein Zeilenumbruch im Wert haette bis 9.5.14 eine zweite Zeile in die
-    # .env geschrieben -- und damit jede Einstellung, auch die geschuetzten.
+
     from aquaticy.config import env_value_problem
 
     problem = env_value_problem(raw)
@@ -274,7 +270,6 @@ def coerce(preference: Preference, value: str) -> str:
         raise BadValue("Fuer das Erscheinungsbild geht 'hell' oder 'dunkel'.")
 
     if preference.name == PALETTE:
-        # "Schwarz-Weiss", "mono", "schlicht" -- alles derselbe Wunsch.
         raw = (
             raw.lower()
             .replace("é", "e")
@@ -296,8 +291,13 @@ def coerce(preference: Preference, value: str) -> str:
 
     if preference.kind == "zahl":
         try:
-            number = int(float(raw))
-        except (ValueError, OverflowError):  # auch "inf", "1e400" (9.5.34)
+            parsed = Decimal(raw)
+            if not parsed.is_finite() or parsed != parsed.to_integral_value():
+                raise ValueError
+            if not preference.low <= parsed <= preference.high:
+                raise ValueError
+            number = int(parsed)
+        except (ValueError, OverflowError, InvalidOperation):
             raise BadValue(
                 f"{preference.label}: eine Zahl zwischen {preference.low} und "
                 f"{preference.high}."
@@ -324,7 +324,6 @@ def coerce(preference: Preference, value: str) -> str:
         model = fix_model_id(raw)
         problem = model_problem(model)
         if problem:
-            # Lieber gar nicht wechseln als auf ein Modell, das nicht antwortet.
             raise BadValue(problem.replace("\n", " "))
         return model
 
@@ -361,8 +360,7 @@ def store(preference: Preference, value: str, profile_env: Path | None = None) -
         return written
     target = find_env_file() or DEFAULT_ENV_PATH
     written = write_env_file({preference.key: value}, target)
-    # Ohne override gewaenne die schon gesetzte Umgebungsvariable, und die
-    # Aenderung waere zwar in der Datei, aber erst nach einem Neustart wirksam.
+
     load_env(written, override=True)
     reset_settings_cache()
     return written

@@ -27,24 +27,24 @@ Reverse Proxy mit Anmeldung.
 from __future__ import annotations
 
 import contextlib
+import math
+import re
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 
-#: Der Port, auf dem die Lagerverwaltung standardmaessig lauscht.
 STORAGE_PORT = 3000
 
-#: Womit sich der Server unter /api/config zu erkennen gibt.
+
 APP_ID = "storage-system"
 
-#: Die erlaubten Rechtestufen, von nichts bis alles.
+
 ACCESS_LEVELS = ("off", "read", "write")
 
 REQUEST_TIMEOUT = 10.0
 
-#: Hoechstzahl der Eintraege je Antwort. Ein Lager mit tausend Artikeln wuerde
-#: das Kontextfenster sonst allein fuellen.
+
 MAX_ROWS = 50
 
 
@@ -63,10 +63,7 @@ def normalize_url(url: str) -> str:
         return ""
     if "://" not in url:
         url = f"http://{url}"
-    # Seit 9.5.34: der Port gehoert an den Rechnernamen, nicht hinter den Pfad
-    # ("nas.local/ha" -> "nas.local:{port}/ha"); ein ungueltiger Port
-    # ("ha.local:abc") ergibt "" statt eines Absturzes. Seit 11.3.0 ebenso eine
-    # unlesbare Adresse ("[1, 2]", Steuerzeichen) -- sonst stuerzte der Test ab.
+
     if any(ord(zeichen) < 33 or ord(zeichen) == 127 for zeichen in url):
         return ""
     try:
@@ -75,6 +72,9 @@ def normalize_url(url: str) -> str:
     except ValueError:
         return ""
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return ""
+    if (parsed.username is not None or parsed.password is not None
+            or parsed.query or parsed.fragment):
         return ""
     if port is None and parsed.scheme == "http" and parsed.hostname:
         url = parsed._replace(netloc=f"{parsed.netloc}:{STORAGE_PORT}").geturl()
@@ -85,6 +85,22 @@ def normalize_access(value: str) -> str:
     """Unbekanntes wird zu "off" -- im Zweifel lieber nichts duerfen."""
     value = (value or "").strip().lower()
     return value if value in ACCESS_LEVELS else "off"
+
+
+def integer(value: Any, *, minimum: int | None = None) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise StorageError("Nenne eine ganze Zahl.")
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
+        raise StorageError("Nenne eine ganze Zahl.")
+    if isinstance(value, str) and not re.fullmatch(r"[+-]?\d+", value.strip()):
+        raise StorageError("Nenne eine ganze Zahl.")
+    try:
+        number = int(value)
+    except (ValueError, OverflowError) as exc:
+        raise StorageError("Nenne eine ganze Zahl.") from exc
+    if minimum is not None and number < minimum:
+        raise StorageError(f"Die Zahl muss mindestens {minimum} sein.")
+    return number
 
 
 class Storage:
@@ -99,9 +115,9 @@ class Storage:
     ) -> None:
         self.url = normalize_url(url)
         self.access = normalize_access(access)
-        self._http = client or httpx.Client(timeout=timeout, follow_redirects=True)
+        self._http = client or httpx.Client(timeout=timeout, follow_redirects=False,
+                                          trust_env=False)
 
-    # -- Zustand ----------------------------------------------------------
     @property
     def configured(self) -> bool:
         return bool(self.url) and self.access != "off"
@@ -114,7 +130,6 @@ class Storage:
         with contextlib.suppress(Exception):
             self._http.close()
 
-    # -- Grundlagen -------------------------------------------------------
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         if not self.url:
             raise StorageError(
@@ -129,19 +144,39 @@ class Storage:
                 "in den Einstellungen unter 'Zuhause & Netz'."
             )
         try:
-            response = self._http.request(method, f"{self.url}{path}", **kwargs)
+            target = httpx.URL(f"{self.url}{path}")
+            origin = (target.scheme, target.host, target.port)
+            for _ in range(6):
+                response = self._http.request(method, target, follow_redirects=False, **kwargs)
+                if not response.is_redirect:
+                    break
+                location = response.headers.get("location", "")
+                if not location or (method not in {"GET", "HEAD"}
+                                    and response.status_code not in {307, 308}):
+                    raise StorageError("Die Lagerverwaltung hat den Aufruf umgeleitet.")
+                target = target.join(location)
+                if ((target.scheme, target.host, target.port) != origin
+                        or target.username or target.password):
+                    raise StorageError("Die Lagerverwaltung leitet an eine andere Adresse um.")
+            else:
+                raise StorageError("Zu viele Weiterleitungen der Lagerverwaltung.")
         except httpx.HTTPError as exc:
             raise StorageError(f"Lagerverwaltung nicht erreichbar: {exc}") from exc
         except (httpx.InvalidURL, ValueError, UnicodeError) as exc:
             raise StorageError("Die Adresse der Lagerverwaltung ist ungültig.") from exc
-        if response.status_code >= 400:
+        if not 200 <= response.status_code < 300:
             raise StorageError(_explain(response))
         try:
-            return response.json()
+            result = response.json()
         except ValueError as exc:
             raise StorageError(
                 "Unter dieser Adresse antwortet etwas anderes als die Lagerverwaltung."
             ) from exc
+        if method not in {"GET", "HEAD"} and (
+                not isinstance(result, dict) or not result or result.get("error")):
+            raise StorageError("Die Antwort der Lagerverwaltung ist unbrauchbar. Prüfe dort, "
+                               "ob die Änderung angekommen ist, bevor du sie wiederholst.")
+        return result
 
     def info(self) -> dict[str, Any]:
         """Kennung und Einstellungen des Servers -- der Verbindungstest."""
@@ -153,22 +188,22 @@ class Storage:
             )
         return data
 
-    # -- Lesen ------------------------------------------------------------
     def rooms(self) -> list[dict[str, Any]]:
         """Alle Raeume mit der Zahl ihrer Moebel und Artikel."""
         return _rows(self._request("GET", "/api/rooms"))
 
     def furniture(self, room_id: int) -> list[dict[str, Any]]:
         """Die Moebel eines Raums."""
-        return _rows(self._request("GET", f"/api/rooms/{int(room_id)}/furniture"))
+        return _rows(self._request("GET", f"/api/rooms/{integer(room_id, minimum=1)}/furniture"))
 
     def items(self, furniture_id: int) -> list[dict[str, Any]]:
         """Die Artikel eines Moebels, nach Nummer sortiert."""
-        return _rows(self._request("GET", f"/api/furniture/{int(furniture_id)}/items"))
+        return _rows(self._request(
+            "GET", f"/api/furniture/{integer(furniture_id, minimum=1)}/items"))
 
     def item(self, item_id: int) -> dict[str, Any]:
         """Ein einzelner Artikel mit vollem Pfad."""
-        return _clean(self._request("GET", f"/api/items/{int(item_id)}"))
+        return _clean(self._request("GET", f"/api/items/{integer(item_id, minimum=1)}"))
 
     def search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         """Sucht in Artikelnummern und -namen; Treffer nennen ihren Pfad."""
@@ -182,7 +217,6 @@ class Storage:
         )
         return _rows(data.get("results") if isinstance(data, dict) else data)
 
-    # -- Schreiben --------------------------------------------------------
     def add_item(self, furniture_id: int, name: str, quantity: int = 1) -> dict[str, Any]:
         """Legt einen Artikel an. Die Nummer vergibt der Server."""
         name = (name or "").strip()
@@ -191,8 +225,8 @@ class Storage:
         return _clean(
             self._request(
                 "POST",
-                f"/api/furniture/{int(furniture_id)}/items",
-                json={"name": name, "quantity": max(0, int(quantity))},
+                f"/api/furniture/{integer(furniture_id, minimum=1)}/items",
+                json={"name": name, "quantity": integer(quantity, minimum=0)},
             )
         )
 
@@ -204,10 +238,11 @@ class Storage:
         if (name or "").strip():
             payload["name"] = name.strip()
         if quantity is not None:
-            payload["quantity"] = max(0, int(quantity))
+            payload["quantity"] = integer(quantity, minimum=0)
         if not payload:
             raise StorageError("Es wurde nichts zum Aendern angegeben.")
-        return _clean(self._request("PATCH", f"/api/items/{int(item_id)}", json=payload))
+        return _clean(self._request(
+            "PATCH", f"/api/items/{integer(item_id, minimum=1)}", json=payload))
 
     def change_quantity(self, item_id: int, delta: int) -> dict[str, Any]:
         """Zaehlt den Bestand hoch oder runter -- ohne den alten Wert zu kennen.
@@ -216,11 +251,12 @@ class Storage:
         eine Schraube entnehmen, kommen hier auf zwei weniger. Mit gesetztem
         Wert wuerde einer den anderen ueberschreiben.
         """
-        delta = int(delta)
+        delta = integer(delta)
         if delta == 0:
             raise StorageError("Eine Aenderung um null ist keine.")
         return _clean(
-            self._request("POST", f"/api/items/{int(item_id)}/quantity", json={"delta": delta})
+            self._request("POST", f"/api/items/{integer(item_id, minimum=1)}/quantity",
+                          json={"delta": delta})
         )
 
     def add_room(self, name: str) -> dict[str, Any]:
@@ -236,15 +272,11 @@ class Storage:
         if not name:
             raise StorageError("Ein Moebel braucht einen Namen.")
         return _clean(
-            self._request("POST", f"/api/rooms/{int(room_id)}/furniture", json={"name": name})
+            self._request("POST", f"/api/rooms/{integer(room_id, minimum=1)}/furniture",
+                          json={"name": name})
         )
 
 
-# ---------------------------------------------------------------------------
-# Aufbereiten
-# ---------------------------------------------------------------------------
-#: Felder, die das Modell nicht braucht. Bilddateinamen und Zeitstempel
-#: fuellen nur das Kontextfenster.
 DROP_FIELDS = frozenset({"imageFile", "createdAt", "updatedAt", "prefix", "seq"})
 
 
@@ -274,9 +306,6 @@ def _explain(response: httpx.Response) -> str:
     return f"Lagerverwaltung antwortet mit {response.status_code}: {detail or 'kein Grund genannt'}"
 
 
-# ---------------------------------------------------------------------------
-# Im Netz finden
-# ---------------------------------------------------------------------------
 def discover(subnet: str = "", timeout: float = 1.0) -> list[str]:
     """Sucht die Lagerverwaltung im eigenen Netz.
 

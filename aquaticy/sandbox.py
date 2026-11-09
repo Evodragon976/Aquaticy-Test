@@ -77,89 +77,84 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
+import weakref
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-#: Wie lange die virtual machine nach der letzten Nutzung stehen bleibt.
 IDLE_MINUTES = 20
 
-#: Grenzen. Ein Kern, ein Gigabyte Arbeitsspeicher, vier Gigabyte Platte.
-CPUS = 1
-MEMORY_MB = 1024
+
+# Die normale virtual machine: 2 Kerne und 3 GB (12.7.8 Luna).
+CPUS = 2
+# Die normale virtual machine: 3 GB (12.7.8 Luna), genug fuer Python, Pakete und Browser.
+MEMORY_MB = 3072
 DISK_GB = 4
 
-#: Zwei Groessen fuer die virtual machine, waehlbar in den Einstellungen
-#: (AQUATICY_VM_SIZE). "normal" ist der Alltag -- ein Skript schreiben,
-#: ausfuehren, die Ausgabe lesen. "plus" gibt es fuer alles, was mehr
-#: Rechenleistung braucht: ein Blender-Rendering zum Beispiel bringt mit
-#: einem Kern und einem Gigabyte kaum ein Bild zustande, bevor die Zeit
-#: ablaeuft.
+
 VM_SIZES: dict[str, dict[str, int]] = {
     "normal": {"cpus": CPUS, "memory_mb": MEMORY_MB, "disk_gb": DISK_GB},
     "plus": {"cpus": 4, "memory_mb": 6144, "disk_gb": 20},
 }
 
-#: Wie lange ein Blender-Rendering laufen darf. Laenger als ein gewoehnlicher
-#: Befehl (COMMAND_TIMEOUT) -- schon eine einfache Szene braucht mehrere
-#: Sekunden je Bild --, aber wie jeder Befehl durch MAX_TIMEOUT gedeckelt.
+
 BLENDER_TIMEOUT = 90
 
-#: Prozesse und offene Dateien. Beides deckelt eine Gabelbombe.
+
 PID_LIMIT = 256
 FILE_LIMIT = 512
 
-#: Wie lange ein einzelner Befehl laufen darf, und wie lange hoechstens.
+
 COMMAND_TIMEOUT = 30
 MAX_TIMEOUT = 120
 
-#: Wie viel Ausgabe zurueckkommt. Der Rest wird abgeschnitten -- ein `yes`
-#: ohne Deckel wuerde sonst das Kontextfenster fuellen.
+
 MAX_OUTPUT = 8000
 
-#: Wie viel eine einzelne Datei beim Lesen liefern darf.
+
 MAX_READ_BYTES = 200_000
 
-#: Wie gross eine Datei sein darf, die hinein- oder herausgereicht wird.
-#: Der Weg fuehrt durch den Arbeitsspeicher des Servers -- 20 MB sind
-#: genug fuer alles, was man von Hand hin- und hertraegt, und wenig genug,
-#: dass zehn davon nebeneinander niemandem den Rechner fuellen.
+
 MAX_FILE_BYTES = 20 * 1024 * 1024
 
-#: Wie viele Dateien die Liste hoechstens zeigt.
+
 MAX_LIST = 500
 
-#: Das Abbild. Klein, mit Python und den ueblichen Werkzeugen.
-DEFAULT_IMAGE = "python:3.12-slim"
 
-#: Das Arbeitsverzeichnis in der virtual machine. Nur hier darf geschrieben werden.
+DEFAULT_IMAGE = "docker.io/library/python:3.12-slim"
+
+
 WORKDIR = "/work"
 
-#: Die Kennung, unter der drinnen gearbeitet wird -- nicht root.
+
 RUN_AS = "1000:1000"
 
-#: Das Abbild fuer den User mode (siehe docker/workshop-desktop.Dockerfile).
+
 DESKTOP_IMAGE = "aquaticy-werkstatt-desktop:local"
 
-#: Im User mode laufen Browser und Office. Die brauchen mehr Prozesse --
-#: jeder Thread zaehlt mit -- und mehr offene Dateien als ein Skript. Gegen
-#: eine Gabelbombe hilft die Grenze trotzdem noch.
+
 DESKTOP_PID_LIMIT = 1024
 DESKTOP_FILE_LIMIT = 4096
 
-#: Der Bildschirm in der virtual machine.
+# Ein Desktop mit Firefox (WhatsApp Web) braucht mehr als die Voreinstellung der normalen
+# virtual machine (damals 1 GB, 1 Kern): Der Tab stuerzt sonst ab (12.6.8 Astra). Der gemeinsame
+# Speicher (/dev/shm) zaehlt zum Speicher des Behaelters.
+DESKTOP_MIN_MEMORY_MB = 2048
+DESKTOP_MIN_CPUS = 2
+DESKTOP_SHM = "512m"
+
+
 DISPLAY = ":1"
 
-#: Die Hilfsprogramme im Desktop-Abbild.
+
 DESKTOP_HELPER = "aquaticy-desktop"
 NETWORK_SCRIPT = "/usr/local/sbin/aquaticy-netz"
 
-#: Diese Bereiche muessen in der Netzsperre stehen, sonst gilt sie als nicht
-#: eingerichtet: das Heimnetz (RFC 1918), Tailscale/CGNAT, Loopback und
-#: Link-Local. Die virtual machine kaeme sonst an Router, Home Assistant und Lager.
+
 BLOCKED_RANGES = (
     "10.0.0.0/8",
     "100.64.0.0/10",
@@ -169,13 +164,10 @@ BLOCKED_RANGES = (
     "192.168.0.0/16",
 )
 
-#: Der Suchpfad fuer die beiden Aufrufe als root (Sperre setzen, Sperre lesen).
-#: Drinnen gilt sonst der knappe PATH der virtual machine -- ohne /usr/sbin, wo
-#: iptables liegt.
+
 ROOT_PATH = "/usr/sbin:/sbin:/usr/bin:/bin"
 
-#: So viel darf ein Bildschirmfoto hoechstens wiegen. Ein JPEG von 1280x800
-#: hat gut 100 kB; was deutlich groesser ist, ist kein Bildschirmfoto.
+
 MAX_SHOT_BYTES = 5 * 1024 * 1024
 
 
@@ -188,10 +180,10 @@ class Runtime:
     """Womit die virtual machine betrieben wird."""
 
     binary: str
-    #: "gvisor", "podman", "podman-root" oder "docker" -- absteigend nach Staerke.
+
     kind: str
     label: str
-    #: Zusaetzliche Argumente fuer `run`, etwa die gVisor-Laufzeit.
+
     extra: tuple[str, ...] = ()
 
     @property
@@ -230,7 +222,6 @@ def _runs(binary: str, *args: str, timeout: float = 8.0) -> subprocess.Completed
     )
 
 
-#: Befehle, die ueber der Grenze noch laufen duerfen -- einzeln, ohne Verkettung.
 _CLEANUP_RE = re.compile(r"^\s*(rm|rmdir|truncate|du|ls|df)(\s[^;&|`$<>(){}\n]*)?$")
 
 
@@ -260,8 +251,7 @@ def _runs_capped(
 
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert process.stdout is not None and process.stderr is not None
-    # `_cut()` braucht etwas mehr als seine Anzeigegrenze, um den Hinweis auf
-    # die Kuerzung einzublenden. Der Host behaelt trotzdem nur kleine Puffer.
+
     readers = [
         threading.Thread(target=drain, args=(process.stdout, stdout, MAX_OUTPUT * 2)),
         threading.Thread(target=drain, args=(process.stderr, stderr, MAX_OUTPUT)),
@@ -288,8 +278,7 @@ def _runs_capped(
 def _works(binary: str) -> bool:
     """Antwortet die Laufzeit ueberhaupt? Ein installierter Client ohne
     laufenden Dienst ist so gut wie keiner."""
-    # Jede mit ihrem eigenen Feld (11.2.2 Sol): Podman kennt kein ".ServerVersion"
-    # und brach damit immer ab -- ein laufendes Podman galt so als "fehlt".
+
     feld = "{{.Version.Version}}" if Path(binary).name.startswith("podman") \
         else "{{.ServerVersion}}"
     try:
@@ -313,7 +302,6 @@ def _has_gvisor(binary: str) -> bool:
     return found.returncode == 0 and "runsc" in found.stdout
 
 
-#: Was Laufzeiten sonst vom Rechner in den Behaelter reichen (beide Schreibweisen).
 PROXY_VARS = tuple(n for name in ("HTTP_PROXY", "HTTPS_PROXY", "FTP_PROXY", "ALL_PROXY",
                                    "NO_PROXY") for n in (name, name.lower()))
 
@@ -349,14 +337,12 @@ def find_runtime() -> Runtime | None:
         virtual machine -- ein Rueckfall auf den Rechner selbst waere genau das, was
         diese Datei verhindern soll.
     """
-    # Jede Laufzeit nur einmal fragen (11.2.2 Sol): haengt der Dienst, kostet jede
-    # Frage das volle Zeitlimit -- vorher zweimal je Laufzeit.
+
     da = [b for b in ("podman", "docker") if shutil.which(b) and _works(b)]
     for binary in da:
         if _has_gvisor(binary):
             return Runtime(binary, "gvisor", f"{binary} + gVisor", ("--runtime", "runsc"))
     if "podman" in da:
-        # Als root laeuft Podman mit Wurzelrechten -- dann nicht "ohne" draufschreiben.
         if _podman_rootless():
             return Runtime("podman", "podman", "Podman (ohne Wurzelrechte)")
         return Runtime("podman", "podman-root", "Podman (gehaertet)")
@@ -365,8 +351,6 @@ def find_runtime() -> Runtime | None:
     return None
 
 
-#: Wie lange gilt, ob Podman/Docker da ist (Sekunden). `docker info` dauert,
-#: und der Agent fragt bei jeder Runde im Code-Modus.
 RUNTIME_TTL = 60.0
 _LAUFZEIT: dict[str, Any] = {"bis": 0.0, "wert": None, "bekannt": False, "sucht": False}
 _LAUFZEIT_LOCK = threading.Lock()
@@ -409,7 +393,6 @@ def runtime_known() -> tuple[bool, Runtime | None]:
         try:
             threading.Thread(target=neu_suchen, name="aquaticy-laufzeit", daemon=True).start()
         except RuntimeError:
-            # Kein Faden frei: beim naechsten Mal wieder versuchen statt nie mehr.
             with _LAUFZEIT_LOCK:
                 _LAUFZEIT["sucht"] = False
     return bekannt, wert
@@ -451,9 +434,6 @@ def _cut(text: str, limit: int = MAX_OUTPUT) -> tuple[str, bool]:
     return text[:half] + "\n… [gekuerzt] …\n" + text[-half:], True
 
 
-#: Was in einem Pfad vorkommen darf. Alles andere waere entweder ein Versuch,
-#: die Anfuehrungszeichen im `sh -c` zu verlassen, oder ein Tippfehler -- beides
-#: will man nicht durchlassen.
 PATH_CHARS = re.compile(r"^[A-Za-z0-9._/\- ]+$")
 
 
@@ -472,7 +452,7 @@ def safe_path(path: str) -> str:
     raw = (path or "").strip()
     if not raw:
         raise ValueError("Ohne Pfad geht es nicht.")
-    if not PATH_CHARS.match(raw):
+    if not PATH_CHARS.fullmatch(raw):
         raise ValueError(
             "Im Pfad sind nur Buchstaben, Ziffern, Punkt, Strich, Unterstrich und "
             f"Schraegstrich erlaubt -- '{raw}' hat anderes darin."
@@ -484,12 +464,145 @@ def safe_path(path: str) -> str:
     return full
 
 
-#: So heissen die Datentraeger der Add-ons: je Konto und Add-on einer.
 ADDON_VOLUME_RE = re.compile(r"^aquaticy-addon-[0-9a-f]{12}-[a-z_]{2,20}$")
-#: Und dort haengen sie in der virtual machine.
+
 ADDON_PATH_RE = re.compile(r"^/addons/[a-z_]{2,20}$")
-#: Beschriftung, an der man sie erkennt -- sweep() laesst sie in Ruhe.
+
 ADDON_LABEL = "aquaticy-addon=1"
+
+
+BUILD_TIMEOUT = 3600
+
+DESKTOP_HELPERS = ("aquaticy-desktop", "aquaticy-netz", "aquaticy-addons")
+
+_BUILD_LOCK = threading.Lock()
+
+
+def short_name_problem(text: str) -> bool:
+    """Meldet die Laufzeit "short-name ... did not resolve" (12.6.6 Luna)?
+
+    Podman sucht einen Namen ohne Registry (``python:3.12-slim``) nur dort, wo die
+    ``registries.conf`` es erlaubt. Steht dort nichts, ist das Abbild "unbekannt" --
+    auch dann, wenn es nur noch nicht gebaut wurde.
+    """
+    klein = (text or "").lower()
+    return "short-name" in klein and "did not resolve" in klein
+
+
+def image_present(runtime: Runtime, image: str) -> bool:
+    """Gibt es dieses Abbild schon auf dem Rechner? (``image inspect`` kennt Docker und Podman.)"""
+    try:
+        return _runs(runtime.binary, "image", "inspect", image, timeout=30).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def desktop_recipe() -> tuple[Path, Path] | None:
+    """Rezept und Hilfen aus dem installierten Paket oder dem eigenen Projektordner.
+
+    Nie im Arbeitsordner suchen: Dort koennte ein fremdes Dockerfile liegen.
+    """
+    paket = Path(__file__).resolve().parent
+    kandidaten = [paket / "_desktop"]
+    if (paket.parent / "pyproject.toml").is_file():
+        kandidaten.append(paket.parent / "docker")
+    for wurzel in kandidaten:
+        rezept = wurzel / "workshop-desktop.Dockerfile"
+        hilfen = wurzel / "desktop"
+        if rezept.is_file() and all((hilfen / name).is_file() for name in DESKTOP_HELPERS):
+            return rezept, hilfen
+    return None
+
+
+def missing_image_text(runtime: Runtime, image: str) -> str:
+    """Ein Satz fuer Menschen, wenn ein Abbild fehlt -- statt der Meldung von Podman."""
+    if image == DESKTOP_IMAGE:
+        return (
+            f"Das Desktop-Abbild '{image}' gibt es auf diesem Rechner noch nicht. Aquaticy "
+            "baut es beim Installieren eines Add-ons selbst. Von Hand, im Ordner des "
+            f"Projekts: '{runtime.binary} build -f docker/workshop-desktop.Dockerfile "
+            f"-t {image} .'"
+        )
+    return (
+        f"Das Abbild '{image}' gibt es auf diesem Rechner nicht. Hol es mit "
+        f"'{runtime.binary} pull {image}' -- mit vollem Namen samt Registry, zum Beispiel "
+        "docker.io/library/... -- oder wähle ein anderes in AQUATICY_VM_DESKTOP_IMAGE."
+    )
+
+
+def build_desktop_image(runtime: Runtime) -> None:
+    """Baut das Desktop-Abbild aus docker/workshop-desktop.Dockerfile (12.6.6 Luna).
+
+    Gebaut wird aus einem kleinen, eigenen Ordner: das Rezept und die drei
+    Hilfsprogramme, sonst nichts. Das dauert beim ersten Mal einige Minuten.
+
+    Raises:
+        SandboxUnavailable: Wenn das Rezept fehlt oder das Bauen scheitert.
+    """
+    gefunden = desktop_recipe()
+    if gefunden is None:
+        raise SandboxUnavailable(
+            "Die Bauvorlage für den Desktop fehlt in dieser Installation. "
+            "Installiere Aquaticy mit allen Paketdateien neu. "
+            + missing_image_text(runtime, DESKTOP_IMAGE)
+        )
+    rezept, hilfen = gefunden
+    with tempfile.TemporaryDirectory(prefix="aquaticy-abbild-") as ordner:
+        wurzel = Path(ordner)
+        (wurzel / "docker" / "desktop").mkdir(parents=True)
+        ziel = wurzel / "docker" / "workshop-desktop.Dockerfile"
+        shutil.copy2(rezept, ziel)
+        for name in DESKTOP_HELPERS:
+            shutil.copy2(hilfen / name, wurzel / "docker" / "desktop" / name)
+        try:
+            gebaut = _runs(runtime.binary, "build", "-f", str(ziel), "-t", DESKTOP_IMAGE,
+                           str(wurzel), timeout=BUILD_TIMEOUT)
+        except subprocess.TimeoutExpired as exc:
+            raise SandboxUnavailable(
+                "Das Bauen des Desktop-Abbilds dauert zu lange (über eine Stunde). Prüfe die "
+                "Internetverbindung und versuch es noch einmal."
+            ) from exc
+    if gebaut.returncode != 0:
+        raise SandboxUnavailable(
+            "Das Desktop-Abbild ließ sich nicht bauen: "
+            + (gebaut.stderr.strip() or gebaut.stdout.strip())[-400:]
+            + (" (Podman findet Abbilder ohne Registry-Namen nicht: In "
+               "/etc/containers/registries.conf fehlt 'unqualified-search-registries'.)"
+               if short_name_problem(gebaut.stderr) else "")
+        )
+
+
+def ensure_image(runtime: Runtime, image: str, *, build: bool = False,
+                 progress: Any = None) -> None:
+    """Sorgt dafuer, dass *image* da ist -- das Desktop-Abbild baut Aquaticy bei Bedarf.
+
+    Raises:
+        SandboxUnavailable: Mit einem Satz, was fehlt und was zu tun ist.
+    """
+    if image_present(runtime, image):
+        return
+    if image == DESKTOP_IMAGE and build:
+        with _BUILD_LOCK:
+            if image_present(runtime, image):
+                return
+            if progress is not None:
+                progress("Baut das Desktop-Abbild (einmalig, 5 bis 20 Minuten) …")
+            build_desktop_image(runtime)
+        return
+    raise SandboxUnavailable(missing_image_text(runtime, image))
+
+
+def ensure_ssh_image(runtime: Runtime) -> None:
+    def ready() -> bool:
+        inspected = _runs(runtime.binary, "image", "inspect", "--format",
+                          '{{index .Config.Labels "org.aquaticy.openssh"}}', DESKTOP_IMAGE)
+        return inspected.returncode == 0 and inspected.stdout.strip() == "1"
+
+    if ready():
+        return
+    with _BUILD_LOCK:
+        if not ready():
+            build_desktop_image(runtime)
 
 
 def ensure_addon_volume(runtime: Runtime, volume: str, image: str) -> None:
@@ -523,6 +636,8 @@ def ensure_addon_volume(runtime: Runtime, volume: str, image: str) -> None:
         timeout=120,
     )
     if prepared.returncode != 0:
+        if short_name_problem(prepared.stderr):
+            raise SandboxUnavailable(missing_image_text(runtime, image))
         raise SandboxUnavailable(
             "Datentraeger fuers Add-on liess sich nicht vorbereiten: "
             + prepared.stderr.strip()[:300]
@@ -571,35 +686,30 @@ class Sandbox:
         internet: bool = False,
         lan: bool = False,
     ) -> None:
-        #: Desktop mit Internet statt Maschine ohne Netz (siehe Kopf der Datei).
         self.user_mode = bool(user_mode)
-        #: Internet ohne Desktop -- die virtual machine im Code-Modus fuer Ultra
-        #: (seit 9.5.31). Dieselbe Heimnetz-Sperre wie im User mode, daher das
-        #: Desktop-Abbild (es bringt iptables und das Sperr-Skript mit). Ohne
-        #: eingerichtete Sperre startet die Maschine nicht (fail-closed).
+
         self.internet = bool(internet) and not self.user_mode
-        #: Auch das lokale Netz (9.5.34, nur Ultra): dann gibt es keine Sperre.
-        #: Ohne Netz ist das sinnlos -- es gilt nur mit Internet oder User mode.
+
         self.lan = bool(lan) and (self.user_mode or bool(internet))
-        #: Womit sich der Browser im User mode bei Webseiten meldet.
+
         self.browser_agent = browser_agent
-        #: Datentraeger der eingeschalteten Add-ons -> wo sie haengen
-        #: (/addons/<name>). Sie gehoeren nicht der virtual machine und bleiben,
-        #: wenn sie abgebaut wird -- dort liegen Programme und Anmeldungen.
+
         self.addon_mounts = {
             volume: ziel
             for volume, ziel in (addon_mounts or {}).items()
             if ADDON_VOLUME_RE.fullmatch(volume) and ADDON_PATH_RE.fullmatch(ziel)
         }
-        #: Ohne Bildschirm: fuer den Installer, der nur laedt und auspackt.
+
         self.headless = bool(headless)
-        # Ohne ausdrueckliches Abbild entscheidet die Betriebsart: der User mode
-        # braucht den Desktop, alles andere kommt mit dem kleinen Abbild aus.
+
         self.image = image or (DESKTOP_IMAGE if self.netz_offen else DEFAULT_IMAGE)
         self.idle_seconds = max(60, int(idle_minutes) * 60)
         self.memory_mb = max(128, int(memory_mb))
         self.disk_gb = max(1, int(disk_gb))
         self.cpus = max(1, int(cpus))
+        if self.user_mode:
+            self.memory_mb = max(self.memory_mb, DESKTOP_MIN_MEMORY_MB)
+            self.cpus = max(self.cpus, DESKTOP_MIN_CPUS)
         self.on_event = on_event
         self.runtime: Runtime | None = None
         self._name = ""
@@ -607,17 +717,15 @@ class Sandbox:
         self._lock = threading.RLock()
         self._timer: threading.Timer | None = None
         self._quota_warned = False
-        #: Ueber der Grenze (nur wo die Laufzeit keine Quote kann): dann laufen
-        #: nur noch Aufraeumbefehle (seit 9.5.15).
+
         self._over_quota = False
-        #: Kann die Laufzeit eine Platzquote? Wird beim ersten Start geklaert.
+
         self._quota_ok = True
-        #: Wann zuletzt nachgemessen wurde (nur ohne Quote noetig).
+
         self._last_quota_check = 0.0
-        #: Wann zuletzt gearbeitet wurde -- fuer die Anzeige.
+
         self.last_used = 0.0
 
-    # -- Zustand ----------------------------------------------------------
     @property
     def name(self) -> str:
         return self._name
@@ -627,15 +735,11 @@ class Sandbox:
         return bool(self._name)
 
     def _emit(self, event: str, **payload: Any) -> None:
-        # Das Aufraeumen laeuft in einem eigenen Thread und meldet sich unter
-        # Umstaenden, wenn die Anfrage laengst vorbei ist. Ein Fehler im
-        # Empfaenger darf die virtual machine nicht stehen lassen.
         if not self.on_event:
             return
-        with contextlib.suppress(Exception):  # nur Anzeige, nie kritisch
+        with contextlib.suppress(Exception):
             self.on_event(event, payload)
 
-    # -- Aufbau -----------------------------------------------------------
     def ensure(self) -> str:
         """Startet die virtual machine, falls sie nicht schon laeuft.
 
@@ -661,6 +765,9 @@ class Sandbox:
                 )
             self.runtime = runtime
             self._check_nested_network()
+            if self.lan and self.image == DESKTOP_IMAGE:
+                self._emit("vm_ssh_setup")
+                ensure_ssh_image(runtime)
             token = uuid.uuid4().hex[:12]
             self._name = f"aquaticy-werkstatt-{token}"
             self._volume = f"aquaticy-werkstatt-{token}"
@@ -677,7 +784,6 @@ class Sandbox:
                 if self.user_mode and not self.headless:
                     self._start_desktop()
             except Exception:
-                # Halbe virtual machine ist schlimmer als keine: alles wieder weg.
                 self._destroy_locked("Start fehlgeschlagen")
                 raise
             self._touch_locked()
@@ -717,9 +823,7 @@ class Sandbox:
             raise SandboxUnavailable(
                 "Datentraeger liess sich nicht anlegen: " + made.stderr.strip()[:300]
             )
-        # Einmal kurz als root hinein, nur um die Rechte zu setzen. Dieser
-        # Behaelter hat kein Netz, keine Faehigkeiten ausser CHOWN und lebt
-        # einen Sekundenbruchteil.
+
         prepared = _runs(
             runtime.binary,
             "run", "--rm",
@@ -744,14 +848,9 @@ class Sandbox:
         assert runtime is not None
         desktop = self.user_mode
         offen = self.netz_offen
-        # Ohne User mode/Internet: gar kein Netz. Mit: das uebliche Netz der
-        # Laufzeit -- die Sperre fuers Heimnetz setzt _lock_network gleich
-        # nach dem Start.
+
         netz = [] if offen else ["--network", "none"]
-        # NET_ADMIN ist die eine Faehigkeit, die die Sperre braucht. Sie steht
-        # nur root zur Verfuegung, und root arbeitet drinnen nie -- ausser fuer
-        # genau dieses eine Skript beim Start.
-        # Ohne Sperre (lokales Netz, nur Ultra) braucht es auch NET_ADMIN nicht.
+
         faehigkeiten = ["--cap-drop", "ALL",
                         *(("--cap-add", "NET_ADMIN") if offen and not self.lan else ())]
         kein_kopieren = "" if Path(runtime.binary).name.startswith("podman") else ":nocopy"
@@ -761,28 +860,20 @@ class Sandbox:
             "run", "--detach",
             "--name", self._name,
             *runtime.extra,
-            # -- Abschottung --
+
             *netz,
             *faehigkeiten,
             "--security-opt", "no-new-privileges",
             "--read-only",
             "--user", RUN_AS,
-            # -- Grenzen --
+
             "--memory", f"{self.memory_mb}m",
             "--memory-swap", f"{self.memory_mb}m",
             "--cpus", str(self.cpus),
             "--pids-limit", str(prozesse),
             "--ulimit", f"nofile={dateien}:{dateien}",
             "--ulimit", f"fsize={self.disk_gb * 1024 * 1024 * 1024}",
-            # -- Platz zum Arbeiten --
-            # `nocopy`: Neuere Docker-Versionen (29.x) legen wegen --workdir
-            # den Ordner zuerst im Abbild an -- als root -- und kopieren das
-            # beim ersten Einhaengen in den noch leeren Datentraeger. Das
-            # machte das chown aus _create_volume zunichte, und die virtual machine
-            # konnte in /work nichts schreiben (bis 9.5.12).
-            # Podman (11.2.2 Sol) reicht `nocopy` an runc durch, und runc lehnt es
-            # als "invalid mount" ab -- die virtual machine startete mit Podman nie.
-            # Podman braucht es auch nicht: ohne laesst es /work beschreibbar.
+
             "-v", f"{self._volume}:{WORKDIR}{kein_kopieren}",
             *(
                 flag
@@ -790,36 +881,31 @@ class Sandbox:
                 for flag in ("-v", f"{volume}:{ziel}{kein_kopieren}")
             ),
             "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
-            # Nicht jede Laufzeit kennt diese Quote (sie braucht xfs mit
-            # Projektquoten). Wo sie fehlt, faellt der Start damit aus -- dann
-            # startet _start_container ohne sie und wir messen stattdessen nach.
+
             *(("--storage-opt", f"size={self.disk_gb}G") if self._quota_ok else ()),
             "--workdir", WORKDIR,
-            # -- Umgebung: nur das Noetigste, nichts vom Rechner --
+
             "--env", "HOME=" + WORKDIR,
             "--env", "PATH=/usr/local/bin:/usr/bin:/bin",
             "--env", "LANG=C.UTF-8",
             "--env", "PYTHONDONTWRITEBYTECODE=1",
-            # Proxys des Rechners bleiben draussen (11.2.2 Sol): Podman reicht
-            # HTTP(S)_PROXY von sich aus hinein, Docker die aus ~/.docker/config.json
-            # -- samt Zugangsdaten, falls sie in der Adresse stehen. Leer gesetzt
-            # gilt bei beiden, was hier steht.
+
             *(flag for name in PROXY_VARS for flag in ("--env", f"{name}=")),
             *(("--http-proxy=false",) if kein_kopieren == "" else ()),
             "--label", "aquaticy-werkstatt=1",
             "--label", instance_label(),
         ]
         if offen:
-            # iptables-legacy braucht ein beschreibbares /run fuer seine
-            # Sperrdatei -- auch ohne Desktop (Internet im Code-Modus, 9.5.31),
-            # sonst scheitert dort die Heimnetz-Sperre (fail-closed).
             flags += ["--tmpfs", "/run:rw,nosuid,nodev,size=8m"]
         if desktop:
             flags += [
-                # Der Browser braucht ein groesseres /dev/shm als die 64 MB ab Werk.
-                "--shm-size", "256m",
+
+                "--shm-size", DESKTOP_SHM,
                 "--env", f"DISPLAY={DISPLAY}",
                 "--label", "aquaticy-werkstatt-user=1",
+                # Firefox soll bei einem Absturz nichts an Mozilla schicken.
+                "--env", "MOZ_CRASHREPORTER_DISABLE=1",
+                "--env", "MOZ_CRASHREPORTER_NO_REPORT=1",
             ]
         return flags
 
@@ -845,15 +931,12 @@ class Sandbox:
         args = [
             *self._run_flags(),
             self.image,
-            # Nichts tun, aber am Leben bleiben. `sleep infinity` haelt genau
-            # einen Prozess und kostet nichts.
+
             *self._command(),
         ]
         started = _runs(runtime.binary, *args, timeout=300)
         quota_unsupported = quota_unsupported_message(started.stderr)
         if started.returncode != 0 and quota_unsupported:
-            # Die Laufzeit kann keine Quote -- dann eben ohne, und der Platz
-            # wird nach jedem Befehl nachgemessen.
             self._quota_ok = False
             args = [*self._run_flags(), self.image, *self._command()]
             started = _runs(runtime.binary, *args, timeout=300)
@@ -868,6 +951,9 @@ class Sandbox:
                 hilfe = (
                     f" (Fehlt das Abbild? '{runtime.binary} pull {self.image}' holt es einmalig.)"
                 )
+            if short_name_problem(started.stderr):
+                hilfe = " " + missing_image_text(runtime, self.image)
+                started.stderr = "Das Abbild ist nicht da."
             raise SandboxUnavailable(
                 "Die virtual machine liess sich nicht starten: "
                 + started.stderr.strip()[:300] + hilfe
@@ -993,9 +1079,10 @@ class Sandbox:
         )
 
     def screenshot(
-        self, *, grid: bool = False, mark: tuple[int, int] | None = None, start: bool = True
+        self, *, grid: bool = False, mark: tuple[int, int] | None = None, start: bool = True,
+        quality: int | None = None,
     ) -> bytes:
-        """Ein Bildschirmfoto als JPEG.
+        """Ein Bildschirmfoto als JPEG (quality 30 bis 95; ohne Angabe die Voreinstellung).
 
         Raises:
             SandboxUnavailable: Ohne User mode oder wenn kein Bild kommt.
@@ -1005,6 +1092,8 @@ class Sandbox:
             extra.append("--grid")
         if mark is not None:
             extra += ["--mark", str(int(mark[0])), str(int(mark[1]))]
+        if quality is not None:
+            extra += ["--quality", str(max(30, min(95, int(quality))))]
         done = self.desktop("shot", *extra, timeout=40, start=start)
         bild = done.stdout or b""
         if done.returncode != 0 or not bild.startswith(b"\xff\xd8"):
@@ -1021,7 +1110,6 @@ class Sandbox:
         found = _runs(runtime.binary, "inspect", "--format", "{{.State.Running}}", self._name)
         return found.returncode == 0 and found.stdout.strip() == "true"
 
-    # -- Arbeiten ---------------------------------------------------------
     def run(self, command: str, timeout: int = COMMAND_TIMEOUT) -> RunResult:
         """Fuehrt *command* in der virtual machine aus.
 
@@ -1036,7 +1124,6 @@ class Sandbox:
         runtime = self.runtime
         assert runtime is not None
         if self._over_quota and not cleanup_command(command):
-            # Hart (9.5.15): ueber der Grenze laeuft nur noch Aufraeumen.
             return RunResult(
                 exit_code=125, stdout="",
                 stderr=(f"[virtual machine] Voll: mehr als {self.disk_gb} GB belegt. Erst "
@@ -1047,9 +1134,7 @@ class Sandbox:
             )
         self._emit("vm_run", command=command[:200])
         started = time.monotonic()
-        # Kann die Laufzeit keine echte Quote, wacht ein Aufpasser waehrend des
-        # Befehls: ueber der Grenze wird er abgebrochen, nicht erst hinterher
-        # gewarnt (bis 9.5.14).
+
         stop = threading.Event()
         waechter = None
         if not self._quota_ok:
@@ -1060,8 +1145,7 @@ class Sandbox:
                 runtime.binary,
                 "exec", "--user", RUN_AS, "--workdir", WORKDIR, name,
                 "sh", "-c", command,
-                # Etwas Luft, damit die Laufzeit selbst antworten kann, bevor
-                # wir sie abwuergen.
+
                 timeout=limit + 5,
             )
             out, cut_out = _cut(done.stdout)
@@ -1074,7 +1158,6 @@ class Sandbox:
                 truncated=cut_out or cut_err,
             )
         except subprocess.TimeoutExpired:
-            # Der Prozess drinnen laeuft womoeglich weiter -- also weg damit.
             self._kill_processes()
             result = RunResult(
                 exit_code=124,
@@ -1098,7 +1181,6 @@ class Sandbox:
             raise ValueError(f"Die virtual machine ist voll (mehr als {self.disk_gb} GB) -- "
                              "erst aufräumen.")
 
-    #: So oft misst der Aufpasser waehrend eines Befehls (Sekunden).
     WATCH_SECONDS = 3.0
 
     def _watch_disk(self, stop: threading.Event) -> None:
@@ -1282,14 +1364,13 @@ class Sandbox:
         full = safe_path(path)
         if not self.alive or self.runtime is None:
             return []
-        # `find -printf` gibt es in busybox nicht; `stat -c` ueberall.
+
         done = _runs(
             self.runtime.binary,
             "exec", "--user", RUN_AS, "--workdir", WORKDIR, self._name,
             "sh", "-c",
             f'find "{full}" -type f -not -path "*/.git/*" 2>/dev/null '
-            # Zeilenweise statt an Leerzeichen getrennt (9.5.34): "mein bericht.pdf"
-            # fehlte sonst in der Liste.
+
             f"| head -n {MAX_LIST} | tr '\\n' '\\000' | xargs -0 -r stat -c '%s %n' 2>/dev/null",
             timeout=30,
         )
@@ -1321,7 +1402,6 @@ class Sandbox:
         except ValueError:
             return 0.0
 
-    # -- Abbau ------------------------------------------------------------
     def touch(self) -> None:
         """Setzt die Uhr zurueck: erst zwanzig Minuten Ruhe raeumen auf."""
         with self._lock:
@@ -1412,9 +1492,7 @@ def sweep(runtime: Runtime | None = None) -> int:
     runtime = runtime or find_runtime()
     if runtime is None:
         return 0
-    # Nur die EIGENEN (seit 9.5.16): bis dahin raeumte jede Instanz beim Start
-    # alle Werkstaetten auf dem Docker-Host weg -- auch die einer zweiten,
-    # die gerade arbeitete.
+
     found = _runs(
         runtime.binary, "ps", "--all", "--quiet", "--filter", "label=aquaticy-werkstatt=1",
         "--filter", f"label={instance_label()}", timeout=30,
@@ -1435,14 +1513,12 @@ def sweep(runtime: Runtime | None = None) -> int:
     return len(ids)
 
 
-#: Eine virtual machine je Kontoprofil. So koennen mehrere Nutzer gleichzeitig
-#: arbeiten, ohne Dateien, Prozesse oder Ereignisse miteinander zu teilen.
 _shared: dict[str, Sandbox] = {}
+_review_boxes: weakref.WeakSet[Sandbox] = weakref.WeakSet()
 _shared_lock = threading.Lock()
 _shared_registered = False
 
 
-#: Kein Empfaenger uebergeben ist etwas anderes als "ab jetzt niemand".
 _KEEP = object()
 
 
@@ -1463,9 +1539,7 @@ def shared(settings: Any = None, on_event: Any = _KEEP) -> Sandbox:
         box = _shared.get(key)
         if box is None:
             user_mode = bool(getattr(settings, "vm_user_mode", False))
-            # Internet ohne Desktop (9.5.31) -- die Einstellung setzt nur Ultra.
-            # Das lokale Netz (9.5.34) bringt das Internet mit -- sonst waere es
-            # eine virtual machine nur fuers Heimnetz.
+
             lan = bool(getattr(settings, "vm_lan", False))
             internet = (bool(getattr(settings, "vm_internet", False)) or lan) and not user_mode
             box = Sandbox(
@@ -1522,9 +1596,25 @@ def browser_agent(settings: Any = None) -> str:
     )
 
 
+def review_box(settings: Any, on_event: Any = None) -> Sandbox:
+    global _shared_registered
+    box = Sandbox(
+        memory_mb=int(getattr(settings, "vm_memory_mb", MEMORY_MB)),
+        disk_gb=int(getattr(settings, "vm_disk_gb", DISK_GB)),
+        cpus=int(getattr(settings, "vm_cpus", CPUS)), on_event=on_event)
+    with _shared_lock:
+        if not _shared_registered:
+            atexit.register(_stop_shared)
+            _shared_registered = True
+        _review_boxes.add(box)
+    return box
+
+
 def _stop_shared() -> None:
     """Beim Beenden des Programms: alle Werkstaetten gehen mit."""
-    for box in list(_shared.values()):
+    with _shared_lock:
+        boxes = [*list(_shared.values()), *list(_review_boxes)]
+    for box in boxes:
         box.stop("Programm beendet")
 
 

@@ -1,0 +1,17 @@
+# Aquaticy-Test: Vercel braucht nur das Paket -- Tests, Worker und Container bleiben draussen.
+tests/
+tools/
+docker/
+exports/
+aquaticy-box
+aquaticy-sandbox
+compose*.yaml
+Dockerfile
+.github/
+*.md
+!README.md
+worker/
+wrangler.toml
+.wrangler/
+.env
+.env.*

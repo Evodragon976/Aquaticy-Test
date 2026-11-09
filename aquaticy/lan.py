@@ -19,11 +19,15 @@ from __future__ import annotations
 import ipaddress
 import socket
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-#: Ports, die aquaticy kennt, mit dem, was dort ueblicherweise laeuft.
+from aquaticy import dns_lookup
+
+DNS_TIMEOUT = dns_lookup.TIMEOUT
+
 KNOWN_PORTS: dict[int, str] = {
     21: "FTP",
     22: "SSH",
@@ -55,23 +59,19 @@ KNOWN_PORTS: dict[int, str] = {
     32400: "Plex",
 }
 
-#: Beim schnellen Durchlauf gepruefte Ports -- deckt fast jedes Haushaltsgeraet
-#: ab, ohne dass ein Scan Minuten dauert.
+
 QUICK_PORTS: tuple[int, ...] = (22, 80, 443, 445, 631, 1883, 8006, 8080, 8123, 9100, 11434, 32400)
 
-#: Beim gruendlichen Durchlauf alle bekannten Ports.
+
 FULL_PORTS: tuple[int, ...] = tuple(sorted(KNOWN_PORTS))
 
-#: So lange wartet ein einzelner Verbindungsversuch. Im lokalen Netz antwortet
-#: alles in Millisekunden -- laenger warten heisst nur, auf Totes zu warten.
+
 CONNECT_TIMEOUT = 0.35
 
-#: So viele Verbindungsversuche gleichzeitig. Ein /24 mit zwoelf Ports sind
-#: gut 3000 Versuche; mit 200 Faeden ist das in wenigen Sekunden durch.
+
 WORKERS = 200
 
-#: Groesstes Netz, das aquaticy am Stueck durchgeht. Ein /16 waere 65.000
-#: Adressen -- das dauert zu lange und will niemand.
+
 MAX_HOSTS = 512
 
 
@@ -83,8 +83,7 @@ class Device:
     name: str = ""
     ports: list[int] = field(default_factory=list)
     services: list[str] = field(default_factory=list)
-    #: Titel einer gefundenen Weboberflaeche -- oft der beste Hinweis darauf,
-    #: was das Geraet ueberhaupt ist.
+
     title: str = ""
 
     def as_dict(self) -> dict[str, object]:
@@ -101,14 +100,12 @@ class Device:
         return self.title or self.name or self.address
 
 
-#: Die Bereiche, in denen Aquaticy im Heimnetz sucht -- und nur diese:
-#: RFC 1918 und das Netz von Tailscale (CGNAT).
 HOME_NETWORKS: tuple[ipaddress.IPv4Network, ...] = tuple(
     ipaddress.IPv4Network(netz)
     for netz in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10")
 )
 
-#: So viel liest der Titelabruf hoechstens -- ein Titel steht weit vorne.
+
 MAX_TITLE_BYTES = 256_000
 
 
@@ -122,14 +119,10 @@ def is_private_net(network: ipaddress.IPv4Network | ipaddress.IPv6Network) -> bo
     Tailscale (100.64/10) zaehlt mit: fuer den Nutzer ist das sein eigenes
     Netz, auch wenn die Adressen offiziell dem Provider-Bereich gehoeren.
     """
-    # Nur IPv4: Aquaticy durchsucht keine IPv6-Netze. Ein IPv6-Netz haette
-    # hier frueher entweder als "privat" gegolten (2001:db8::/32) oder einen
-    # TypeError geworfen (::/32 gegen 100.64/10).
+
     if not isinstance(network, ipaddress.IPv4Network):
         return False
-    # Genau die zugesagten Bereiche (seit 9.5.16). ``is_private`` zaehlte
-    # auch 127/8 (der Server selbst), 169.254/16 (Metadaten der Cloud) und
-    # Doku-/Testnetze mit -- dort hat eine Heimnetzsuche nichts verloren.
+
     return any(network.subnet_of(bereich) for bereich in HOME_NETWORKS)
 
 
@@ -201,9 +194,9 @@ def parse_subnet(subnet: str) -> ipaddress.IPv4Network:
         raise ValueError("Kein Netz angegeben.")
     if "/" not in text:
         parts = text.split(".")
-        if len(parts) == 3:  # "192.168.1" -> ganzes /24
+        if len(parts) == 3:
             text = f"{text}.0/24"
-        elif len(parts) == 4:  # eine einzelne Adresse -> ihr /24
+        elif len(parts) == 4:
             text = f"{text}/24"
         else:
             raise ValueError(f"Damit kann Aquaticy AI nichts anfangen: {subnet}")
@@ -233,7 +226,7 @@ def port_open(address: str, port: int, timeout: float = CONNECT_TIMEOUT) -> bool
 def hostname_of(address: str) -> str:
     """Rueckwaerts-Aufloesung, wenn der Router sie anbietet."""
     try:
-        name = socket.gethostbyaddr(address)[0]
+        name = dns_lookup.call(socket.gethostbyaddr, address, timeout=DNS_TIMEOUT)[0]
     except (OSError, socket.herror):
         return ""
     return "" if name == address else name
@@ -251,11 +244,8 @@ def web_title(address: str, port: int, timeout: float = 1.5) -> str:
         return ""
     if not isinstance(ip, ipaddress.IPv4Address) or not any(ip in n for n in HOME_NETWORKS):
         return ""
-    # Keine Weiterleitungen und eine Obergrenze (seit 9.5.16): ein Geraet
-    # koennte sonst woandershin schicken oder endlos Daten liefern.
+
     try:
-        # Kein Proxy aus der Umgebung und eine Gesamtfrist (9.5.34): ein Geraet,
-        # das Byte fuer Byte tropft, haelt die Suche sonst stundenlang auf.
         frist = time.monotonic() + max(5.0, 3 * float(timeout))
         with httpx.stream("GET", url, timeout=timeout, verify=False,
                           headers={"Accept-Encoding": "gzip, deflate"},
@@ -278,7 +268,8 @@ def web_title(address: str, port: int, timeout: float = 1.5) -> str:
 
 
 def check_host(
-    address: str, ports: tuple[int, ...] = FULL_PORTS, *, with_title: bool = True
+    address: str, ports: tuple[int, ...] = FULL_PORTS, *, with_title: bool = True,
+    with_names: bool = True,
 ) -> Device | None:
     """Prueft ein einzelnes Geraet. `None`, wenn kein Port antwortet."""
     with ThreadPoolExecutor(max_workers=min(len(ports), 32)) as pool:
@@ -293,7 +284,7 @@ def check_host(
         return None
     device = Device(
         address=address,
-        name=hostname_of(address),
+        name=hostname_of(address) if with_names else "",
         ports=found,
         services=[KNOWN_PORTS[port] for port in found if port in KNOWN_PORTS],
     )
@@ -311,46 +302,48 @@ def scan(
     *,
     quick: bool = True,
     with_titles: bool = True,
+    with_names: bool = True,
     on_device: object = None,
+    ports: tuple[int, ...] | None = None,
+    allowed: Callable[[], bool] | None = None,
 ) -> list[Device]:
-    """Durchsucht *subnet* (leer = das eigene Netz) nach erreichbaren Geraeten.
-
-    Zuerst wird nur geklopft -- ein Port je Adresse reicht, um zu wissen, dass
-    da etwas ist. Erst fuer die Geraete, die geantwortet haben, wird genauer
-    hingesehen. Das spart bei einem /24 den Grossteil der Versuche.
-
-    Raises:
-        NotPrivate: Bei oeffentlichen oder zu grossen Netzen.
-        ValueError: Wenn kein Netz erkennbar ist.
-    """
+    """Erkundet ein privates Netz; eine entzogene Freigabe stoppt neue Anfragen."""
     network = parse_subnet(subnet or own_subnet())
-    ports = QUICK_PORTS if quick else FULL_PORTS
+    if ports is None:
+        ports = QUICK_PORTS if quick else FULL_PORTS
+    elif not ports or len(ports) > 128 or not all(1 <= int(p) <= 65535 for p in ports):
+        raise ValueError("Höchstens 128 gültige Ports je Scan.")
     addresses = [str(host) for host in network.hosts()] or [str(network.network_address)]
-
-    # Jede Adresse/Port-Kombination ist eine eigene Aufgabe. Der naheliegende
-    # Weg -- je Adresse ein Faden, der die Ports der Reihe nach durchgeht --
-    # ist in genau dem Fall langsam, der am haeufigsten vorkommt: eine
-    # Firewall, die Pakete verschluckt statt abzulehnen. Dann wartet dieser
-    # eine Faden zwoelfmal das volle Zeitlimit ab. Flach verteilt trifft das
-    # Warten viele Faeden gleichzeitig.
     pairs = [(address, port) for address in addresses for port in ports]
+    observed: dict[str, list[int]] = {}
+
+    def probe(pair: tuple[str, int]) -> bool:
+        return (allowed is None or allowed()) and port_open(*pair)
+
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        answered = pool.map(lambda pair: port_open(*pair), pairs)
-        living = list(
-            dict.fromkeys(
-                address
-                for (address, _), is_open in zip(pairs, answered, strict=True)
-                if is_open
-            )
-        )
+        for (address, port), is_open in zip(pairs, pool.map(probe, pairs), strict=True):
+            if is_open:
+                observed.setdefault(address, []).append(port)
+
+    def describe(address: str) -> Device:
+        found = observed[address]
+        device = Device(address=address, ports=found,
+                        services=[KNOWN_PORTS[p] for p in found if p in KNOWN_PORTS])
+        if with_names and (allowed is None or allowed()):
+            device.name = hostname_of(address)
+        if with_titles:
+            for port in (8123, 80, 8080, 443, 8443, 3000, 5000, 8006, 9000):
+                if allowed is not None and not allowed():
+                    break
+                if port in found:
+                    device.title = web_title(address, port)
+                    if device.title:
+                        break
+        return device
 
     devices: list[Device] = []
-    with ThreadPoolExecutor(max_workers=min(max(len(living), 1), 32)) as pool:
-        for device in pool.map(
-            lambda address: check_host(address, ports, with_title=with_titles), living
-        ):
-            if device is None:
-                continue
+    with ThreadPoolExecutor(max_workers=min(max(len(observed), 1), 32)) as pool:
+        for device in pool.map(describe, observed):
             devices.append(device)
             if callable(on_device):
                 on_device(device)

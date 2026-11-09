@@ -14,6 +14,7 @@ nichts herauskommt.
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -23,7 +24,6 @@ from selectolax.parser import HTMLParser, Node
 from aquaticy.jsonutil import loads
 from aquaticy.models import Product, domain_of
 
-#: Ueberschriften, unter denen typischerweise technische Daten stehen.
 SPEC_HEADINGS = (
     "technische daten",
     "technische details",
@@ -39,21 +39,20 @@ SPEC_HEADINGS = (
     "ausstattung",
 )
 
-#: Zeilen mit diesen Schluesseln sind Navigations- statt Produktdaten.
+
 SPEC_KEY_BLOCKLIST = ("cookie", "newsletter", "datenschutz", "impressum", "versand nach")
 
 MAX_SPECS = 40
 MAX_SPEC_VALUE_LEN = 160
 
-#: Eine Preiszahl mit ihren Trennzeichen. Zwei Formen, in dieser Reihenfolge:
-#: erst die gruppierte (``1.299,00``, ``1,299.00``, ``12 345``), dann die
-#: einfache (``249.99``, ``1299``). Das Komma MUSS in der Gruppe stehen --
-#: ohne es brach die Suche bei ``1,299.00`` nach der ersten Ziffer ab und
-#: lieferte ``1,29``: aus 1299 Dollar wurde ein Euro neunundzwanzig.
+
 _PRICE_RE = re.compile(
-    r"(\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)"
+    r"([+-]?(?:\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)"
+    r"(?:[eE][+-]?\d+)?)(?!\d)"
 )
-_CURRENCY_SYMBOLS = {"€": "EUR", "$": "USD", "£": "GBP", "chf": "CHF", "fr.": "CHF"}
+_CURRENCY_SYMBOLS = {"ca$": "CAD", "c$": "CAD", "au$": "AUD", "a$": "AUD",
+                     "nz$": "NZD", "€": "EUR", "$": "USD", "£": "GBP",
+                     "chf": "CHF", "fr.": "CHF"}
 
 
 def _text(node: Node | None) -> str:
@@ -67,8 +66,13 @@ def _absolute(url: Any, base_url: str) -> str | None:
     """
     if not isinstance(url, str) or not url.strip():
         return None
-    ziel = urljoin(base_url, url.strip())
-    return ziel if urlparse(ziel).scheme.lower() in ("http", "https") else None
+    try:
+        ziel = urljoin(base_url, url.strip())
+        parsed = urlparse(ziel)
+        _ = parsed.port
+        return ziel if parsed.scheme.lower() in ("http", "https") and parsed.hostname else None
+    except ValueError:
+        return None
 
 
 def _text_or_none(value: Any) -> str | None:
@@ -94,8 +98,18 @@ def parse_price(raw: Any) -> tuple[str | None, str | None]:
     """Trennt `"1.099,00 €"` in `("1.099,00", "EUR")`."""
     if raw is None:
         return None, None
-    text = str(raw).strip()
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        from decimal import Decimal
+
+        number = Decimal(str(raw))
+        if not number.is_finite():
+            return None, None
+        text = format(number, "f")
+    else:
+        text = str(raw).strip()
     if not text:
+        return None, None
+    if len(text) > 2000:
         return None, None
 
     currency: str | None = None
@@ -104,26 +118,34 @@ def parse_price(raw: Any) -> tuple[str | None, str | None]:
         if symbol in lowered:
             currency = code
             break
-    if currency is None:
-        match = re.search(r"\b(EUR|USD|GBP|CHF|PLN|SEK|DKK)\b", text, re.IGNORECASE)
-        if match:
-            currency = match.group(1).upper()
+    match = re.search(r"\b(EUR|USD|GBP|CHF|PLN|SEK|DKK|CAD|AUD|NZD|JPY|CNY|NOK)\b",
+                      text, re.IGNORECASE)
+    if match:
+        currency = match.group(1).upper()
 
     price_match = _PRICE_RE.search(text.replace(" ", " "))
     price = price_match.group(1).strip() if price_match else None
+    if price and re.search(r"[eE]", price):
+        from decimal import Decimal, InvalidOperation
+
+        try:
+            number = Decimal(price.replace(",", "."))
+            if not number.is_finite() or abs(number.adjusted()) > 1000:
+                return None, currency
+            price = format(number, "f")
+        except InvalidOperation:
+            return None, currency
     return price, currency
 
 
 def _as_float(value: Any) -> float | None:
     try:
-        return float(str(value).replace(",", "."))
+        result = float(str(value).replace(",", "."))
+        return result if math.isfinite(result) else None
     except (TypeError, ValueError):
         return None
 
 
-# ---------------------------------------------------------------------------
-# 1. JSON-LD
-# ---------------------------------------------------------------------------
 def _iter_jsonld_objects(tree: HTMLParser) -> list[dict[str, Any]]:
     objects: list[dict[str, Any]] = []
     for node in tree.css('script[type="application/ld+json"]'):
@@ -133,7 +155,6 @@ def _iter_jsonld_objects(tree: HTMLParser) -> list[dict[str, Any]]:
         try:
             data = loads(raw)
         except (ValueError, RecursionError):
-            # Manche Seiten haengen mehrere JSON-Objekte hintereinander.
             try:
                 data = loads(f"[{raw.strip().rstrip(',')}]")
             except (ValueError, RecursionError):
@@ -148,7 +169,7 @@ def _flatten_jsonld(data: Any, out: list[dict[str, Any]]) -> None:
             _flatten_jsonld(item, out)
     elif isinstance(data, dict):
         out.append(data)
-        for key in ("@graph", "mainEntity", "itemListElement", "hasVariant"):
+        for key in ("@graph", "mainEntity", "itemListElement", "item", "hasVariant"):
             if key in data:
                 _flatten_jsonld(data[key], out)
 
@@ -156,14 +177,15 @@ def _flatten_jsonld(data: Any, out: list[dict[str, Any]]) -> None:
 def _is_product(obj: dict[str, Any]) -> bool:
     type_field = obj.get("@type")
     types = type_field if isinstance(type_field, list) else [type_field]
-    return any(str(t).lower() in {"product", "productmodel", "individualproduct"} for t in types)
+    return any(str(t).lower().removeprefix("https://schema.org/").removeprefix(
+        "http://schema.org/") in {"product", "productmodel", "individualproduct"} for t in types)
 
 
 def _first_image(value: Any, base_url: str) -> str | None:
     if isinstance(value, str):
         return _absolute(value, base_url)
     if isinstance(value, list) and value:
-        return _first_image(value[0], base_url)
+        return next((image for item in value if (image := _first_image(item, base_url))), None)
     if isinstance(value, dict):
         return _first_image(value.get("url") or value.get("contentUrl"), base_url)
     return None
@@ -172,10 +194,14 @@ def _first_image(value: Any, base_url: str) -> str | None:
 def _offer_fields(obj: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
     offers = obj.get("offers")
     if isinstance(offers, list):
-        offers = offers[0] if offers else None
+        candidates = [item for item in offers if isinstance(item, dict)]
+        offers = next((item for item in candidates if parse_price(
+            item.get("price") if item.get("price") is not None else item.get("lowPrice"))[0]
+                       is not None), candidates[0] if candidates else None)
     if not isinstance(offers, dict):
         return None, None, None
-    price, currency = parse_price(offers.get("price") or offers.get("lowPrice"))
+    raw_price = offers.get("price")
+    price, currency = parse_price(raw_price if raw_price is not None else offers.get("lowPrice"))
     currency = _text_or_none(offers.get("priceCurrency")) or currency
     availability = _text_or_none(offers.get("availability"))
     if availability:
@@ -198,7 +224,12 @@ def product_from_jsonld(tree: HTMLParser, base_url: str) -> Product | None:
             rating = _as_float(aggregate.get("ratingValue"))
 
         specs: dict[str, str] = {}
-        brand = _text_or_none(obj.get("brand"))
+        raw_brand = obj.get("brand")
+        if isinstance(raw_brand, list) and raw_brand:
+            raw_brand = raw_brand[0]
+        if isinstance(raw_brand, dict) and raw_brand.get("name"):
+            raw_brand = raw_brand["name"]
+        brand = _text_or_none(raw_brand)
         if brand:
             specs["Marke"] = brand
         for key, label in (("gtin13", "GTIN"), ("gtin", "GTIN"), ("sku", "SKU"), ("mpn", "MPN")):
@@ -209,6 +240,8 @@ def product_from_jsonld(tree: HTMLParser, base_url: str) -> Product | None:
         if isinstance(eigenschaften, dict):
             eigenschaften = [eigenschaften]
         for prop in eigenschaften if isinstance(eigenschaften, list) else []:
+            if len(specs) >= MAX_SPECS:
+                break
             if isinstance(prop, dict) and _text_or_none(prop.get("name")):
                 specs[str(_text_or_none(prop["name"]))[:80]] = (
                     _text_or_none(prop.get("value")) or "")
@@ -227,9 +260,6 @@ def product_from_jsonld(tree: HTMLParser, base_url: str) -> Product | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# 2. Open Graph
-# ---------------------------------------------------------------------------
 def _meta(tree: HTMLParser, *names: str) -> str | None:
     for name in names:
         for selector in (f'meta[property="{name}"]', f'meta[name="{name}"]'):
@@ -260,11 +290,31 @@ def product_from_opengraph(tree: HTMLParser, base_url: str) -> Product | None:
     )
 
 
-# ---------------------------------------------------------------------------
-# 3. Microdata
-# ---------------------------------------------------------------------------
-def _itemprop(tree: HTMLParser, prop: str) -> str | None:
-    node = tree.css_first(f'[itemprop="{prop}"]')
+def _itemprop(tree: HTMLParser | Node, prop: str) -> str | None:
+    nested = {
+        "price": {"Offer", "AggregateOffer"},
+        "priceCurrency": {"Offer", "AggregateOffer"},
+        "availability": {"Offer", "AggregateOffer"},
+        "ratingValue": {"AggregateRating"},
+    }.get(prop, set())
+    node = None
+    for candidate in tree.css(f'[itemprop~="{prop}"]'):
+        if isinstance(tree, Node):
+            parent = candidate.parent
+            blocked = False
+            while parent is not None and parent.mem_id != tree.mem_id:
+                if "itemscope" in parent.attributes:
+                    types = (parent.attributes.get("itemtype") or "").split()
+                    allowed = {f"{scheme}://schema.org/{kind}"
+                               for scheme in ("http", "https") for kind in nested}
+                    if not set(types) & allowed:
+                        blocked = True
+                        break
+                parent = parent.parent
+            if blocked or parent is None:
+                continue
+        node = candidate
+        break
     if node is None:
         return None
     attrs = node.attributes
@@ -277,25 +327,25 @@ def _itemprop(tree: HTMLParser, prop: str) -> str | None:
 
 def product_from_microdata(tree: HTMLParser, base_url: str) -> Product | None:
     """Fallback ueber `itemprop`-Attribute."""
-    name = _itemprop(tree, "name")
+    scope = tree.css_first('[itemscope][itemtype~="https://schema.org/Product"], '
+                           '[itemscope][itemtype~="http://schema.org/Product"]')
+    context: HTMLParser | Node = scope if scope is not None else tree
+    name = _itemprop(context, "name")
     if not name:
         return None
-    price, currency = parse_price(_itemprop(tree, "price"))
+    price, currency = parse_price(_itemprop(context, "price"))
     return Product(
         name=name.strip(),
         url=base_url,
-        image_url=_absolute(_itemprop(tree, "image"), base_url),
+        image_url=_absolute(_itemprop(context, "image"), base_url),
         price=price,
-        currency=_itemprop(tree, "priceCurrency") or currency,
-        rating=_as_float(_itemprop(tree, "ratingValue")),
-        availability=_itemprop(tree, "availability"),
+        currency=_itemprop(context, "priceCurrency") or currency,
+        rating=_as_float(_itemprop(context, "ratingValue")),
+        availability=_itemprop(context, "availability"),
         source_domain=domain_of(base_url),
     )
 
 
-# ---------------------------------------------------------------------------
-# 4. Spec-Tabellen
-# ---------------------------------------------------------------------------
 def _clean_spec(key: str, value: str) -> tuple[str, str] | None:
     key = key.strip().rstrip(":").strip()
     value = value.strip()
@@ -345,14 +395,14 @@ def has_spec_heading(tree: HTMLParser) -> bool:
     return False
 
 
-# ---------------------------------------------------------------------------
-# Orchestrierung
-# ---------------------------------------------------------------------------
 def _merge(base: Product, extra: Product | None) -> Product:
     """Fuellt leere Felder von *base* aus *extra* auf."""
     if extra is None:
         return base
+    currency_matches = (not base.price or not extra.price or base.price == extra.price)
     for field in ("image_url", "price", "currency", "rating", "availability"):
+        if field == "currency" and not currency_matches:
+            continue
         if getattr(base, field) is None:
             setattr(base, field, getattr(extra, field))
     for key, value in extra.specs.items():
@@ -376,8 +426,6 @@ def extract_product(html: str, base_url: str) -> Product | None:
     from_micro = product_from_microdata(tree, base_url)
 
     if product is None:
-        # Ohne JSON-LD brauchen wir ein zweites Signal, sonst halten wir jede
-        # beliebige Seite mit og:title faelschlich fuer ein Produkt.
         candidate = from_micro or from_og
         if candidate is None:
             return None

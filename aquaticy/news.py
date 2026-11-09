@@ -26,10 +26,9 @@ from datetime import datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
 
+from aquaticy import zeit as deutsche_zeit
 from aquaticy.models import SearchResult
 
-#: Schlagzeilen je Land. Mehrere Quellen, damit eine ausgefallene nicht reicht,
-#: um die Antwort leer zu lassen -- und damit nicht nur eine Redaktion spricht.
 HEADLINE_FEEDS: dict[str, tuple[str, ...]] = {
     "de": (
         "https://www.tagesschau.de/index~rss2.xml",
@@ -54,10 +53,10 @@ HEADLINE_FEEDS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-#: So viele Schlagzeilen bekommt das Modell -- genug fuer einen Ueberblick.
+
 HEADLINE_COUNT = 12
 
-#: Je Feed hoechstens so viele, damit nicht eine Redaktion alles fuellt.
+
 PER_FEED = 6
 
 _NOMEN = r"nachrichten|news|schlagzeilen|neuigkeiten|headlines|tagesthemen|tagesschau"
@@ -65,12 +64,12 @@ _AKTUELL = (r"neu(e)?ste[nrs]?|aktuelle[nrs]?|heutige[nrs]?|letzte[nrs]?|wichtig
             r"top|heute|gestern|gerade|jetzt|momentan|derzeit|latest|today|yesterday|breaking|"
             r"current|recent")
 
-#: "neueste Nachrichten", "Nachrichten von heute", "latest news" ...
+
 _FRAGE_RE = re.compile(rf"\b({_NOMEN})\b", re.IGNORECASE)
 _AKTUELL_RE = re.compile(rf"\b({_AKTUELL})\b", re.IGNORECASE)
-#: "Meldungen" allein ist zu breit ("Meldungen im Log") -- nur mit "neueste" o. ae.
+
 _MELDUNG_RE = re.compile(r"\bmeldungen\b", re.IGNORECASE)
-#: "Was ist heute passiert?", "Was gibt's Neues?", "what's happening in the world"
+
 _PASSIERT_RE = re.compile(
     r"\bwas\s+(ist|war|gibt'?s|gibt\s+es)\s+(denn\s+)?(heute|gerade|aktuell|so|neues|"
     r"in\s+der\s+welt|in\s+deutschland)\b.*\b(passiert|los|neues)\b"
@@ -78,17 +77,17 @@ _PASSIERT_RE = re.compile(
     r"|\bwhat'?s\s+(happening|new)\b|\bwhat\s+happened\s+today\b",
     re.IGNORECASE,
 )
-#: Nachrichten im Sinn von Post: "meine Nachrichten", "neue Nachrichten auf WhatsApp".
+
 _POST_RE = re.compile(
     r"\b(meine[nm]?|my|whatsapp|signal|telegram|sms|e-?mails?|mails?|postfach|"
     r"inbox|chat|chats|geschickt|geschrieben|bekommen|erhalten)\b",
     re.IGNORECASE,
 )
-#: Schreibauftraege: "schreib eine Nachricht", "formuliere Schlagzeilen".
+
 _SCHREIBEN_RE = re.compile(
     r"\b(schreib\w*|formulier\w*|verfass\w*|erfind\w*|ausdenk\w*|write|draft)\b", re.IGNORECASE)
 
-#: Woerter, die kein Thema sind. Was danach uebrig bleibt, ist das Thema.
+
 _FUELLWOERTER = frozenset({
     "was", "sind", "ist", "war", "gibt", "gibt's", "es", "die", "der", "das", "den", "dem",
     "des", "ein", "eine", "einen", "einem", "einer", "neueste", "neuesten", "neuester",
@@ -171,7 +170,10 @@ def _zeit(datum: str) -> float:
 def _wann(stempel: float) -> str:
     if not stempel:
         return ""
-    return datetime.fromtimestamp(stempel).strftime("%d.%m. %H:%M")
+    try:
+        return deutsche_zeit.aus_stempel(stempel).strftime("%d.%m. %H:%M")
+    except (ValueError, OSError, OverflowError):
+        return ""
 
 
 def _ein_feed(feed: str, reader: Any) -> list[dict[str, Any]]:
@@ -195,21 +197,22 @@ def headlines(country: str = "de", lang: str = "de", count: int = HEADLINE_COUNT
     feeds = feeds_for(country, lang)
     with ThreadPoolExecutor(max_workers=len(feeds)) as pool:
         listen = list(pool.map(lambda feed: _ein_feed(feed, reader), feeds))
-    gesehen: set[str] = set()
-    alle: list[tuple[float, SearchResult]] = []
+    by_title: dict[str, tuple[float, SearchResult]] = {}
     for eintraege in listen:
         for eintrag in eintraege:
             titel = str(eintrag.get("titel") or "").strip()
             link = str(eintrag.get("link") or "").strip()
-            schluessel = re.sub(r"\W+", " ", titel.lower()).strip()
-            if not titel or not link.startswith(("https://", "http://")) or schluessel in gesehen:
+            schluessel = " ".join(titel.casefold().split())
+            if not titel or not link.startswith(("https://", "http://")):
                 continue
-            gesehen.add(schluessel)
             stempel = _zeit(str(eintrag.get("datum") or ""))
             kopf = " · ".join(t for t in (_wann(stempel), str(eintrag.get("quelle") or "")) if t)
             text = str(eintrag.get("zusammenfassung") or "").strip()
-            alle.append((stempel, SearchResult(
-                title=titel, url=link, snippet=f"[{kopf}] {text}" if kopf else text)))
+            previous = by_title.get(schluessel)
+            if previous is None or stempel > previous[0]:
+                by_title[schluessel] = (stempel, SearchResult(
+                    title=titel, url=link, snippet=f"[{kopf}] {text}" if kopf else text))
+    alle = list(by_title.values())
     alle.sort(key=lambda paar: paar[0], reverse=True)
     ergebnis = [treffer for _, treffer in alle[:max(1, count)]]
     for rang, treffer in enumerate(ergebnis, start=1):

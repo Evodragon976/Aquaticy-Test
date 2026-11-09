@@ -21,7 +21,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-#: Die Schubladen -- mit dem Satz, der im Verlauf steht.
 KATEGORIEN: dict[str, str] = {
     "code": "Programmieren",
     "schnell": "kurze Unterhaltung",
@@ -72,7 +71,8 @@ def kategorie(frage: str, mode: str = "normal") -> str:
         return "code"
     if not text:
         return "recherche"
-    if CODE_ZEICHEN_RE.search(text) or (CODE_WORT_RE.search(text) and CODE_VERB_RE.search(text)):
+    code_word = CODE_WORT_RE.search(text) or re.search(r"(?<!\w)(?:c\+\+|c#)(?!\w)", text, re.I)
+    if CODE_ZEICHEN_RE.search(text) or (code_word and CODE_VERB_RE.search(text)):
         return "code"
     if SCHNELL_RE.match(text):
         return "schnell"
@@ -95,18 +95,25 @@ class Wahl:
         return self.model.split("/", 1)[-1] if self.model else ""
 
 
-#: Die erreichbaren Modelle je Zweck, eine halbe Minute gemerkt -- die Liste
-#: fragt Ollama, und das soll nicht vor jeder Nachricht passieren.
 _CACHE_TTL = 30.0
 _cache: dict[str, tuple[float, str]] = {}
 _cache_lock = threading.Lock()
 
 
 def _staerkstes(settings: Any, zweck: str) -> str:
+    from aquaticy.judgecache import cache_key
     from aquaticy.system import strongest_model
 
-    schluessel = f"{getattr(settings, 'data_dir', '')}|{getattr(settings, 'model', '')}|{zweck}"
+    schluessel = cache_key(
+        str(getattr(settings, "data_dir", "")), zweck,
+        [getattr(settings, field, "") for field in (
+            "model", "code_model", "subagent_model", "api_base", "api_base_for", "own_api_base")],
+        getattr(settings, "api_keys", {}), sorted(getattr(settings, "own_key_names", ()) or ()))
     with _cache_lock:
+        now = time.monotonic()
+        expired = [key for key, (stamp, _) in _cache.items() if now - stamp >= _CACHE_TTL]
+        for key in expired:
+            _cache.pop(key, None)
         treffer = _cache.get(schluessel)
         if treffer and time.monotonic() - treffer[0] < _CACHE_TTL:
             return treffer[1]
@@ -116,6 +123,9 @@ def _staerkstes(settings: Any, zweck: str) -> str:
         modell = ""
     with _cache_lock:
         _cache[schluessel] = (time.monotonic(), modell)
+        while len(_cache) > 256:
+            oldest = min(_cache, key=lambda key: _cache[key][0])
+            _cache.pop(oldest)
     return modell
 
 

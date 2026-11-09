@@ -24,20 +24,23 @@ from aquaticy.memory import secure_file
 
 SESSION_DAYS = 30
 
-#: Das Kontingent eines normalen Kontos steht seit 9.5.14 in aquaticy/quota.py
-#: (5-Stunden-Sitzung und Woche). Pro hat eigene, höhere Grenzen; Ultra keine.
+
 EMAIL_RE = re.compile(r"^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,63}$")
 USERNAME_RE = re.compile(r"^[^\x00-\x1f\x7f]{2,40}$")
 PRO_CODE_RE = re.compile(r"^[A-Z0-9]{9}$")
 PRO_CODE_IN_TEXT_RE = re.compile(r"(?<![A-Z0-9])[A-Z0-9]{9}(?![A-Z0-9])", re.IGNORECASE)
 
-#: Der Ultra-Code (seit 9.5.17): 14 Zeichen, mit Buchstabe, Ziffer UND
-#: Sonderzeichen -- ein eigenes, sicheres Passwort, unabhängig vom Pro-Code.
+
 ULTRA_SPECIALS = "!@#$%&*+-=?"
 ULTRA_CODE_LEN = 14
 
+#: Einzelkonto (13.0.0 Luna): Das eine Konto braucht keine E-Mail. Es bekommt eine Adresse unter
+#: dieser Domain, die nie verschickt wird -- sie haelt nur die Tabelle zusammen.
+LOCAL_EMAIL_DOMAIN = "konto.aquaticy.lokal"
+SINGLE_TAKEN = ("Auf diesem Rechner gibt es schon ein Konto. Melde dich damit an. "
+                "Weitere Konten gibt es nur mit dem Kontensystem (aquaticy setup).")
 
-#: Alle Spalten der Kontentabelle, in der Reihenfolge des Neubaus (9.5.18).
+
 USERS_COLUMNS = (
     "id", "email", "username", "password_hash", "password_salt", "plan", "created_at",
     "terms_version", "terms_accepted_at", "last_ip", "last_seen", "created_ip",
@@ -84,14 +87,10 @@ class Account:
     plan: str
     created_at: float
     username: str = ""
-    #: Die zuletzt gesehene Adresse und wann (seit 9.5.16 Lion, fuer `aquaticy
-    #: list` und Ai-guard). Seit 9.5.32 nur als Schluessel-Hash (aquaticy/
-    #: privacy.py): der Server kann vergleichen und sperren, lesen kann sie
-    #: niemand -- `aquaticy list` zeigt "#" und die ersten acht Zeichen.
+
     last_ip: str = ""
     last_seen: float = 0.0
-    # Account-bound proof of the credential version read by this operation.
-    # Password hashes and salts never enter public account responses.
+
     _credential: bytes = field(default=b"", repr=False, compare=False)
 
     @property
@@ -112,8 +111,6 @@ class Account:
         return {"ultra": "Ultra", "pro": "Pro"}.get(self.plan, "Normal")
 
 
-#: So beginnt ein Passwort-Hash nach Argon2id (seit 9.5.32). Alte Hashes (scrypt,
-#: 32 rohe Bytes) werden bei der naechsten Anmeldung umgeschrieben.
 ARGON_PREFIX = b"argon2id$"
 
 
@@ -152,8 +149,7 @@ def _argon_verify(password: str, salt: bytes, pepper: bytes, stored: bytes) -> b
         params = (int(werte["m"]), int(werte["t"]), int(werte["p"]))
     except (ValueError, KeyError, UnicodeDecodeError):
         return False
-    # Nie mehr Arbeit als die staerkste Einstellung -- ein manipulierter
-    # Datenbankeintrag soll den Server nicht mit Riesenwerten lahmlegen.
+
     if not (8 <= params[0] <= 1024 * 1024 and 1 <= params[1] <= 10 and 1 <= params[2] <= 16):
         return False
     return hmac.compare_digest(_argon_hash(password, salt, pepper, params), stored)
@@ -180,9 +176,6 @@ def _secret_hash(value: str, pepper: bytes) -> str:
     return hmac.new(pepper, value.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-#: Wie streng eine Sitzung an die Adresse gebunden ist (AQUATICY_SESSION_IP):
-#: "netz" (Standard): dasselbe /16-Netz bei IPv4, dasselbe /48 bei IPv6;
-#: "genau": dieselbe Adresse; "aus": gar nicht.
 SESSION_IP_MODE = (os.environ.get("AQUATICY_SESSION_IP", "netz").strip().lower() or "netz")
 
 
@@ -204,7 +197,8 @@ def ip_scope(ip: str) -> str:
 
 def normalize_email(email: str) -> str:
     value = (email or "").strip().lower()
-    if len(value) > 254 or not EMAIL_RE.fullmatch(value):
+    if (len(value) > 254 or not EMAIL_RE.fullmatch(value)
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)):
         raise ValueError("Bitte gib eine gültige E-Mail-Adresse ein.")
     try:
         value.encode("utf-8")
@@ -213,8 +207,6 @@ def normalize_email(email: str) -> str:
     return value
 
 
-#: Mindestlaenge neuer Passwoerter (seit 9.5.15; vorher 7). Bestehende
-#: Passwoerter bleiben gueltig -- die Grenze gilt beim Anlegen.
 MIN_PASSWORD = 12
 
 
@@ -231,7 +223,9 @@ def validate_password(password: str) -> None:
 
 def normalize_username(username: str) -> str:
     value = " ".join((username or "").strip().split())
-    if not USERNAME_RE.fullmatch(value):
+    if (not USERNAME_RE.fullmatch(value)
+            or any(char in "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069"
+                   for char in value)):
         raise ValueError("Der Nutzername braucht 2 bis 40 sichtbare Zeichen.")
     try:
         value.encode("utf-8")
@@ -365,8 +359,6 @@ class RateLimiter:
         self._events: dict[str, deque[float]] = defaultdict(deque)
         self._lock = threading.Lock()
 
-    #: Ab so vielen Eintraegen wird aufgeraeumt (seit 9.5.15). Bis dahin blieb
-    #: fuer jede Adresse, die je angefragt hatte, ein Eintrag fuer immer liegen.
     SWEEP_AT = 10_000
 
     def allow(self, key: str) -> bool:
@@ -374,6 +366,8 @@ class RateLimiter:
         with self._lock:
             if len(self._events) >= self.SWEEP_AT:
                 self._sweep(now)
+            if key not in self._events and len(self._events) >= self.SWEEP_AT:
+                return False
             events = self._events[key]
             while events and now - events[0] >= self.window:
                 events.popleft()
@@ -414,12 +408,16 @@ class RateLimiter:
 class AuthStore:
     """SQLite-Ablage für Konten und undurchsichtige Browser-Sitzungen."""
 
-    def __init__(self, data_dir: Path, pro_code: str, ultra_code: str = "") -> None:
+    def __init__(self, data_dir: Path, pro_code: str, ultra_code: str = "", *,
+                 single: bool = False) -> None:
         self.data_dir = Path(data_dir)
+        #: Einzelkonto (Standard seit 13.0.0 Luna): genau ein Konto, Ultra, Anmeldung mit
+        #: Nutzername und Passwort. Mit dem Kontensystem (single=False) wie bisher.
+        self.single = bool(single)
         self.db_path = self.data_dir / "accounts.sqlite3"
         self.users_dir = self.data_dir / "users"
         self.pro_code = pro_code
-        # Der Ultra-Code (seit 9.5.17) -- eigenes Passwort, unabhängig vom Pro-Code.
+
         self.ultra_code = ultra_code or ultra_code_for(Path(data_dir))
         self._lock = threading.RLock()
         secure_directory(self.data_dir)
@@ -427,15 +425,12 @@ class AuthStore:
         self._pepper = self._load_pepper()
         from aquaticy.privacy import ServerSecrets
 
-        #: Schluessel-Hashes und verschluesselte Spalten (seit 9.5.32).
         self._secrets = ServerSecrets(self.data_dir)
-        #: Das Geheimnis fuer den Schluesselbund -- erst geladen, wenn es gebraucht wird.
+
         self._vault_secret: bytes | None = None
         self._setup()
         from aquaticy.learning import Learning
 
-        # Install before cluster triggers: this store participates in the same
-        # authenticated account-database replication as consent and deletions.
         Learning(self.data_dir)
 
     def _load_pepper(self) -> bytes:
@@ -460,6 +455,12 @@ class AuthStore:
         with self._connect() as conn:
             conn.executescript(
                 """
+                -- Einzelkonto (13.0.0 Luna): welches Konto das eine ist. Fest gemerkt, damit
+                -- nach dem Loeschen kein altes Konto (aus der Zeit mit Kontensystem) nachrueckt.
+                CREATE TABLE IF NOT EXISTS single_owner (
+                    slot INTEGER PRIMARY KEY CHECK(slot = 1),
+                    user_id TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS users (
                     id TEXT PRIMARY KEY,
                     email TEXT NOT NULL UNIQUE,
@@ -483,10 +484,7 @@ class AuthStore:
                 CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at);
                 """
             )
-            # Konten aus 9.4.2 bleiben gültig. Für neue Konten wird die
-            # ausdrücklich bestätigte Fassung unten beim INSERT festgehalten.
-            # Alte Tabellen (vor 9.5.17) erlauben per CHECK nur normal/pro --
-            # und eine mit 9.5.17 fehlerhaft umgebaute Datenbank wird repariert.
+
             self._migrate_tables(conn)
             columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(users)")}
             if "terms_version" not in columns:
@@ -499,25 +497,21 @@ class AuthStore:
                 )
             if "username" not in columns:
                 conn.execute("ALTER TABLE users ADD COLUMN username TEXT NOT NULL DEFAULT ''")
-            # Auch nach einem Neubau einer sehr alten Tabelle (ohne Nutzernamen)
-            # bekommt jedes Konto einen Namen -- leer ist er sonst nie.
+
             conn.execute(
                 "UPDATE users SET username=CASE "
                 "WHEN instr(email, '@') > 1 THEN substr(email, 1, instr(email, '@') - 1) "
                 "ELSE 'Nutzer' END WHERE username=''"
             )
-            # Zuletzt gesehene Adresse -- fuer `aquaticy list` und Ai-guard (9.5.16).
+
             if "last_ip" not in columns:
                 conn.execute("ALTER TABLE users ADD COLUMN last_ip TEXT NOT NULL DEFAULT ''")
             if "last_seen" not in columns:
                 conn.execute("ALTER TABLE users ADD COLUMN last_seen REAL NOT NULL DEFAULT 0")
-            # Adresse bei der Registrierung -- ein Anhaltspunkt (seit 9.5.31, bis
-            # 9.5.30 hiess das: ein Konto pro Adresse).
+
             if "created_ip" not in columns:
                 conn.execute("ALTER TABLE users ADD COLUMN created_ip TEXT NOT NULL DEFAULT ''")
-            # Geraete je Konto (9.5.31, aquaticy/devices.py): Geraete-Kennung
-            # (Hash), Hardware und Browser -- lesbar fuer `aquaticy list`, als
-            # Hash zum Vergleichen bei einer neuen Registrierung.
+
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS account_devices ("
                 "user_id TEXT NOT NULL, "
@@ -530,7 +524,7 @@ class AuthStore:
                 "last_seen REAL NOT NULL, "
                 "PRIMARY KEY (user_id, cookie_hash, hardware_hash, browser_hash))"
             )
-            # Verschluesselte Spalten (9.5.32, aquaticy/privacy.py).
+
             columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(users)")}
             for spalte in ("email_enc", "last_ip_enc"):
                 if spalte not in columns:
@@ -538,15 +532,13 @@ class AuthStore:
                         f"ALTER TABLE users ADD COLUMN {spalte} TEXT NOT NULL DEFAULT ''")
             conn.execute("CREATE TABLE IF NOT EXISTS privacy_state ("
                          "name TEXT PRIMARY KEY, value TEXT NOT NULL)")
-            # Sicherheitshinweise je Konto (9.5.32): "Neue Anmeldung von einem
-            # unbekannten Geraet" -- verschluesselt, nur fuer das Konto selbst.
+
             conn.execute("CREATE TABLE IF NOT EXISTS account_events ("
                          "user_id TEXT NOT NULL, at REAL NOT NULL, kind TEXT NOT NULL, "
                          "detail TEXT NOT NULL DEFAULT '', seen INTEGER NOT NULL DEFAULT 0)")
             self._seal_plain_rows(conn)
         secure_file(self.db_path)
 
-    # -- Verschluesselung (9.5.32) ----------------------------------------------
     def _email_key(self, email: str) -> str:
         """Wonach eine E-Mail-Adresse gesucht wird: ihr Schluessel-Hash."""
         return "h:" + self._secrets.blind("email", email)
@@ -598,8 +590,7 @@ class AuthStore:
                  self._secrets.seal(str(row["browser"] or ""), "geraet.browser"),
                  row["rowid"]),
             )
-        # Was wegen einer Doppelung nicht umgeschrieben werden konnte, geht --
-        # Klartext bleibt nie liegen.
+
         conn.execute(
             "DELETE FROM account_devices WHERE (hardware != '' AND substr(hardware, 1, 5) "
             "!= 'enc2:') OR (browser != '' AND substr(browser, 1, 5) != 'enc2:')")
@@ -653,12 +644,11 @@ class AuthStore:
         conn.commit()
         vorher = conn.isolation_level
         conn.isolation_level = None
-        # Muss ausserhalb einer Transaktion stehen, sonst wirkt es nicht.
+
         conn.execute("PRAGMA foreign_keys=OFF")
         try:
             conn.execute("BEGIN IMMEDIATE")
-            # Ein zweiter Prozess kann inzwischen umgebaut haben: erst jetzt,
-            # unter der Schreibsperre, zaehlt der Zustand.
+
             neubau, verwaist, _ = zustand()
             if neubau:
                 gemeinsam = [s for s in USERS_COLUMNS if s in spalten("users")]
@@ -741,7 +731,21 @@ class AuthStore:
         terms_version: str = "",
         ip: str = "",
         device: Any = None,
+        trusted: bool = False,
     ) -> Account:
+        """Legt ein Konto an.
+
+        Im Einzelkonto-Modus nur, solange es noch keins gibt: immer Ultra und nur mit dem
+        Einrichtungscode (dem Ultra-Code aus dem Terminal) -- ausser *trusted* (die
+        Kommandozeile am Rechner selbst). Eine E-Mail-Adresse braucht es dann nicht.
+        """
+        if self.single:
+            plan = "ultra"
+            if trusted:
+                pro_code = self.ultra_code
+            if not str(email or "").strip():
+                email = f"{secrets.token_hex(8)}@{LOCAL_EMAIL_DOMAIN}"
+            terms_accepted, terms_version = True, terms_version or "einzelkonto"
         email = normalize_email(email)
         fallback_username = email.split("@", 1)[0]
         if len(fallback_username) < 2:
@@ -758,12 +762,12 @@ class AuthStore:
         if plan == "pro" and not hmac.compare_digest(
                 code_from_input(pro_code).encode("utf-8"), self.pro_code.encode("utf-8")):
             raise ValueError("Der Pro-Code stimmt nicht.")
-        # Ultra hat ein eigenes, langes Passwort (14 Zeichen mit Sonderzeichen).
-        # Es wird als Ganzes verglichen, nicht als 9-stelliger Block.
+
         if plan == "ultra" and not hmac.compare_digest(
                 (pro_code or "").strip().encode("utf-8", "surrogatepass"),
                 self.ultra_code.encode("utf-8")):
-            raise ValueError("Der Ultra-Code stimmt nicht.")
+            raise ValueError("Der Einrichtungscode stimmt nicht. Er steht im Terminal, in dem "
+                             "Aquaticy läuft." if self.single else "Der Ultra-Code stimmt nicht.")
         salt = secrets.token_bytes(16)
         password_hash = _argon_hash(password, salt, self._pepper)
         user_id = secrets.token_hex(16)
@@ -775,8 +779,7 @@ class AuthStore:
         from aquaticy.aiguard import _norm_ip
 
         adresse = _norm_ip(ip)
-        # Loopback (der eigene Rechner, Tests) fällt aus der Ein-Konto-pro-
-        # Adresse-Regel heraus -- sie richtet sich gegen fremde Anschlüsse.
+
         pruefe_adresse = adresse
         try:
             import ipaddress as _ip
@@ -787,23 +790,16 @@ class AuthStore:
             pruefe_adresse = ""
         try:
             with self._lock, self._connect() as conn:
-                # Die Sperre muss in SQLite liegen: mehrere Web-Prozesse haben
-                # verschiedene Python-Locks und duerfen nicht beide die noch
-                # freie Adresse bzw. denselben Nutzernamen sehen.
                 conn.execute("BEGIN IMMEDIATE")
-                # Nutzernamen sind eindeutig (seit 9.5.16) -- sonst traefe
-                # `aquaticy ban <name>` womoeglich das falsche Konto.
+                if self.single and self._owner_row(conn) is not None:
+                    raise ValueError(SINGLE_TAKEN)
+
                 if any(str(row[0]).casefold() == username.casefold() for row in
                        conn.execute("SELECT username FROM users")):
                     raise vergeben
-                # Mehrfachkonten (seit 9.5.31): Anhaltspunkte statt "ein Konto
-                # pro Adresse" -- zwei Menschen im selben Haushalt teilen sich
-                # die Adresse. Erst viele oder gewichtige Anhaltspunkte sperren
-                # (dasselbe Geraet, oder Adresse + aehnliche E-Mail + Hardware).
+
                 pruefung = self._assess(conn, email, self.ip_key(pruefe_adresse), device)
                 if pruefung.suspicious:
-                    # Ohne E-Mail-Adresse (seit 9.5.32) -- das Terminal-Protokoll
-                    # ist kein Ort fuer persoenliche Daten.
                     print(f"[Konten] Registrierung {username}: "
                           f"{pruefung.points:g} Punkte – {', '.join(pruefung.reasons)}"
                           f" (ähnelt {pruefung.closest})"
@@ -839,9 +835,10 @@ class AuthStore:
                     ),
                 )
                 self._store_device(conn, user_id, device, now)
+                if self.single:
+                    conn.execute("INSERT OR REPLACE INTO single_owner (slot, user_id) "
+                                 "VALUES (1, ?)", (user_id,))
         except sqlite3.IntegrityError as exc:
-            # Ein Satz fuer E-Mail UND Nutzername (seit 9.5.16): vorher sagte die
-            # Registrierung genau, welche E-Mail-Adresse hier ein Konto hat.
             raise vergeben from exc
         folder = self.profile_dir(user_id)
         secure_directory(folder)
@@ -849,7 +846,6 @@ class AuthStore:
                        now if adresse else 0.0, self._credential_for({
                            "id": user_id, "password_hash": password_hash, "password_salt": salt}))
 
-    # -- Geraete und Anhaltspunkte (9.5.31) ---------------------------------
     def _assess(self, conn: sqlite3.Connection, email: str, ip: str,
                 device: Any) -> Any:
         """Punkte der neuen Registrierung gegen jedes vorhandene Konto (hoechster zaehlt)."""
@@ -886,9 +882,7 @@ class AuthStore:
         if not isinstance(device, DeviceInfo) or not (
                 device.cookie_hash or device.hardware_hash or device.browser_hash):
             return
-        # Seit 9.5.32: Hardware und Browser verschluesselt, Hashes mit Schluessel.
-        # Der Betreiber sieht sie nicht; nur der Server vergleicht, und das
-        # Konto selbst sieht seine Geraete unter Einstellungen -> Sicherheit.
+
         geraet = self._keyed(device)
         conn.execute(
             "INSERT INTO account_devices (user_id, cookie_hash, hardware_hash, browser_hash, "
@@ -899,7 +893,7 @@ class AuthStore:
              self._secrets.seal(device.hardware, "geraet.hardware"),
              self._secrets.seal(device.browser, "geraet.browser"), when, when),
         )
-        # Hoechstens 20 Geraete je Konto -- die aeltesten gehen.
+
         conn.execute(
             "DELETE FROM account_devices WHERE user_id=? AND rowid NOT IN ("
             "SELECT rowid FROM account_devices WHERE user_id=? ORDER BY last_seen DESC LIMIT 20)",
@@ -966,8 +960,6 @@ class AuthStore:
         except ValueError:
             return None
         if not isinstance(password, str) or len(password) > 128:
-            # Laenger darf kein Passwort sein (validate_password) -- so rechnet
-            # niemand dem Server einen Megabyte-Hash auf (seit 9.5.22).
             _argon_hash("", b"\0" * 16, self._pepper)
             return None
         try:
@@ -979,8 +971,6 @@ class AuthStore:
             row = conn.execute("SELECT * FROM users WHERE email = ?",
                                (self._email_key(email),)).fetchone()
         if row is None:
-            # Gleiche teure Arbeit auch für unbekannte Adressen: weniger Hinweise
-            # für automatisches Durchprobieren von Konten.
             _argon_hash(password, b"\0" * 16, self._pepper)
             return None
         salz, gespeichert = bytes(row["password_salt"]), bytes(row["password_hash"])
@@ -988,8 +978,6 @@ class AuthStore:
             if not _argon_verify(password, salz, self._pepper, gespeichert):
                 return None
         else:
-            # Altes Verfahren (scrypt, bis 9.5.31): pruefen und gleich auf
-            # Argon2id mit Pfeffer umschreiben -- mit neuem Salz.
             if not hmac.compare_digest(_password_hash(password, salz), gespeichert):
                 return None
             neues_salz = secrets.token_bytes(16)
@@ -1002,8 +990,7 @@ class AuthStore:
                 if not updated:
                     current = conn.execute("SELECT * FROM users WHERE id=?",
                                            (row["id"],)).fetchone()
-                    # Another login may have upgraded the same password. It
-                    # remains valid; a genuinely changed password must win.
+
                     if current is None or not _argon_verify(
                             password, bytes(current["password_salt"]), self._pepper,
                             bytes(current["password_hash"])):
@@ -1030,14 +1017,16 @@ class AuthStore:
             if current is None or not hmac.compare_digest(
                     account._credential, self._credential_for(current)):
                 raise ValueError("Das Passwort wurde inzwischen geändert. Bitte melde dich neu an.")
-            conn.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
+            if self.single and self._owner_id(conn) != account.id:
+                raise ValueError("Mit dem Einzelkonto meldet sich nur das eine Konto an.")
+            conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
             conn.execute(
                 "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     _secret_hash(token, self._pepper),
                     account.id,
                     _secret_hash(device, self._pepper),
-                    # Das Netz, nicht die genaue Adresse (siehe session_account).
+
                     _secret_hash(ip_scope(ip), self._pepper),
                     now,
                     now + SESSION_DAYS * 86400,
@@ -1062,9 +1051,11 @@ class AuthStore:
             row = conn.execute(
                 "SELECT users.*, sessions.ip_hash AS _ip FROM sessions "
                 "JOIN users ON users.id=sessions.user_id "
-                "WHERE token_hash=? AND device_hash=? AND expires_at>=?",
+                "WHERE token_hash=? AND device_hash=? AND expires_at>?",
                 (_secret_hash(token, self._pepper), _secret_hash(device, self._pepper), now),
             ).fetchone()
+            if row is not None and self.single and self._owner_id(conn) != str(row["id"]):
+                row = None  # Kontensystem aus: andere Konten bleiben, kommen aber nicht hinein
         if row is None:
             return None
         if ip is not None and SESSION_IP_MODE != "aus":
@@ -1096,8 +1087,6 @@ class AuthStore:
         """
         from aquaticy.quota import Quota
 
-        # Normal und Pro haben je eigene Grenzen (aquaticy/quota.py, seit
-        # 9.5.23); Ultra hat gar keins (dort ruft niemand diese Methode).
         return Quota(self.db_path, account.id, float(account.created_at or 0.0),
                      plan=account.plan)
 
@@ -1117,6 +1106,114 @@ class AuthStore:
         with self._connect() as conn:
             rows = conn.execute("SELECT * FROM users ORDER BY created_at").fetchall()
         return [account for row in rows if (account := self._account(row)) is not None]
+
+    # -- Einzelkonto (13.0.0 Luna) -------------------------------------------------------------
+    @staticmethod
+    def _owner_row(conn: sqlite3.Connection) -> sqlite3.Row | None:
+        """Das eine Konto -- oder None.
+
+        Beim ersten Mal (Umstieg vom Kontensystem) wird es bestimmt und fest gemerkt: das
+        aelteste Ultra-Konto, sonst das aelteste. Danach gilt nur noch das gemerkte. Ist es
+        geloescht, gibt es keins mehr: Ein neues legt nur an, wer den Einrichtungscode hat
+        oder am Rechner sitzt -- nie rueckt ein anderes altes Konto nach.
+        """
+        gemerkt = conn.execute("SELECT user_id FROM single_owner WHERE slot = 1").fetchone()
+        if gemerkt is not None:
+            return conn.execute("SELECT * FROM users WHERE id = ?", (str(gemerkt[0]),)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM users ORDER BY plan = 'ultra' DESC, created_at, id LIMIT 1").fetchone()
+        if row is not None:
+            conn.execute("INSERT OR IGNORE INTO single_owner (slot, user_id) VALUES (1, ?)",
+                         (str(row["id"]),))
+            gemerkt = conn.execute("SELECT user_id FROM single_owner WHERE slot = 1").fetchone()
+            if gemerkt is not None and str(gemerkt[0]) != str(row["id"]):
+                return conn.execute("SELECT * FROM users WHERE id = ?",
+                                    (str(gemerkt[0]),)).fetchone()
+        return row
+
+    def _owner_id(self, conn: sqlite3.Connection) -> str:
+        row = self._owner_row(conn)
+        return str(row["id"]) if row is not None else ""
+
+    def owner(self) -> Account | None:
+        with self._connect() as conn:
+            return self._account(self._owner_row(conn))
+
+    def active_accounts(self) -> list[Account]:
+        """Die Konten, die arbeiten duerfen: beim Einzelkonto nur das eine."""
+        if not self.single:
+            return self.accounts()
+        eins = self.owner()
+        return [eins] if eins is not None else []
+
+    def ensure_owner_ultra(self) -> Account | None:
+        """Einzelkonto: Das eine Konto ist Ultra -- der Betreiber hat alle Rechte."""
+        with self._lock, self._connect() as conn:
+            row = self._owner_row(conn)
+            if row is not None and str(row["plan"]) != "ultra":
+                conn.execute("UPDATE users SET plan='ultra' WHERE id=?", (str(row["id"]),))
+                row = conn.execute("SELECT * FROM users WHERE id=?", (str(row["id"]),)).fetchone()
+        return self._account(row)
+
+    def login(self, name: str, password: str) -> Account | None:
+        """Anmelden. Einzelkonto: mit Nutzername (oder E-Mail) -- nur das eine Konto.
+
+        Mit dem Kontensystem wie bisher mit der E-Mail-Adresse.
+        """
+        if not self.single:
+            return self.authenticate(name, password)
+        wanted = " ".join(str(name or "").split())
+        eins = self.owner()
+        passt = eins is not None and bool(wanted) and (
+            wanted.casefold() == eins.username.casefold()
+            or wanted.casefold() == eins.email.casefold())
+        if eins is None or not passt:
+            _argon_hash(str(password or "")[:128], b"\0" * 16, self._pepper)  # gleiche Dauer
+            return None
+        konto = self.authenticate(eins.email, password)
+        return konto if konto is not None and konto.id == eins.id else None
+
+    def choose_owner(self, name: str) -> Account:
+        """Kommandozeile am Rechner: Ein vorhandenes Konto wird das eine Konto (Ultra).
+
+        Fuer den Umstieg vom Kontensystem, wenn nicht das aelteste Ultra-Konto gemeint ist.
+        """
+        konto = self.account_by_name(name)
+        if konto is None:
+            raise ValueError("Dieses Konto gibt es nicht. aquaticy list zeigt alle.")
+        with self._lock, self._connect() as conn:
+            conn.execute("INSERT OR REPLACE INTO single_owner (slot, user_id) VALUES (1, ?)",
+                         (konto.id,))
+            conn.execute("UPDATE users SET plan='ultra' WHERE id=?", (konto.id,))
+            row = conn.execute("SELECT * FROM users WHERE id=?", (konto.id,)).fetchone()
+        neu = self._account(row)
+        assert neu is not None
+        return neu
+
+    def reset_owner(self, username: str, password: str) -> Account:
+        """Kommandozeile am Rechner: Nutzername und Passwort des einen Kontos neu setzen.
+
+        Meldet alle Geraete ab. Gibt es noch kein Konto, wird es angelegt (Ultra).
+        """
+        validate_password(password)
+        username = normalize_username(username)
+        eins = self.owner()
+        if eins is None:
+            return self.register("", password, "ultra", username=username, trusted=True)
+        salt = secrets.token_bytes(16)
+        password_hash = _argon_hash(password, salt, self._pepper)
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if any(str(row[0]).casefold() == username.casefold() and str(row[1]) != eins.id
+                   for row in conn.execute("SELECT username, id FROM users")):
+                raise ValueError("Diesen Nutzernamen hat schon ein anderes Konto.")
+            conn.execute("UPDATE users SET username=?, password_hash=?, password_salt=?, "
+                         "plan='ultra' WHERE id=?", (username, password_hash, salt, eins.id))
+            conn.execute("DELETE FROM sessions WHERE user_id=?", (eins.id,))
+            row = conn.execute("SELECT * FROM users WHERE id=?", (eins.id,)).fetchone()
+        konto = self._account(row)
+        assert konto is not None
+        return konto
 
     def note_seen(self, user_id: str, ip: str) -> None:
         """Haelt die zuletzt gesehene Adresse eines Kontos fest.
@@ -1157,7 +1254,6 @@ class AuthStore:
             )
         return self._account(matches[0]) if matches else None
 
-    # -- Sicherheit des Kontos (9.5.32) ---------------------------------------
     def is_known_device(self, user_id: str, device: Any) -> bool:
         """Kennt dieses Konto das Geraet schon (Geraete-Kennung oder Hardware+Browser)?"""
         from aquaticy.devices import DeviceInfo
@@ -1169,7 +1265,7 @@ class AuthStore:
             rows = conn.execute("SELECT cookie_hash, hardware_hash, browser_hash FROM "
                                 "account_devices WHERE user_id=?", (str(user_id),)).fetchall()
         if not rows:
-            return True  # das erste Geraet ist kein "neues"
+            return True
         for keks, hardware, browser in rows:
             if geraet.cookie_hash and geraet.cookie_hash == keks:
                 return True
@@ -1202,8 +1298,7 @@ class AuthStore:
                 return False
             rows = conn.execute("SELECT cookie_hash FROM account_devices WHERE user_id=?",
                                 (zeile["id"],)).fetchall()
-        # Nur die Kennung aus dem Cookie zaehlt: Hardware und Browser meldet der
-        # Client selbst, ein Bot koennte sie nachmachen und so "bekannt" wirken.
+
         return bool(geraet.cookie_hash) and any(
             hmac.compare_digest(str(geraet.cookie_hash), str(r["cookie_hash"] or ""))
             for r in rows)
@@ -1214,7 +1309,7 @@ class AuthStore:
                          "VALUES (?, ?, ?, ?)",
                          (str(user_id), time.time(), str(kind)[:40],
                           self._secrets.seal(str(detail)[:300], "konto.ereignis")))
-            # Hoechstens 50 je Konto.
+
             conn.execute("DELETE FROM account_events WHERE user_id=? AND rowid NOT IN ("
                          "SELECT rowid FROM account_events WHERE user_id=? "
                          "ORDER BY at DESC LIMIT 50)", (str(user_id), str(user_id)))
@@ -1236,7 +1331,7 @@ class AuthStore:
     def session_count(self, user_id: str) -> int:
         with self._connect() as conn:
             (anzahl,) = conn.execute(
-                "SELECT COUNT(*) FROM sessions WHERE user_id=? AND expires_at>=?",
+                "SELECT COUNT(*) FROM sessions WHERE user_id=? AND expires_at>?",
                 (str(user_id), time.time())).fetchone()
         return int(anzahl)
 
@@ -1298,9 +1393,7 @@ class AuthStore:
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             self._require_current_credential(conn, account)
-            # Auch ausserhalb des Profils erst nach aktueller Freigabe loeschen.
-            # Die Schreibsperre umfasst die Dateien: kein Passwortwechsel
-            # zwischen der Freigabe und dem letzten destruktiven Schritt.
+
             upgrading.forget_account(self.data_dir, account.id)
             forget_states(profile)
             guardrails.forget_verdicts()
@@ -1341,11 +1434,10 @@ class AuthStore:
             for table, column in (("token_usage", "account_id"),
                                   ("token_sessions", "account_id"),
                                   ("aiguard_flags", "user_id"),
-                                  # Seit 9.5.31: auch Geraete und Chatsperren gehen mit
-                                  # (die Chatsperren blieben bis dahin liegen).
+
                                   ("aiguard_chat_locks", "user_id"),
                                   ("account_devices", "user_id"),
-                                  # Seit 9.5.32: auch die Sicherheitshinweise.
+
                                   ("account_events", "user_id"),
                                   ("api_keys", "account_id")):
                 if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",

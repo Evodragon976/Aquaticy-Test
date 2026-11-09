@@ -28,29 +28,26 @@ import json
 import re
 import sqlite3
 import threading
+import weakref
 from collections.abc import Iterator
 from contextlib import contextmanager
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-#: Die Designs. Muessen mit denen in `webui.html` uebereinstimmen -- ein Test
-#: haelt beide Listen zusammen. Der leere Name ist Standard (setzt kein
-#: Attribut). "mono" ist das schlichte Schwarz-Weiss; "custom" nimmt die
-#: Farben, die man sich unter "Design selber erstellen" zusammenstellt.
 PALETTES = (
     "",
     "mono",
     "custom",
 )
 
-#: Die drei Farben, die man beim eigenen Design waehlen kann.
+
 DESIGN_KEYS = ("accent", "bg", "sidebar")
 
-#: Ein leeres eigenes Design -- nichts gewaehlt, also gilt Standard.
+
 DEFAULT_DESIGN: dict[str, str] = {key: "" for key in DESIGN_KEYS}
 
-#: Eine Farbe ist genau ein #rrggbb. Alles andere faellt weg -- so kommt aus
-#: dem Browser nie etwas anderes als eine Farbe in die Seite.
+
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -61,32 +58,29 @@ def clean_design(value: Any) -> dict[str, str]:
         return design
     for key in DESIGN_KEYS:
         farbe = str(value.get(key) or "").strip().lower()
-        if _HEX.match(farbe):
+        if _HEX.fullmatch(farbe):
             design[key] = farbe
     return design
 
-#: Sprache der Oberflaeche und der Antworten (seit 9.5.25).
+
 LANGUAGES = ("de", "en")
 
-#: Hell, dunkel oder das, was das Betriebssystem sagt.
+
 THEMES = ("light", "dark", "system")
 
-#: Schriftgroesse (seit 9.5.32): klein, normal, gross.
+
 FONT_SIZES = ("normal", "small", "large")
 
-#: Die Arbeitsweise. Muss mit `aquaticy.agent.MODES` uebereinstimmen -- ein
-#: Test haelt beide Listen zusammen.
+
 MODES = ("normal", "code", "pro")
 
-#: Wie lange das Modell ueberlegen darf.
+
 EFFORTS = ("low", "medium", "high")
 
-#: Die Oberflaeche merkt die gewaehlte Mannschaft. Ob fuer das Konto 12 oder
-#: 50 erlaubt sind, entscheidet erst die authentifizierte Webroute.
+
 AGENT_COUNTS = range(1, 51)
 
-#: Jedes Feld mit seinem Standard und dem, was erlaubt ist. `bool` heisst:
-#: ein Wahrheitswert, alles andere eine Liste zulaessiger Zeichenketten.
+
 FIELDS: dict[str, tuple[Any, Any]] = {
     "theme": ("system", THEMES),
     "palette": ("", PALETTES),
@@ -104,16 +98,12 @@ FIELDS: dict[str, tuple[Any, Any]] = {
     "load": (False, bool),
     "agents": (12, AGENT_COUNTS),
     "visual_sources": (False, bool),
-    # Seit 12.0.0 Luna: beim Schreiben mitscrollen (an wie bisher) und ob der
-    # Hinweis zur Spracheingabe schon bestaetigt ist.
+
     "autoscroll": (True, bool),
     "voice_ok": (False, bool),
 }
 
-#: Was aus dem Browser als "ja" durchgeht. Alles andere ist nein -- und
-#: zwar ausdruecklich auch die Zeichenkette "false", ueber die ein blosses
-#: `bool(...)` stolpern wuerde: nicht leer, also wahr, also an. Genau so
-#: schaltet sich ein Schalter von selbst ein, den niemand angefasst hat.
+
 _YES = frozenset({True, "1", "true", "True", "on", "ja", "yes"})
 _NO = frozenset({False, "0", "false", "False", "off", "nein", "no", "", None})
 
@@ -143,7 +133,6 @@ def clean_flag(value: Any, standard: bool) -> bool:
     if isinstance(value, str):
         value = value.strip()
     elif value is not None and not isinstance(value, (bool, int, float)):
-        # Liste oder Objekt (9.5.34): "in _YES" warf sonst TypeError -> 500.
         return standard
     if value in _YES:
         return True
@@ -176,8 +165,12 @@ def clean(raw: Any, *, base: dict[str, Any] | None = None) -> dict[str, Any]:
             stand[name] = clean_design(wert)
         elif isinstance(erlaubt, range):
             try:
-                zahl = int(wert)
-            except (TypeError, ValueError, OverflowError):  # auch 1e999 (9.5.34)
+                number = Decimal(str(wert))
+                if (isinstance(wert, bool) or not number.is_finite()
+                        or number != number.to_integral_value() or number not in erlaubt):
+                    continue
+                zahl = int(number)
+            except (TypeError, ValueError, OverflowError, InvalidOperation):
                 continue
             if zahl in erlaubt:
                 stand[name] = zahl
@@ -187,10 +180,7 @@ def clean(raw: Any, *, base: dict[str, Any] | None = None) -> dict[str, Any]:
     return stand
 
 
-#: Eine Sperre je Datenbank (9.5.34): der Server legt je Anfrage ein neues
-#: UIState an -- eine Sperre je Objekt schuetzte nichts, und zwei gleichzeitige
-#: Schalter ueberschrieben einander.
-_SPERREN: dict[str, threading.Lock] = {}
+_SPERREN: weakref.WeakValueDictionary[str, threading.Lock] = weakref.WeakValueDictionary()
 _SPERREN_LOCK = threading.Lock()
 
 
@@ -233,25 +223,28 @@ class UIState:
             gespeichert = json.loads(row["state"])
         except (TypeError, ValueError):
             return defaults()
-        # Auch das Gespeicherte wird geprueft: eine von Hand veraenderte
-        # Datenbank ist kein Grund, eine kaputte Oberflaeche auszuliefern.
+
         return clean(gespeichert)
 
     def write(self, raw: Any) -> dict[str, Any]:
         """Uebernimmt einen Vorschlag und gibt zurueck, was wirklich gilt."""
         with self._lock:
-            neu = clean(raw, base=self.read())
             try:
                 with self._connect() as conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    row = conn.execute("SELECT state FROM uistate WHERE id = 1").fetchone()
+                    try:
+                        base = clean(json.loads(row["state"])) if row else defaults()
+                    except (TypeError, ValueError):
+                        base = defaults()
+                    neu = clean(raw, base=base)
                     conn.execute(
                         "INSERT INTO uistate (id, state) VALUES (1, ?) "
                         "ON CONFLICT(id) DO UPDATE SET state = excluded.state",
                         (json.dumps(neu, ensure_ascii=False),),
                     )
-            except sqlite3.Error:
-                # Der Zustand ist Bequemlichkeit, keine Bedingung. Laesst er
-                # sich nicht ablegen, gilt er trotzdem fuer diesen Aufruf.
-                pass
+            except sqlite3.Error as exc:
+                raise OSError("Die Einstellungen konnten nicht gespeichert werden.") from exc
             return neu
 
     def reset(self) -> dict[str, Any]:

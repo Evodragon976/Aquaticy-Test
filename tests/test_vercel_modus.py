@@ -1,0 +1,269 @@
+"""Vercel-Modus (Aquaticy-Test): ganze App als WSGI, verschluesselte Sicherung im Blob-Speicher."""
+
+from __future__ import annotations
+
+import io
+import json
+import tarfile
+import tomllib
+from pathlib import Path
+
+import httpx
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+TOKEN = "vercel_blob_rw_AbCdEf123_geheimerTeil"
+SECRET = "x" * 40
+
+
+@pytest.fixture
+def blob_env(monkeypatch):
+    monkeypatch.setenv("AQUATICY_BLOB_TOKEN", TOKEN)
+    monkeypatch.setenv("AQUATICY_VERCEL_SECRET", SECRET)
+
+
+class FakeBlob:
+    """Ein privater Blob-Speicher im Speicher -- prueft die Kopfzeilen wie das SDK."""
+
+    def __init__(self) -> None:
+        self.data: bytes | None = None
+        self.puts: list[httpx.Request] = []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        if request.method == "PUT":
+            self.puts.append(request)
+            self.data = request.content
+            return httpx.Response(200, json={"pathname": request.url.params["pathname"]})
+        if self.data is None:
+            return httpx.Response(404)
+        return httpx.Response(200, content=self.data)
+
+    def client(self) -> httpx.Client:
+        return httpx.Client(transport=httpx.MockTransport(self))
+
+
+def names(archiv: bytes) -> list[str]:
+    with tarfile.open(fileobj=io.BytesIO(archiv), mode="r:gz") as tar:
+        return tar.getnames()
+
+
+def test_pyproject_points_vercel_to_the_full_app():
+    daten = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert daten["tool"]["vercel"]["entrypoint"] == "aquaticy.vercel:app"
+
+
+def test_store_id_from_token():
+    from aquaticy import vercel_blob
+
+    assert vercel_blob.store_id(TOKEN) == "AbCdEf123"
+    with pytest.raises(vercel_blob.BlobError):
+        vercel_blob.store_id("kaputt")
+    with pytest.raises(vercel_blob.BlobError):
+        vercel_blob.store_id("vercel_blob_rw_../x_y")
+
+
+def test_no_backup_without_long_secret(monkeypatch, tmp_path):
+    from aquaticy import vercel_blob
+
+    monkeypatch.setenv("AQUATICY_BLOB_TOKEN", TOKEN)
+    monkeypatch.setenv("AQUATICY_VERCEL_SECRET", "zu-kurz")
+    assert not vercel_blob.enabled()
+    assert vercel_blob.save(tmp_path) is False
+    assert vercel_blob.restore(tmp_path) == 0
+
+
+def test_pack_skips_links_and_caches(tmp_path):
+    from aquaticy import vercel_blob
+
+    quelle = tmp_path / "home"
+    (quelle / ".aquaticy" / "cache").mkdir(parents=True)
+    (quelle / ".aquaticy" / "konten.json").write_text("{}", encoding="utf-8")
+    (quelle / ".aquaticy" / "cache" / "gross.bin").write_bytes(b"x")
+    (quelle / "link").symlink_to("/etc/passwd")
+    namen = names(vercel_blob.pack(quelle))
+    assert namen == [".aquaticy/konten.json"]
+
+
+def test_unpack_refuses_paths_outside_and_links(tmp_path):
+    from aquaticy import vercel_blob
+
+    puffer = io.BytesIO()
+    with tarfile.open(fileobj=puffer, mode="w:gz") as archiv:
+        for name in ("../draussen.txt", "/abs.txt", "ok/datei.txt"):
+            info = tarfile.TarInfo(name)
+            info.size = 2
+            archiv.addfile(info, io.BytesIO(b"hi"))
+        link = tarfile.TarInfo("ok/link")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "/etc/passwd"
+        archiv.addfile(link)
+    ziel = tmp_path / "ziel"
+    assert vercel_blob.unpack(puffer.getvalue(), ziel) == 1
+    assert (ziel / "ok" / "datei.txt").read_bytes() == b"hi"
+    assert not (tmp_path / "draussen.txt").exists()
+    assert not (ziel / "ok" / "link").exists()
+
+
+def test_save_is_encrypted_private_and_restores(blob_env, tmp_path):
+    from aquaticy import vercel_blob
+
+    quelle = tmp_path / "a"
+    (quelle / ".aquaticy").mkdir(parents=True)
+    (quelle / ".aquaticy" / "notiz.txt").write_text("streng geheim", encoding="utf-8")
+    blob = FakeBlob()
+    assert vercel_blob.save(quelle, client=blob.client())
+    anfrage = blob.puts[0]
+    assert anfrage.url.host == "vercel.com"
+    assert anfrage.headers["x-vercel-blob-access"] == "private"
+    assert anfrage.headers["x-vercel-blob-store-id"] == "AbCdEf123"
+    assert anfrage.headers["x-allow-overwrite"] == "1"
+    assert anfrage.headers["authorization"] == f"Bearer {TOKEN}"
+    assert b"streng geheim" not in (blob.data or b"")
+    ziel = tmp_path / "b"
+    assert vercel_blob.restore(ziel, client=blob.client()) == 1
+    assert (ziel / ".aquaticy" / "notiz.txt").read_text(encoding="utf-8") == "streng geheim"
+
+
+def test_restore_without_backup_and_with_wrong_secret(blob_env, monkeypatch, tmp_path):
+    from aquaticy import vercel_blob
+
+    blob = FakeBlob()
+    assert vercel_blob.restore(tmp_path, client=blob.client()) == 0
+    (tmp_path / "x.txt").write_text("1", encoding="utf-8")
+    vercel_blob.save(tmp_path, client=blob.client())
+    monkeypatch.setenv("AQUATICY_VERCEL_SECRET", "y" * 40)
+    with pytest.raises(vercel_blob.BlobError):
+        vercel_blob.restore(tmp_path / "neu", client=blob.client())
+
+
+@pytest.fixture
+def vercel_app(monkeypatch, tmp_path):
+    """Der Vercel-Einstieg mit /tmp unter tmp_path -- und die globalen Werte danach zurueck."""
+    from aquaticy import config, vercel, web
+
+    home = tmp_path / "home"
+    monkeypatch.setattr(vercel, "HOME", home)
+    for name in ("HOME", "AQUATICY_DATA_DIR", "AQUATICY_VERCEL", "AQUATICY_ENABLE_PLAYWRIGHT",
+                 "AQUATICY_ACCOUNTS", "AQUATICY_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("AQUATICY_BLOB_TOKEN", raising=False)
+    monkeypatch.delenv("BLOB_READ_WRITE_TOKEN", raising=False)
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.setattr(vercel, "_STATE", {"error": "", "web": None, "handler": None,
+                                           "stand": None})
+    for name in ("AUTH", "AIGUARD", "TOKEN"):
+        monkeypatch.setattr(web, name, getattr(web, name))
+    config.reset_settings_cache()
+    yield vercel
+    config.reset_settings_cache()
+
+
+def call(app, path: str, method: str = "GET", ip: str = "198.51.100.7",
+         body: bytes = b"", headers: dict[str, str] | None = None):
+    environ = {"REQUEST_METHOD": method, "PATH_INFO": path, "QUERY_STRING": "",
+               "HTTP_HOST": "aquaticy.vercel.app", "HTTP_X_REAL_IP": ip,
+               "CONTENT_LENGTH": str(len(body)), "wsgi.input": io.BytesIO(body)}
+    for name, wert in (headers or {}).items():
+        environ["HTTP_" + name.upper().replace("-", "_")] = wert
+    antwort: dict[str, object] = {}
+
+    def start_response(status, kopf):
+        antwort["status"] = status
+        antwort["headers"] = dict(kopf)
+
+    inhalt = b"".join(app(environ, start_response))
+    return str(antwort["status"]), antwort["headers"], inhalt
+
+
+def test_without_setup_code_nothing_starts(vercel_app, monkeypatch):
+    monkeypatch.delenv("AQUATICY_ULTRA_CODE", raising=False)
+    status, _, inhalt = call(vercel_app.app, "/")
+    assert status.startswith("503")
+    assert "AQUATICY_ULTRA_CODE" in inhalt.decode()
+
+
+def test_full_app_runs_with_setup_code(vercel_app, monkeypatch):
+    from aquaticy import web
+
+    monkeypatch.setenv("AQUATICY_ULTRA_CODE", "Ab3-defghijklm")
+    status, kopf, inhalt = call(vercel_app.app, "/")
+    assert status.startswith("200")
+    assert "text/html" in kopf["Content-Type"]
+    assert b"Aquaticy" in inhalt
+    assert "Connection" not in kopf
+    assert web.AUTH is not None and web.AUTH.single
+    assert web.AUTH.ultra_code == "Ab3-defghijklm"
+    status, _, inhalt = call(vercel_app.app, "/api/auth/status")
+    assert status.startswith("200")
+    assert json.loads(inhalt)["authenticated"] is False
+
+
+def test_server_only_features_are_off(vercel_app, monkeypatch):
+    monkeypatch.setenv("AQUATICY_ULTRA_CODE", "Ab3-defghijklm")
+    for pfad in ("/api/vm", "/api/messenger/native", "/api/cluster", "/api/werkstatt"):
+        status, _, inhalt = call(vercel_app.app, pfad)
+        assert status.startswith("404"), pfad
+        assert "Vercel" in json.loads(inhalt)["error"]
+
+
+def test_loopback_and_unknown_addresses_are_refused(vercel_app, monkeypatch):
+    monkeypatch.setenv("AQUATICY_ULTRA_CODE", "Ab3-defghijklm")
+    assert call(vercel_app.app, "/", ip="127.0.0.1")[0].startswith("400")
+    assert call(vercel_app.app, "/", ip="kein-ip")[0].startswith("400")
+    assert vercel_app.visitor_ip({"HTTP_X_REAL_IP": "2001:db8::1"}) == "2001:db8::1"
+
+
+def test_preset_model_is_gemma_only_without_choice(vercel_app, monkeypatch):
+    monkeypatch.setenv("NVIDIA_NIM_API_KEY", "nv")
+    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+    assert vercel_app.preset_model() == "nvidia_nim/google/gemma-4-31b-it"
+    monkeypatch.setenv("MISTRAL_API_KEY", "m")
+    assert vercel_app.preset_model() == ""
+    monkeypatch.delenv("MISTRAL_API_KEY")
+    datei = vercel_app._env_file()
+    datei.parent.mkdir(parents=True)
+    datei.write_text("AQUATICY_MODEL=mistral/mistral-small-latest\n", encoding="utf-8")
+    assert vercel_app.preset_model() == ""
+
+
+def test_readme_explains_vercel_mode():
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    for wort in ("AQUATICY_ULTRA_CODE", "AQUATICY_VERCEL_SECRET", "BLOB_READ_WRITE_TOKEN",
+                 "Gemma 4"):
+        assert wort in text
+
+
+def test_sqlite_in_wal_mode_is_packed_consistently(tmp_path):
+    import sqlite3
+
+    from aquaticy import vercel_blob
+
+    quelle = tmp_path / "home"
+    quelle.mkdir()
+    db = sqlite3.connect(quelle / "aquaticy.sqlite3")
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute("CREATE TABLE t (x TEXT)")
+    db.execute("INSERT INTO t VALUES ('noch im WAL')")
+    db.commit()
+    archiv = vercel_blob.pack(quelle)
+    db.close()
+    namen = names(archiv)
+    assert namen == ["aquaticy.sqlite3"]
+    ziel = tmp_path / "ziel"
+    vercel_blob.unpack(archiv, ziel)
+    neu = sqlite3.connect(ziel / "aquaticy.sqlite3")
+    assert neu.execute("SELECT x FROM t").fetchall() == [("noch im WAL",)]
+    neu.close()
+
+
+def test_backup_only_after_changes(vercel_app, monkeypatch):
+    from aquaticy import vercel_blob
+
+    gesichert: list[Path] = []
+    monkeypatch.setattr(vercel_blob, "save", lambda home: gesichert.append(home) or True)
+    vercel_app.HOME.mkdir(parents=True)
+    (vercel_app.HOME / "a.txt").write_text("1", encoding="utf-8")
+    vercel_app.save_if_changed()
+    vercel_app.save_if_changed()
+    assert gesichert == [vercel_app.HOME]

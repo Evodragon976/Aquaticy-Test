@@ -38,12 +38,14 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-#: Die Einstellungen in der ``.env``.
+from aquaticy.tlsfiles import folder_lock, replace_pair
+
 DOMAIN_ENV = "AQUATICY_DOMAIN"
 TOKEN_ENV = "AQUATICY_CLOUDFLARE_TOKEN"
 EMAIL_ENV = "AQUATICY_ACME_EMAIL"
@@ -51,7 +53,7 @@ STAGING_ENV = "AQUATICY_ACME_STAGING"
 PUBLIC_PORT_ENV = "AQUATICY_PUBLIC_PORT"
 CLOUDFLARED_ENV = "AQUATICY_CLOUDFLARED"
 
-#: Der Eingang fuer den Tunnel. Nur auf 127.0.0.1.
+
 DEFAULT_PUBLIC_PORT = 8443
 
 CF_API = "https://api.cloudflare.com/client/v4"
@@ -60,34 +62,39 @@ ACME_STAGING = "https://acme-staging-v02.api.letsencrypt.org/directory"
 DOH_URL = "https://cloudflare-dns.com/dns-query"
 CLOUDFLARED_API = "https://api.github.com/repos/cloudflare/cloudflared"
 
-#: Ein Zertifikat wird erneuert, wenn es nur noch so lange gilt.
+
 RENEW_DAYS = 30
-#: So oft sieht Aquaticy nach dem Zertifikat.
+
 CHECK_SECONDS = 12 * 3600
-#: Nach einem Fehlschlag frühestens wieder -- Let's Encrypt zaehlt Fehlversuche.
+
 RETRY_SECONDS = 6 * 3600
-#: Neustarts von cloudflared, wenn es endet: erst schnell, dann geduldig.
+
 TUNNEL_BACKOFF = (5.0, 15.0, 60.0, 300.0)
-#: Wie lange Aquaticy hoechstens auf den DNS-Eintrag wartet.
+
 DNS_WAIT_SECONDS = 90.0
-#: Wie lange es hoechstens auf Let's Encrypt wartet (je Schritt).
+
 ACME_POLL_SECONDS = 180.0
-#: Groesste Antwort, die von Cloudflare oder Let's Encrypt gelesen wird.
+
 MAX_API_BYTES = 4 * 1024 * 1024
-#: cloudflared ist rund 40 MB gross.
+
 MAX_LOG_BYTES = 5 * 1024 * 1024
+
+
+def log_keep_bytes() -> int:
+    """So viel bleibt nach dem Kuerzen: vier Fuenftel -- danach ist eine Weile Ruhe."""
+    return MAX_LOG_BYTES * 4 // 5
 
 DOMAIN_RE = re.compile(
     r"^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}$")
 TOKEN_RE = re.compile(r"^[A-Za-z0-9_.\-]{20,400}$")
-#: Tunnel-Tokens sind Base64 (JSON darin) -- mit "+", "/" und "=".
+
 TUNNEL_TOKEN_RE = re.compile(r"^[A-Za-z0-9+/=_.\-]{20,4000}$")
 ID_RE = re.compile(r"^[0-9a-f]{32}$")
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 EMAIL_RE = re.compile(r"^[^@\s<>\"']{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,63}$")
 RELEASE_TAG_RE = re.compile(r"^\d{4}\.\d{1,2}\.\d{1,3}$")
 
-#: Welche Ausgabe von cloudflared zu welchem System passt.
+
 CLOUDFLARED_ASSETS: dict[tuple[str, str], str] = {
     ("linux", "x86_64"): "cloudflared-linux-amd64",
     ("linux", "amd64"): "cloudflared-linux-amd64",
@@ -100,10 +107,10 @@ CLOUDFLARED_ASSETS: dict[tuple[str, str], str] = {
     ("windows", "x86_64"): "cloudflared-windows-amd64.exe",
 }
 
-#: Wo ein mitgelieferter cloudflared liegt (Container-Abbild).
+
 SYSTEM_CLOUDFLARED = Path("/opt/aquaticy/cloudflared/cloudflared")
 
-#: Die Rechte, die das Cloudflare-Token braucht -- so steht es im Setup.
+
 TOKEN_RIGHTS = ("Zone → Zone → Lesen", "Zone → DNS → Bearbeiten",
                 "Konto → Cloudflare Tunnel → Bearbeiten")
 
@@ -112,9 +119,6 @@ class WebsiteError(RuntimeError):
     """Etwas an der Website klappt nicht -- mit einem Satz, den man versteht."""
 
 
-# ---------------------------------------------------------------------------
-# Eingaben
-# ---------------------------------------------------------------------------
 def clean_domain(roh: str) -> str:
     """Die Domain in der Form, die Cloudflare und Let's Encrypt erwarten.
 
@@ -128,8 +132,10 @@ def clean_domain(roh: str) -> str:
     if not text or ":" in text or "@" in text or "*" in text:
         raise WebsiteError("Das ist keine Domain. Beispiel: chat.example.de")
     try:
-        text = text.encode("idna").decode("ascii")
-    except UnicodeError as exc:
+        import idna
+
+        text = idna.encode(text, uts46=True).decode("ascii")
+    except (UnicodeError, idna.IDNAError) as exc:
         raise WebsiteError("Das ist keine Domain. Beispiel: chat.example.de") from exc
     if not DOMAIN_RE.fullmatch(text):
         raise WebsiteError("Das ist keine Domain. Beispiel: chat.example.de")
@@ -186,9 +192,6 @@ class SiteConfig:
         return ("aquaticy-" + self.domain.replace(".", "-"))[:60]
 
 
-# ---------------------------------------------------------------------------
-# Was Aquaticy sich merkt (data_dir/website, nur fuer den eigenen Nutzer lesbar)
-# ---------------------------------------------------------------------------
 @dataclass(slots=True)
 class SiteState:
     domain: str
@@ -251,9 +254,6 @@ def forget_state(data_dir: Path) -> None:
             (ordner / name).unlink()
 
 
-# ---------------------------------------------------------------------------
-# Cloudflare
-# ---------------------------------------------------------------------------
 def _guarded(timeout: float = 30.0, **headers: str) -> httpx.Client:
     from aquaticy import __version__, netguard
 
@@ -313,7 +313,6 @@ class Cloudflare:
             raise WebsiteError(f"Cloudflare sagt: {text or f'Fehler {status}'}")
         return daten.get("result")
 
-    # -- Zone ---------------------------------------------------------------
     def zone_for(self, domain: str) -> tuple[str, str]:
         """(Zonen-Kennung, Konto-Kennung) der Zone, zu der *domain* gehoert."""
         teile = domain.split(".")
@@ -334,7 +333,6 @@ class Cloudflare:
         raise WebsiteError(f"{domain} liegt nicht bei Cloudflare, oder das Token darf die "
                            "Zone nicht sehen.")
 
-    # -- Tunnel -------------------------------------------------------------
     def tunnel(self, konto: str, name: str) -> str:
         """Die Kennung des Tunnels *name* -- angelegt, wenn es ihn noch nicht gibt."""
         gefunden = self.call("GET", f"/accounts/{konto}/cfd_tunnel",
@@ -380,7 +378,6 @@ class Cloudflare:
             self.call("DELETE", f"/accounts/{konto}/cfd_tunnel/{tunnel_id}/connections")
         self.call("DELETE", f"/accounts/{konto}/cfd_tunnel/{tunnel_id}")
 
-    # -- DNS ----------------------------------------------------------------
     def records(self, zone: str, name: str) -> list[dict[str, Any]]:
         gefunden = self.call("GET", f"/zones/{zone}/dns_records", params={"name": name})
         return [r for r in gefunden or [] if isinstance(r, dict)]
@@ -449,9 +446,6 @@ def provision(config: SiteConfig, data_dir: Path, port: int, *,
     return zustand
 
 
-# ---------------------------------------------------------------------------
-# Let's Encrypt (ACME, RFC 8555) -- Pruefung per DNS-Eintrag
-# ---------------------------------------------------------------------------
 def _b64(daten: bytes) -> str:
     return base64.urlsafe_b64encode(daten).rstrip(b"=").decode("ascii")
 
@@ -497,7 +491,6 @@ class Acme:
             raise WebsiteError(f"Let's Encrypt ist nicht erreichbar ({type(exc).__name__}).") \
                 from exc
 
-    # -- Signieren ----------------------------------------------------------
     def jwk(self) -> dict[str, str]:
         zahlen = self._key.public_key().public_numbers()
         return {"crv": "P-256", "kty": "EC", "x": _b64(zahlen.x.to_bytes(32, "big")),
@@ -573,7 +566,6 @@ class Acme:
             raise WebsiteError("Let's Encrypt hat unerwartet geantwortet.")
         return daten
 
-    # -- Ablauf -------------------------------------------------------------
     def register(self, email: str = "") -> None:
         anfrage: dict[str, Any] = {"termsOfServiceAgreed": True}
         if email:
@@ -586,6 +578,8 @@ class Acme:
     def _poll(self, url: str, gut: set[str], schlecht: set[str]) -> dict[str, Any]:
         frist = time.monotonic() + ACME_POLL_SECONDS
         while True:
+            if time.monotonic() >= frist:
+                raise WebsiteError("Let's Encrypt braucht zu lange.")
             kopf, roh = self.post(url, None)
             daten = self._json(roh)
             stand = str(daten.get("status") or "")
@@ -596,9 +590,16 @@ class Acme:
                                    + (_acme_detail(daten) or stand))
             if time.monotonic() > frist:
                 raise WebsiteError("Let's Encrypt braucht zu lange.")
-            warten = 2.0
-            with contextlib.suppress(ValueError):
-                warten = min(30.0, max(1.0, float(kopf.get("Retry-After", "2"))))
+            retry = kopf.get("Retry-After", "2")
+            try:
+                warten = float(retry)
+            except ValueError:
+                from email.utils import parsedate_to_datetime
+
+                warten = 2.0
+                with contextlib.suppress(ValueError, TypeError, OverflowError):
+                    warten = parsedate_to_datetime(retry).timestamp() - time.time()
+            warten = max(1.0, min(warten, max(0.0, frist - time.monotonic())))
             self._sleep(warten)
 
     def certificate(self, domain: str, publish: Callable[[str, str], Callable[[], None]],
@@ -672,9 +673,11 @@ def _acme_detail(daten: dict[str, Any]) -> str:
     return _kurz(fehler.get("detail")) if isinstance(fehler, dict) else ""
 
 
-def _check_chain(kette: bytes, schluessel_pem: bytes, domain: str) -> None:
+def _check_chain(kette: bytes, schluessel_pem: bytes, domain: str,
+                 *, now: datetime | None = None) -> None:
     """Passt das Zertifikat zu Schluessel und Domain? Sonst wird nichts gespeichert."""
     from cryptography import x509
+    from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
     from cryptography.hazmat.primitives import serialization
 
     try:
@@ -682,6 +685,8 @@ def _check_chain(kette: bytes, schluessel_pem: bytes, domain: str) -> None:
         schluessel = serialization.load_pem_private_key(schluessel_pem, password=None)
     except ValueError as exc:
         raise WebsiteError("Das Zertifikat von Let's Encrypt ist unlesbar.") from exc
+    if not zertifikate:
+        raise WebsiteError("Die Zertifikatskette ist leer.")
     erstes = zertifikate[0]
     format_ = (serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
     if erstes.public_key().public_bytes(*format_) != schluessel.public_key().public_bytes(
@@ -689,6 +694,79 @@ def _check_chain(kette: bytes, schluessel_pem: bytes, domain: str) -> None:
         raise WebsiteError("Das Zertifikat passt nicht zum Schlüssel.")
     if domain not in _domains_of(erstes):
         raise WebsiteError("Das Zertifikat gilt nicht für diese Domain.")
+    current = now or datetime.now(UTC)
+    for cert in zertifikate:
+        if not cert.not_valid_before_utc <= current < cert.not_valid_after_utc:
+            raise WebsiteError("Die Zertifikatskette ist noch nicht gültig oder abgelaufen.")
+    _check_leaf(erstes)
+    for stufe, (child, issuer) in enumerate(pairwise(zertifikate)):
+        try:
+            child.verify_directly_issued_by(issuer)
+            _check_issuer(issuer, stufe)
+        except (ValueError, TypeError, InvalidSignature, UnsupportedAlgorithm,
+                x509.ExtensionNotFound) as exc:
+            raise WebsiteError("Die Zertifikatskette passt nicht zusammen.") from exc
+    namen = _domains_of(erstes)
+    for issuer in zertifikate[1:]:
+        if not _names_allowed(issuer, namen):
+            raise WebsiteError("Die Zertifikatskette passt nicht zusammen.")
+
+
+def _check_leaf(zertifikat: Any) -> None:
+    """Das Serverzertifikat selbst ist keine Zertifizierungsstelle und taugt fuer TLS-Server."""
+    from cryptography import x509
+    from cryptography.x509.oid import ExtendedKeyUsageOID
+
+    with contextlib.suppress(x509.ExtensionNotFound):
+        if zertifikat.extensions.get_extension_for_class(x509.BasicConstraints).value.ca:
+            raise WebsiteError("Das Zertifikat ist eine Zertifizierungsstelle, kein Server.")
+    with contextlib.suppress(x509.ExtensionNotFound):
+        zwecke = zertifikat.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+        if ExtendedKeyUsageOID.SERVER_AUTH not in zwecke:
+            raise WebsiteError("Das Zertifikat ist nicht für Webserver gedacht.")
+
+
+def _check_issuer(issuer: Any, darunter: int) -> None:
+    """15.7.8: eine echte Zertifizierungsstelle, die signieren darf und tief genug reicht.
+
+    *darunter*: wie viele Zwischenstellen zwischen ihr und dem Serverzertifikat liegen.
+    Vorher genuegte "ist eine CA" -- Pfadlaenge und Signierrecht wurden uebergangen.
+    """
+    from cryptography import x509
+
+    grenzen = issuer.extensions.get_extension_for_class(x509.BasicConstraints).value
+    if not grenzen.ca:
+        raise ValueError("issuer is not a CA")
+    if grenzen.path_length is not None and darunter > grenzen.path_length:
+        raise ValueError("path length exceeded")
+    with contextlib.suppress(x509.ExtensionNotFound):
+        if not issuer.extensions.get_extension_for_class(x509.KeyUsage).value.key_cert_sign:
+            raise ValueError("issuer may not sign certificates")
+
+
+def _names_allowed(issuer: Any, namen: list[str]) -> bool:
+    """Haelt das Serverzertifikat die Namensbeschraenkungen dieser Stelle ein?"""
+    from cryptography import x509
+
+    try:
+        regel = issuer.extensions.get_extension_for_class(x509.NameConstraints).value
+    except x509.ExtensionNotFound:
+        return True
+
+    def passt(name: str, muster: str) -> bool:
+        name, muster = name.lower().rstrip("."), muster.lower().lstrip(".").rstrip(".")
+        return name == muster or name.endswith("." + muster)
+
+    erlaubt = [str(n.value) for n in regel.permitted_subtrees or []
+               if isinstance(n, x509.DNSName)]
+    verboten = [str(n.value) for n in regel.excluded_subtrees or []
+                if isinstance(n, x509.DNSName)]
+    for name in namen:
+        if any(passt(name, m) for m in verboten):
+            return False
+        if regel.permitted_subtrees is not None and not any(passt(name, m) for m in erlaubt):
+            return False
+    return True
 
 
 def _domains_of(zertifikat: Any) -> list[str]:
@@ -701,20 +779,32 @@ def _domains_of(zertifikat: Any) -> list[str]:
     return [str(name) for name in san.value.get_values_for_type(x509.DNSName)]
 
 
-def _account_key(data_dir: Path) -> Any:
+def _account_key_unlocked(data_dir: Path) -> Any:
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import ec
 
     pfad = site_dir(data_dir) / "acme-account.key"
     with contextlib.suppress(OSError, ValueError, TypeError):
         schluessel = serialization.load_pem_private_key(pfad.read_bytes(), password=None)
-        if isinstance(schluessel, ec.EllipticCurvePrivateKey):
+        if (isinstance(schluessel, ec.EllipticCurvePrivateKey)
+                and isinstance(schluessel.curve, ec.SECP256R1)):
             return schluessel
     schluessel = ec.generate_private_key(ec.SECP256R1())
     _privat_schreiben(pfad, schluessel.private_bytes(
         serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
         serialization.NoEncryption()))
     return schluessel
+
+
+def _txt_value(raw: str) -> str:
+    value = raw.strip()
+    if not value.startswith('"'):
+        return value
+    pieces = re.findall(r'"((?:\\.|[^"\\])*)"', value)
+    if re.sub(r'"(?:\\.|[^"\\])*"', '', value).strip():
+        return ""
+    return re.sub(r"\\(\d{3}|.)", lambda m: chr(int(m[1]))
+                  if m[1].isdigit() and len(m[1]) == 3 else m[1], "".join(pieces))
 
 
 def wait_for_txt(name: str, wert: str, *, http: httpx.Client | None = None,
@@ -735,7 +825,8 @@ def wait_for_txt(name: str, wert: str, *, http: httpx.Client | None = None,
                                  headers={"Accept": "application/dns-json"}) as antwort:
                     daten = json.loads(_lesen(antwort))
                 for eintrag in (daten.get("Answer") or []) if isinstance(daten, dict) else []:
-                    if isinstance(eintrag, dict) and wert in str(eintrag.get("data") or ""):
+                    if (isinstance(eintrag, dict) and eintrag.get("type") == 16
+                            and _txt_value(str(eintrag.get("data") or "")) == wert):
                         return True
             sleep(3.0)
     finally:
@@ -754,24 +845,29 @@ def certificate_expiry(data_dir: Path, domain: str) -> datetime | None:
 
     zert, _ = cert_paths(data_dir)
     try:
-        erstes = x509.load_pem_x509_certificates(zert.read_bytes())[0]
+        chain = x509.load_pem_x509_certificates(zert.read_bytes())
+        erstes = chain[0]
     except (OSError, ValueError, IndexError):
         return None
     if domain not in _domains_of(erstes):
         return None
-    return erstes.not_valid_after_utc
+    return min(cert.not_valid_after_utc for cert in chain)
 
 
 def certificate_valid(data_dir: Path, domain: str, *, now: datetime | None = None) -> bool:
-    ablauf = certificate_expiry(data_dir, domain)
-    jetzt = now or datetime.now(UTC)
-    return ablauf is not None and ablauf > jetzt
+    zert, key = cert_paths(data_dir)
+    try:
+        _check_chain(zert.read_bytes(), key.read_bytes(), domain, now=now)
+    except (OSError, WebsiteError):
+        return False
+    return True
 
 
 def needs_certificate(data_dir: Path, domain: str, *, now: datetime | None = None) -> bool:
     ablauf = certificate_expiry(data_dir, domain)
     jetzt = now or datetime.now(UTC)
-    return ablauf is None or ablauf - jetzt < timedelta(days=RENEW_DAYS)
+    return (not certificate_valid(data_dir, domain, now=jetzt) or ablauf is None
+            or ablauf - jetzt < timedelta(days=RENEW_DAYS))
 
 
 def obtain_certificate(config: SiteConfig, data_dir: Path, zone: str, *,
@@ -796,7 +892,9 @@ def obtain_certificate(config: SiteConfig, data_dir: Path, zone: str, *,
                 wait(name, wert)
                 return
             sleep(5.0)
-            wait_for_txt(name, wert, sleep=sleep)
+            if not wait_for_txt(name, wert, sleep=sleep):
+                raise WebsiteError("Der DNS-Eintrag ist noch nicht sichtbar. "
+                                   "Die Zertifikatsprüfung wurde nicht gestartet.")
 
         schluessel, kette = acme.certificate(config.domain, veroeffentlichen, warten)
     finally:
@@ -805,15 +903,16 @@ def obtain_certificate(config: SiteConfig, data_dir: Path, zone: str, *,
         if cloudflare is None:
             cf.close()
     zert, key = cert_paths(data_dir)
-    _privat_schreiben(key, schluessel)
-    _privat_schreiben(zert, kette)
+    with folder_lock(zert.parent):
+        _check_chain(kette, schluessel, config.domain)
+        replace_pair(zert, key, kette, schluessel)
     ablauf = certificate_expiry(data_dir, config.domain)
     if ablauf is None:
         raise WebsiteError("Das neue Zertifikat ließ sich nicht lesen.")
     return ablauf
 
 
-def self_signed(data_dir: Path, domain: str) -> tuple[Path, Path]:
+def _self_signed_unlocked(data_dir: Path, domain: str) -> tuple[Path, Path]:
     """Ein selbst ausgestelltes Zertifikat fuer den Weg cloudflared -> Aquaticy,
     solange das echte noch fehlt. Es verlaesst den Rechner nie."""
     from cryptography import x509
@@ -823,7 +922,8 @@ def self_signed(data_dir: Path, domain: str) -> tuple[Path, Path]:
 
     ordner = site_dir(data_dir)
     zert, key = ordner / "selfsigned-cert.pem", ordner / "selfsigned-key.pem"
-    with contextlib.suppress(OSError, ValueError, IndexError):
+    with contextlib.suppress(OSError, ValueError, IndexError, WebsiteError):
+        _check_chain(zert.read_bytes(), key.read_bytes(), domain)
         bisher = x509.load_pem_x509_certificates(zert.read_bytes())[0]
         if (domain in _domains_of(bisher) and key.is_file()
                 and bisher.not_valid_after_utc - datetime.now(UTC) > timedelta(days=30)):
@@ -838,10 +938,10 @@ def self_signed(data_dir: Path, domain: str) -> tuple[Path, Path]:
                   .add_extension(x509.SubjectAlternativeName(
                       [x509.DNSName(domain), x509.DNSName("localhost")]), critical=False)
                   .sign(schluessel, hashes.SHA256()))
-    _privat_schreiben(key, schluessel.private_bytes(
-        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption()))
-    _privat_schreiben(zert, zertifikat.public_bytes(serialization.Encoding.PEM))
+    ordner.mkdir(parents=True, exist_ok=True)
+    replace_pair(zert, key, zertifikat.public_bytes(serialization.Encoding.PEM),
+                 schluessel.private_bytes(serialization.Encoding.PEM,
+                    serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
     return zert, key
 
 
@@ -874,9 +974,6 @@ def load_certificate(kontext: ssl.SSLContext, data_dir: Path, domain: str) -> bo
     return False
 
 
-# ---------------------------------------------------------------------------
-# cloudflared
-# ---------------------------------------------------------------------------
 def cloudflared_asset(system: str = "", machine: str = "") -> str:
     system = (system or platform.system()).lower()
     machine = (machine or platform.machine()).lower()
@@ -989,8 +1086,6 @@ def _starts(programm: Path) -> bool:
     return fertig.returncode == 0
 
 
-#: Was cloudflared aus der Umgebung bekommt. Die Schluessel von Aquaticy
-#: (Modell-Anbieter, Cloudflare-API) braucht es nicht -- also bekommt es sie nicht.
 TUNNEL_ENV_KEEP = (
     "PATH", "HOME", "USERPROFILE", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP", "TZ", "LANG",
     "LC_ALL", "SSL_CERT_FILE", "SSL_CERT_DIR", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY",
@@ -1069,21 +1164,47 @@ class Tunnel:
                 self._set("startet", "Verbinde mit Cloudflare …")
                 log = site_dir(self.data_dir) / "cloudflared.log"
                 log.parent.mkdir(parents=True, exist_ok=True)
-                with contextlib.suppress(OSError):
-                    if log.stat().st_size > MAX_LOG_BYTES:
-                        log.unlink()
                 umgebung = tunnel_env(token)
-                fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-                with os.fdopen(fd, "ab") as ausgabe:
+                flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+                if log.is_symlink():
+                    raise WebsiteError("Das Tunnel-Protokoll darf kein Link sein.")
+                fd = os.open(log, flags, 0o600)
+                with os.fdopen(fd, "r+b") as ausgabe:
+                    with contextlib.suppress(OSError):
+                        os.chmod(log, 0o600)
+                    if ausgabe.seek(0, os.SEEK_END) > MAX_LOG_BYTES:
+                        ausgabe.seek(-MAX_LOG_BYTES, os.SEEK_END)
+                        tail = ausgabe.read()
+                        ausgabe.seek(0)
+                        ausgabe.truncate()
+                        ausgabe.write(tail)
                     with self._lock:
                         if self._stop.is_set():
                             return
                         self._proc = self._popen(
                             [str(programm), "tunnel", "--no-autoupdate", "run"],
-                            env=umgebung, stdin=subprocess.DEVNULL, stdout=ausgabe,
+                            env=umgebung, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
                     self._set("laeuft", "Mit Cloudflare verbunden.")
                     gestartet = time.monotonic()
+                    stream = self._proc.stdout
+                    if stream is not None:
+                        try:
+                            read = getattr(stream, "read1", stream.read)
+                            while chunk := read(16_384):
+                                if ausgabe.tell() + len(chunk) > MAX_LOG_BYTES:
+                                    # 15.7.8: auf 4 MB kuerzen, nicht auf 5 -- sonst schrieb
+                                    # jede neue Zeile die ganzen 5 MB neu (Dauerlast).
+                                    ausgabe.seek(0)
+                                    tail = (ausgabe.read() + chunk)[-log_keep_bytes():]
+                                    ausgabe.seek(0)
+                                    ausgabe.truncate()
+                                    ausgabe.write(tail)
+                                else:
+                                    ausgabe.write(chunk)
+                                ausgabe.flush()
+                        finally:
+                            stream.close()
                     code = self._proc.wait()
                 if self._stop.is_set():
                     return
@@ -1093,7 +1214,7 @@ class Tunnel:
                                     "Details: website/cloudflared.log")
             except (WebsiteError, OSError) as exc:
                 self._set("fehler", str(exc))
-            except Exception as exc:  # der Tunnel versucht es weiter, statt still zu sterben
+            except Exception as exc:
                 self._set("fehler", f"Unerwarteter Fehler ({type(exc).__name__}).")
             pause = TUNNEL_BACKOFF[min(versuch, len(TUNNEL_BACKOFF) - 1)]
             versuch += 1
@@ -1104,9 +1225,6 @@ class Tunnel:
         return {"phase": self.phase, "message": self.message}
 
 
-# ---------------------------------------------------------------------------
-# Alles zusammen
-# ---------------------------------------------------------------------------
 @dataclass
 class Website:
     """Haelt Domain, Zertifikat und Tunnel in Ordnung, solange Aquaticy laeuft."""
@@ -1125,7 +1243,7 @@ class Website:
     _next_try: float = 0.0
     _ingress: tuple[int, bool] | None = None
     _lifecycle: Any = field(default_factory=threading.Lock, repr=False)
-    #: Wartet zwischen den Schritten bei Let's Encrypt (Tests setzen das auf nichts).
+
     pause: Callable[[float], None] = time.sleep
 
     def tls(self) -> ssl.SSLContext:
@@ -1169,10 +1287,9 @@ class Website:
             except WebsiteError as exc:
                 self.message = str(exc)
                 print(f"  [Website] {exc}", flush=True)
-                # Erst nach einer Minute, dann immer geduldiger -- ein falsches
-                # Token soll Cloudflare nicht minuetlich behelligen.
+
                 warten, pause = pause, min(pause * 2, 3600.0)
-            except Exception as exc:  # pragma: no cover - die Website darf nie den Server kosten
+            except Exception as exc:  # pragma: no cover
                 self.message = f"{type(exc).__name__}"
                 print(f"  [Website] {type(exc).__name__}: {exc}", flush=True)
                 warten, pause = pause, min(pause * 2, 3600.0)
@@ -1210,7 +1327,6 @@ class Website:
             return
         echt = load_certificate(self.tls(), self.data_dir, self.config.domain)
         if self._ingress != (self.port, echt):
-            # Der Tunnel muss wissen, wohin (Port) und wie streng er prueft.
             with self._cloudflare() as cf:
                 cf.set_ingress(self.state.account_id, self.state.tunnel_id, self.config.domain,
                                self.port, ca_pool=ca_pool_for(self.data_dir, self.config.domain))
@@ -1260,3 +1376,13 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
+
+
+def _account_key(data_dir: Path) -> Any:
+    with folder_lock(site_dir(data_dir)):
+        return _account_key_unlocked(data_dir)
+
+
+def self_signed(data_dir: Path, domain: str) -> tuple[Path, Path]:
+    with folder_lock(site_dir(data_dir)):
+        return _self_signed_unlocked(data_dir, domain)

@@ -66,64 +66,69 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-#: Hoechstens so viele Server in einem Verbund.
 MAX_NODES = 10
-#: UDP-Port fuer das Finden im lokalen Netz.
-DISCOVERY_PORT = int(os.environ.get("AQUATICY_CLUSTER_PORT", "8766") or 8766)
-# Laengste Pause zwischen zwei Versuchen, ein abgegebenes Konto freizugeben.
+
+try:
+    DISCOVERY_PORT = int(os.environ.get("AQUATICY_CLUSTER_PORT", "8766") or 8766)
+    if not 0 < DISCOVERY_PORT < 65536:
+        DISCOVERY_PORT = 8766
+except ValueError:
+    DISCOVERY_PORT = 8766
+
 RELEASE_RETRY_FIRST = 2.0
 RELEASE_RETRY_MAX = 60.0
 BEACON_SECONDS = 5.0
-#: So lange bleibt ein gefundener Server in der Liste, ohne sich zu melden.
+
 DISCOVERY_TTL = 20.0
-#: Takt fuer Lebenszeichen und Abgleich.
+
 SYNC_SECONDS = 3.0
-#: Ohne Antwort so lange gilt ein Server als weg.
+
 DEAD_AFTER = 15.0
-#: Erst nach so langer Pause darf ein Konto auf einen anderen Server wandern.
+
 IDLE_SECONDS = 600.0
-#: Wie lange eine Einladung gilt.
+
 INVITE_SECONDS = 300.0
-#: Wie weit die Uhren zweier Server auseinanderliegen duerfen.
+
 CLOCK_SKEW = 120.0
-#: Stueckgroesse beim Kopieren von Dateien.
+
 CHUNK = 1 << 20
-#: Eintraege je Abruf aus dem Aenderungsprotokoll.
+SNAPSHOT_SECONDS = 900.0
+MAX_SNAPSHOTS = 16
+
 LOG_BATCH = 500
-#: So lange bleiben Protokolleintraege liegen.
+
 LOG_KEEP_SECONDS = 3 * 86400.0
-#: Falsche Codes, bevor eine Einladung verfaellt.
+
 CODE_TRIES = 3
-#: So lange gilt die gemessene Hardware eines Servers (Sekunden) -- nvidia-smi
-#: und die Modellliste von Ollama kosten, das Lebenszeichen kommt alle 3 s.
+
+
 HW_SECONDS = 10.0
-#: Ab diesem Anteil der staerksten Modell-Leistung im Verbund ist ein Server ein
-#: Modell-Server (11.3.2 Sol). Alle anderen bedienen nur die Website.
+
+
 MODEL_ROLE_SHARE = 0.4
-#: Ein Modell-Server uebernimmt hoechstens so viel Website-Arbeit wie dieser
-#: Anteil des besten reinen Website-Servers -- "ein bisschen was die Website".
+
+
 WEB_ON_MODEL_SHARE = 0.5
 _TAILSCALE_V4 = ipaddress.ip_network("100.64.0.0/10")
 _TAILSCALE_V6 = ipaddress.ip_network("fd7a:115c:a1e0::/48")
 
-#: Die Datenbank, die alle Server gemeinsam haben.
+
 SHARED_DB = "accounts.sqlite3"
-#: Dateien im Datenordner, die nie in den Verbund gehen: der Zwischenspeicher
-#: des lokalen Profils und alles, was zur Datenbank gehoert (die laeuft ueber
-#: das Protokoll).
+
+
 _ROOT_SKIP = re.compile(r"^(aquaticy\.sqlite3|accounts\.sqlite3)(-wal|-shm|-journal)?$|\.tmp$"
                         r"|^addons\.json$")
-#: Gehoert zu diesem Rechner, nicht zum Verbund: was hier installiert ist.
+
 _NODE_LOCAL = frozenset({"cluster", "addons.json"})
 _USER_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _NODE_RE = re.compile(r"^[0-9a-f]{16,64}$")
 _SQLITE_SUFFIXES = (".sqlite3", ".sqlite", ".db")
 _SIDE_FILES = ("-wal", "-shm", "-journal")
 _TMP_PREFIX = ".sync-"
-#: Kopfzeilen, die nicht weitergereicht werden (gelten nur fuer eine Verbindung).
+
 _HOP = frozenset({"connection", "keep-alive", "transfer-encoding", "content-length",
                   "proxy-connection", "te", "upgrade", "trailer"})
-#: Woran der Eingang erkennt, dass das Konto inzwischen woanders zuhause ist.
+
 MOVED_HEADER = "X-Aquaticy-Cluster"
 
 
@@ -146,7 +151,6 @@ def parse_port(value: Any) -> int:
     return port
 
 
-# -- Verschluesselung --------------------------------------------------------
 def _hkdf(key: bytes, salt: bytes, info: str, length: int = 32) -> bytes:
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -303,7 +307,7 @@ def lan_ip_ok(address: str) -> bool:
 def tailscale_ip_ok(address: str) -> bool:
     """Die von Tailscale verwendeten IPv4- und IPv6-Bereiche."""
     try:
-        ip = ipaddress.ip_address(address)
+        ip = ipaddress.ip_address(str(address).split("%", 1)[0])
     except ValueError:
         return False
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
@@ -355,11 +359,10 @@ def resolve_address(address: str, *, family: int = socket.AF_UNSPEC) -> str:
     addresses = list(dict.fromkeys(str(answer[4][0]) for answer in answers))
     if not addresses or not all(tailscale_ip_ok(item) for item in addresses):
         raise ClusterError("Der MagicDNS-Name darf nur auf Tailscale-Adressen zeigen.")
-    # Die Rueckverbindung muss zur lokalen Bindung passen. Ohne Vorgabe IPv4 zuerst.
+
     return _address_for_family(sorted(addresses, key=lambda item: ":" in item), family)
 
 
-# -- Die gemeinsame Datenbank -----------------------------------------------
 def _unquote(text: Any) -> Any:
     """Liest ein Literal aus SQLites ``quote()`` -- ohne es je als SQL auszufuehren."""
     if text is None:
@@ -659,20 +662,22 @@ class SharedDb:
 
 
 def snapshot_sqlite(path: Path, target: Path) -> None:
-    """Ein in sich stimmiger Abzug einer laufenden Datenbank (Backup-API)."""
+    """Erstellt einen privaten Abzug und ersetzt erst nach erfolgreichem Backup."""
+    from aquaticy.memory import secure_file
+
     target.parent.mkdir(parents=True, exist_ok=True)
-    with contextlib.suppress(FileNotFoundError):
-        target.unlink()
-    quelle = sqlite3.connect(path, timeout=15)
-    ziel = sqlite3.connect(target)
+    temporary = target.parent / f"{_TMP_PREFIX}{secrets.token_hex(12)}"
     try:
-        quelle.backup(ziel)
+        with contextlib.closing(sqlite3.connect(path, timeout=15)) as source:
+            temporary.touch(mode=0o600, exist_ok=False)
+            secure_file(temporary)
+            with contextlib.closing(sqlite3.connect(temporary)) as destination:
+                source.backup(destination)
+        os.replace(temporary, target)
     finally:
-        ziel.close()
-        quelle.close()
+        temporary.unlink(missing_ok=True)
 
 
-# -- Dateien -----------------------------------------------------------------
 def _is_sqlite(path: Path) -> bool:
     if not path.name.endswith(_SQLITE_SUFFIXES):
         return False
@@ -736,35 +741,35 @@ def write_atomic(target: Path, data: bytes) -> None:
 
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.parent / f"{_TMP_PREFIX}{secrets.token_hex(6)}"
-    tmp.write_bytes(data)
-    secure_file(tmp)
-    if target.name.endswith(_SQLITE_SUFFIXES):
-        # Ein altes WAL wuerde sonst auf die neue Datenbank angewandt.
-        for endung in _SIDE_FILES:
-            with contextlib.suppress(FileNotFoundError):
-                Path(str(target) + endung).unlink()
-    os.replace(tmp, target)
+    try:
+        tmp.touch(mode=0o600, exist_ok=False)
+        secure_file(tmp)
+        tmp.write_bytes(data)
+        os.replace(tmp, target)
+        if target.name.endswith(_SQLITE_SUFFIXES):
+            for endung in _SIDE_FILES:
+                with contextlib.suppress(FileNotFoundError):
+                    Path(str(target) + endung).unlink()
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
-# -- Zustand -----------------------------------------------------------------
 @dataclass
 class Hooks:
     """Was der Verbund von der Weboberflaeche braucht."""
 
-    #: {"runs": laufende Antworten, "sessions": offene Sitzungen}
     load: Callable[[], dict[str, Any]] = lambda: {}
-    #: Gibt ein Konto ab. False = es laeuft noch etwas, bleibt hier.
+
     release: Callable[[str], bool] = lambda user: True
-    #: Dieser Server ist jetzt Heimserver des Kontos.
+
     adopt: Callable[[str], None] = lambda user: None
-    #: Startet den Server mit den Daten des Verbunds neu.
+
     restart: Callable[[], None] = lambda: None
-    #: Eine neue Anfrage zum Verbinden (Terminal).
+
     ask: Callable[[dict[str, Any]], None] | None = None
-    #: Hardware und Auslastung dieses Rechners (11.3.2 Sol): Kerne, RAM, Grafikkarte,
-    #: installierte Ollama-Modelle. Siehe :func:`hardware`.
+
     hardware: Callable[[], dict[str, Any]] = lambda: {}
-    #: Braucht dieses Konto lokale Modelle (Ollama, verteiltes Modell)?
+
     wants_models: Callable[[str], bool] = lambda user: False
 
 
@@ -776,11 +781,11 @@ class Invite:
     peer: dict[str, Any]
     key: bytes = b""
     code: str = ""
-    status: str = "pending"  # pending, accepted, denied, joined, failed, expired
+    status: str = "pending"
     created: float = field(default_factory=time.time)
     tries: int = 0
     message: str = ""
-    #: Beim Eingeladenen: die Adresse, von der die Einladung kam.
+
     source: str = ""
 
     def expire(self) -> None:
@@ -833,17 +838,20 @@ class Cluster:
         self.invites_out: dict[str, Invite] = {}
         self.invites_in: dict[str, Invite] = {}
         self._nonces: dict[str, float] = {}
-        self._activity: dict[str, float] = {}   # Master: zuletzt aktiv (verbundweit)
-        self._local_seen: dict[str, float] = {}  # Eingang: zuletzt hier gesehen
+        self._activity: dict[str, float] = {}
+        self._local_seen: dict[str, float] = {}
         self._seen_batch: set[str] = set()
         self._gens_done: dict[str, str] = {}
         self._orphans: dict[str, float] = {}
         self._moving: set[str] = set()
         self._assign_locks: dict[str, threading.Lock] = {}
         self._snapshots: dict[str, tuple[Path, str]] = {}
+        self._snapshot_lock = threading.RLock()
+        self._snapshot_times: dict[str, float] = {}
+        self._snapshot_sources: dict[str, Path] = {}
+        self._sweep_snapshots()
         self.notice = ""
 
-    # -- Dateien des Verbunds ---------------------------------------------
     def _load_json(self, name: str, default: Any) -> Any:
         with contextlib.suppress(OSError, ValueError):
             daten = json.loads((self.dir / name).read_text(encoding="utf-8"))
@@ -860,13 +868,12 @@ class Cluster:
 
     def _load_node(self) -> dict[str, str]:
         knoten = self._load_json("node.json", {})
-        if not _NODE_RE.match(str(knoten.get("id", ""))):
+        if not _NODE_RE.fullmatch(str(knoten.get("id", ""))):
             knoten = {"id": secrets.token_hex(16)}
         knoten["name"] = (socket.gethostname() or "aquaticy")[:60]
         self._save_json("node.json", knoten)
         return knoten
 
-    # -- Eigenschaften -----------------------------------------------------
     @property
     def node_id(self) -> str:
         return str(self.node["id"])
@@ -916,7 +923,6 @@ class Cluster:
         """Hoert der Server ueberhaupt auf das Netz (``--lan``)?"""
         return self.host not in ("127.0.0.1", "localhost", "::1")
 
-    # -- Start und Stopp ---------------------------------------------------
     def start(self) -> None:
         """Startet Finden und Abgleich -- nur, wenn der Schalter an ist."""
         if not self.enabled or self._threads:
@@ -946,7 +952,6 @@ class Cluster:
             self.stop()
             self.discovered.clear()
 
-    # -- Finden im lokalen Netz -------------------------------------------
     def beacon(self) -> dict[str, Any]:
         return {"app": "aquaticy", "v": 1, "node": self.node_id, "name": self.node["name"],
                 "port": self.port, "version": self.version,
@@ -1010,7 +1015,7 @@ class Cluster:
         if not isinstance(b, dict) or b.get("app") != "aquaticy":
             return
         knoten = str(b.get("node", ""))
-        if not _NODE_RE.match(knoten) or knoten == self.node_id:
+        if not _NODE_RE.fullmatch(knoten) or knoten == self.node_id:
             return
         try:
             port = int(b.get("port", 0))
@@ -1034,7 +1039,6 @@ class Cluster:
             return [dict(v, member=v["node"] in mitglieder)
                     for v in sorted(self.discovered.values(), key=lambda v: v["name"])]
 
-    # -- Nachrichten zwischen Servern -------------------------------------
     def _seen_nonce(self, nonce: str) -> bool:
         jetzt = _now()
         with self._lock:
@@ -1110,7 +1114,6 @@ class Cluster:
         self.last_ok[node] = _now()
         return daten if isinstance(daten, dict) else {}
 
-    # -- Eingang fuer /cluster/... ----------------------------------------
     def handle_rpc(self, raw: bytes, source_ip: str) -> bytes:
         """Beantwortet einen verschluesselten Aufruf. Antwort: verschluesselt."""
         if not self.joined or not lan_ip_ok(source_ip):
@@ -1122,8 +1125,6 @@ class Cluster:
         except ClusterError as exc:
             ergebnis = {"error": str(exc)}
         except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as exc:
-            # Auch ein Platten- oder Datenbankfehler geht als Antwort zurueck --
-            # sonst riss die Verbindung ab, und der andere sah nur "weg".
             ergebnis = {"error": f"{type(exc).__name__} beim Bearbeiten von „{op}“."}
         return seal(key, json.dumps(ergebnis).encode(), f"reply:{nonce}")
 
@@ -1133,7 +1134,7 @@ class Cluster:
             if self.is_master:
                 jetzt = _now()
                 for user in args.get("seen", [])[:5000]:
-                    if _USER_RE.match(str(user)):
+                    if _USER_RE.fullmatch(str(user)):
                         self._activity[str(user)] = jetzt
             if isinstance(args.get("load"), dict):
                 self.loads[absender] = args["load"]
@@ -1147,7 +1148,7 @@ class Cluster:
             return {"ok": True}
         if op == "assign" and self.is_master:
             user = str(args.get("user", ""))
-            if not _USER_RE.match(user):
+            if not _USER_RE.fullmatch(user):
                 raise ClusterError("Ungültiges Konto.")
             return {"node": self.assign(user)}
         if op == "dblog":
@@ -1189,7 +1190,6 @@ class Cluster:
             return {"ok": True}
         raise ClusterError("Unbekannter Aufruf.")
 
-    # -- Last und Zuteilung ------------------------------------------------
     def my_load(self) -> dict[str, Any]:
         try:
             last = dict(self.hooks.load() or {})
@@ -1247,8 +1247,7 @@ class Cluster:
         jetzt = _now()
         aktiv = sum(1 for u, n in list(self.homes.items())
                     if n == node and jetzt - self._activity.get(u, 0) < IDLE_SECONDS)
-        # Wie die Hardware geprueft (11.4.1 Luna): ein Text wie "viel" von einem
-        # anderen Server liess sonst die Zuteilung ALLER Konten abstuerzen.
+
         return (2.0 * _zahl(last.get("runs"), 100_000) + aktiv
                 + 2.0 * _zahl(last.get("cpu"), 1_000))
 
@@ -1277,10 +1276,10 @@ class Cluster:
                 for n in kandidaten:
                     if rollen.get(n) == "modelle":
                         kraft[n] = min(kraft[n], deckel)
-        # Unbekannte Hardware (aeltere Fassung) zaehlt wie der Durchschnitt.
+
         bekannt = [k for k in kraft.values() if k > 0]
         mittel = sum(bekannt) / len(bekannt) if bekannt else 1.0
-        # Bei Gleichstand der Master -- dort liegen die Daten ohnehin schon.
+
         return min(kandidaten, key=lambda n: ((self.score(n) + 1.0) / (kraft[n] or mittel),
                                               n != self.master_node(), n))
 
@@ -1300,9 +1299,6 @@ class Cluster:
             self._activity[user] = jetzt
             jetzt_heim = self.homes.get(user, "")
             if self.split_on:
-                # Serverlast aufteilen: das Modell laeuft verteilt, bedient wird
-                # beim Master. Laeuft auf dem alten Heimserver noch etwas, bleibt
-                # das Konto dort, bis es frei ist (_move gibt dann *alt* zurueck).
                 if jetzt_heim == self.node_id:
                     return jetzt_heim
                 if jetzt_heim and self.alive(jetzt_heim):
@@ -1312,8 +1308,6 @@ class Cluster:
                 self._set_home(user, self.node_id)
                 return self.node_id
             if jetzt_heim and self.alive(jetzt_heim):
-                # Lokale Modelle auf einem schwachen Server: sobald dort nichts
-                # mehr laeuft, auf einen Modell-Server (_move prueft das).
                 falsch = self.misplaced(user, jetzt_heim)
                 if jetzt - zuletzt < IDLE_SECONDS and not falsch:
                     return jetzt_heim
@@ -1323,12 +1317,9 @@ class Cluster:
                     return jetzt_heim
                 return self._move(user, jetzt_heim, bester)
             if jetzt_heim:
-                # Die letzte Profilkopie kann hinter dem ausgefallenen Server
-                # zurueckliegen. Ohne Abgabe und Nachziehen nicht neu zuteilen.
                 return jetzt_heim
             bester = self.least_loaded(user)
-            # Ohne Heimserver liegen die Daten beim Master (dort war das Konto,
-            # bevor es den Verbund gab).
+
             quelle = jetzt_heim or self.master_node()
             if quelle and quelle != bester and self.alive(quelle):
                 return self._move(user, quelle, bester)
@@ -1348,9 +1339,6 @@ class Cluster:
             else:
                 self.call(neu, "pull", {"user": user, "from": alt}, timeout=300.0)
         except (ClusterError, OSError, ValueError, sqlite3.Error):
-            # Ohne vollstaendige Kopie bleibt der bisherige Server zustaendig.
-            # Er hat seine Arbeit fuer die Uebergabe angehalten: auch auf einem
-            # entfernten Server die Sperre loesen und Auftraege wieder starten.
             self._set_home(user, alt)
             return alt
         self._set_home(user, neu)
@@ -1370,7 +1358,7 @@ class Cluster:
                 self.call(node, "adopt", {"user": user})
 
     def _release(self, user: str) -> bool:
-        if not _USER_RE.match(user):
+        if not _USER_RE.fullmatch(user):
             return False
         with self._lock:
             self._moving.add(user)
@@ -1423,7 +1411,6 @@ class Cluster:
     def forget_home(self, user: str) -> None:
         self._local_seen.pop(user, None)
 
-    # -- Serverlast aufteilen (10.2.0 Luna, aquaticy/sharding.py) ----------
     def split(self) -> dict[str, Any]:
         """Die Einstellung "Serverlast aufteilen" -- steht in der Mitgliederliste."""
         roh = (self.info or {}).get("split")
@@ -1445,7 +1432,7 @@ class Cluster:
             info["split"] = {"on": bool(on),
                              "model": str(model or alt.get("model") or "")[:200],
                              "at": _now(),
-                             # Die Fassung von llama.cpp bleibt (set_split_llama).
+
                              "llama": str(alt.get("llama") or "")[:20]}
             info["version"] = int(info.get("version", 0)) + 1
             self._save()
@@ -1531,7 +1518,6 @@ class Cluster:
             raise ClusterError("Ungültige Anfrage.")
         return schluessel, zufall
 
-    # -- Mitgliederliste ---------------------------------------------------
     def public_info(self) -> dict[str, Any]:
         """Die Mitgliederliste ohne Schluessel -- die gehen nur ueber "rekey"."""
         info = dict(self.info or {})
@@ -1561,17 +1547,15 @@ class Cluster:
         with self._lock:
             neu = dict(info)
             neu.pop("joining", None)
-            # Schluessel kommen nie ueber diesen Weg -- nur ueber "rekey".
+
             neu["secret"] = self.info["secret"]
             neu.pop("previous", None)
             self.state["cluster"] = neu
             abgegeben: list[str] = []
             angenommen: list[str] = []
             if isinstance(homes, dict):
-                neue = {str(u): str(n) for u, n in homes.items() if _USER_RE.match(str(u))}
-                # Konten, die der Master inzwischen woanders hinlegt (etwa nach
-                # einer Uebernahme, waehrend dieser Server weg war), werden hier
-                # angehalten -- sonst liefen Auftraege und Sitzungen weiter (9.6.8 Sol).
+                neue = {str(u): str(n) for u, n in homes.items() if _USER_RE.fullmatch(str(u))}
+
                 abgegeben = [u for u, n in self.homes.items()
                              if n == self.node_id and neue.get(u, n) != self.node_id]
                 angenommen = [u for u, n in neue.items()
@@ -1588,8 +1572,6 @@ class Cluster:
             return self._assign_locks.setdefault(user, threading.Lock())
 
     def _adopt_quietly(self, user: str) -> None:
-        # A returning assignment must restart jobs after any pending release,
-        # without holding the cluster-wide lock across slow runtime hooks.
         with self._runtime_lock(user):
             with self._lock:
                 if self._stop.is_set() or self.homes.get(user) != self.node_id:
@@ -1736,7 +1718,6 @@ class Cluster:
         self.notice = "Dieser Server arbeitet wieder allein."
         print("  [Verbund] Dieser Server ist nicht mehr im Verbund und arbeitet allein.")
 
-    # -- Abgleich ----------------------------------------------------------
     def _sync_loop(self) -> None:
         runde = 0
         while not self._stop.wait(SYNC_SECONDS):
@@ -1745,7 +1726,7 @@ class Cluster:
             runde += 1
             try:
                 self.sync_once(full=runde % 3 == 0)
-            except Exception as exc:  # pragma: no cover - der Takt darf nie sterben
+            except Exception as exc:  # pragma: no cover
                 print(f"  [Verbund] Abgleich: {type(exc).__name__}: {exc}")
             if runde % 1200 == 0:
                 with contextlib.suppress(Exception):
@@ -1779,7 +1760,7 @@ class Cluster:
                 if self.alive(m["node"]):
                     self.pull_files(m["node"])
             self._sweep_orphans()
-
+            self._sweep_snapshots()
     def pull_db(self, node: str) -> int:
         gesamt = 0
         for _ in range(200):
@@ -1817,7 +1798,7 @@ class Cluster:
             return out
         for ordner in users.iterdir():
             user = ordner.name
-            if not ordner.is_dir() or not _USER_RE.match(user):
+            if not ordner.is_dir() or not _USER_RE.fullmatch(user):
                 continue
             heim = self.homes.get(user, "")
             if heim == self.node_id or (not heim and self.is_master):
@@ -1830,7 +1811,7 @@ class Cluster:
         except (ClusterError, OSError, ValueError):
             return
         for user, gen in stände.items():
-            if not _USER_RE.match(str(user)) or self.homes.get(user) == self.node_id:
+            if not _USER_RE.fullmatch(str(user)) or self.homes.get(user) == self.node_id:
                 continue
             if self._gens_done.get(user) == gen:
                 continue
@@ -1840,27 +1821,58 @@ class Cluster:
 
     def _user_dir(self, user: Any) -> Path:
         user = str(user or "")
-        if not _USER_RE.match(user):
+        if not _USER_RE.fullmatch(user):
             raise ClusterError("Ungültiges Konto.")
         return self.data_dir / "users" / user
 
     def sync_user(self, user: str, node: str, force: bool = False) -> None:
-        """Holt den Profilordner eines Kontos vom zustaendigen Server."""
+        """Spiegelt ein validiertes Manifest, ohne lokale Daten als Fehlerfolge zu loeschen."""
         if node == self.node_id or (self.homes.get(user) == self.node_id and not force):
             return
         ordner = self._user_dir(user)
-        fern = self.call(node, "manifest", {"user": user}, timeout=30.0).get("files") or {}
+        response = self.call(node, "manifest", {"user": user}, timeout=30.0)
+        fern = response.get("files")
+        if not isinstance(fern, dict):
+            raise ClusterError("Der andere Server hat kein gültiges Profilverzeichnis gesendet.")
+        for rel, sig in fern.items():
+            if (not isinstance(rel, str) or not isinstance(sig, str)
+                    or not re.fullmatch(r"[0-9]+:-?[0-9]+(?:\+[0-9]+:-?[0-9]+)?", sig)):
+                raise ClusterError("Das Profilverzeichnis enthält ungültige Dateiangaben.")
+            safe_rel(ordner, rel)
+            if any(parent.as_posix() in fern for parent in Path(rel).parents
+                   if parent != Path(".")):
+                raise ClusterError("Das Profilverzeichnis enthält widersprüchliche Pfade.")
         bekannt = dict(self.synced.get(user, {}))
         for rel, sig in fern.items():
-            if not force and bekannt.get(rel) == sig and (ordner / rel).exists():
+            if not force and bekannt.get(rel) == sig and (ordner / rel).is_file():
                 continue
             ziel = safe_rel(ordner, rel)
             daten = self._fetch(node, {"user": user, "rel": rel, "sig": sig})
             if daten is None:
                 if force:
                     raise ClusterError("Das Profil hat sich während der Übernahme geändert.")
-                continue  # hat sich gerade geaendert -- naechste Runde
-            write_atomic(ziel, daten)
+                continue
+            blocker = next((p for p in reversed([ziel, *ziel.parents])
+                            if p != ordner and ordner in p.parents and p.is_file()), None)
+            if blocker is None and ziel.is_dir():
+                blocker = ziel
+            backup = None
+            if blocker is not None:
+                backup = blocker.with_name(f"{_TMP_PREFIX}{secrets.token_hex(12)}")
+                os.replace(blocker, backup)
+            try:
+                write_atomic(ziel, daten)
+            except BaseException:
+                if blocker is not None and backup is not None:
+                    if blocker.is_dir():
+                        shutil.rmtree(blocker)
+                    os.replace(backup, blocker)
+                raise
+            if backup is not None:
+                if backup.is_dir():
+                    shutil.rmtree(backup)
+                else:
+                    backup.unlink()
             bekannt[rel] = sig
         if ordner.is_dir():
             for rel in list(manifest(ordner)):
@@ -1873,51 +1885,117 @@ class Cluster:
             self._save_json("sync.json", self.synced)
 
     def _fetch(self, node: str, args: dict[str, Any], op: str = "file") -> bytes | None:
+        """Prueft Fortschritt, Endmarkierung und die angekuendigte Laenge jedes Transfers."""
         teile: list[bytes] = []
         versatz = 0
+        transfer = secrets.token_hex(12)
+        limit = 1_073_741_824
+        exact = None
+        if op == "file":
+            sig = str(args.get("sig", ""))
+            if not re.fullmatch(r"[0-9]+:-?[0-9]+(?:\+[0-9]+:-?[0-9]+)?", sig):
+                raise ClusterError("Ungültige Dateikennung.")
+            sizes = [int(part.split(":")[0]) for part in sig.split("+")]
+            limit = min(limit, sum(sizes))
+            exact = sizes[0] if len(sizes) == 1 else None
         while True:
-            antwort = self.call(node, op, dict(args, offset=versatz), timeout=60.0)
+            antwort = self.call(node, op, dict(args, offset=versatz, transfer=transfer),
+                                timeout=60.0)
             if antwort.get("changed"):
                 return None
-            stueck = _unb64(antwort.get("data", ""))
-            teile.append(stueck)
+            if type(antwort.get("eof")) is not bool or not isinstance(antwort.get("data"), str):
+                raise ClusterError("Die Dateiübertragung hat ungültig geantwortet.")
+            stueck = _unb64(antwort["data"])
             versatz += len(stueck)
-            if antwort.get("eof") or not stueck:
+            if versatz > limit:
+                raise ClusterError("Die Dateiübertragung überschreitet die angekündigte Größe.")
+            teile.append(stueck)
+            if antwort["eof"]:
+                if exact is not None and versatz != exact:
+                    raise ClusterError("Die Datei wurde nicht vollständig übertragen.")
                 return b"".join(teile)
+            if not stueck:
+                raise ClusterError("Die Dateiübertragung wurde ohne Endmarkierung abgebrochen.")
+
+    @staticmethod
+    def _transfer_key(key: str, args: dict[str, Any]) -> str:
+        transfer = str(args.get("transfer", ""))
+        if transfer and not re.fullmatch(r"[0-9a-f]{24}", transfer):
+            raise ClusterError("Ungültige Übertragungskennung.")
+        return f"{key}:{transfer}" if transfer else key
 
     def _serve_file(self, args: dict[str, Any]) -> dict[str, Any]:
         ordner = self._user_dir(args.get("user"))
         rel = str(args.get("rel", ""))
         pfad = safe_rel(ordner, rel)
+        offset = int(args.get("offset", 0))
+        key = self._transfer_key(f"{args.get('user')}/{rel}", args)
+        with self._snapshot_lock:
+            self._sweep_snapshots()
+            snapshot = self._snapshots.get(key)
+            if offset > 0 and snapshot and snapshot[1] == args.get("sig"):
+                return self._chunk(pfad, key, snapshot[1], offset)
         sig = manifest(ordner).get(rel)
         if sig is None or (args.get("sig") and sig != args.get("sig")):
             return {"changed": True}
-        return self._chunk(pfad, f"{args.get('user')}/{rel}", sig, int(args.get("offset", 0)))
+        return self._chunk(pfad, key, sig, int(args.get("offset", 0)))
+
+    def _sweep_snapshots(self) -> None:
+        with self._snapshot_lock:
+            now = _now()
+            expired = [key for key in self._snapshots
+                       if now - self._snapshot_times.get(key, 0) >= SNAPSHOT_SECONDS
+                       or (key in self._snapshot_sources
+                           and not self._snapshot_sources[key].is_file())]
+            for key in expired:
+                path, _ = self._snapshots.pop(key)
+                self._snapshot_times.pop(key, None)
+                self._snapshot_sources.pop(key, None)
+                with contextlib.suppress(OSError):
+                    path.unlink()
+            active = {path for path, _ in self._snapshots.values()}
+            directory = self.dir / "tmp"
+            if directory.is_dir():
+                for path in directory.iterdir():
+                    if re.fullmatch(r"[0-9a-f]{40}\.db", path.name) and path not in active:
+                        with contextlib.suppress(OSError):
+                            path.unlink()
 
     def _chunk(self, pfad: Path, schluessel: str, sig: str, versatz: int) -> dict[str, Any]:
-        quelle = pfad
-        if _is_sqlite(pfad):
-            # Eine laufende Datenbank wird nie roh kopiert, sondern als Abzug.
-            with self._lock:
-                abzug = self._snapshots.get(schluessel)
-            if abzug is None or abzug[1] != sig or not abzug[0].exists():
-                kennung = hashlib.sha1(schluessel.encode(), usedforsecurity=False).hexdigest()
-                ziel = self.dir / "tmp" / f"{kennung}.db"
-                snapshot_sqlite(pfad, ziel)
-                abzug = (ziel, sig)
-                with self._lock:
+        with self._snapshot_lock:
+            self._sweep_snapshots()
+            quelle = pfad
+            abzug = self._snapshots.get(schluessel)
+            if abzug is not None and abzug[1] == sig and versatz > 0:
+                quelle = abzug[0]
+            elif _is_sqlite(pfad):
+                if abzug is None or abzug[1] != sig or not abzug[0].exists():
+                    if schluessel not in self._snapshots and len(self._snapshots) >= MAX_SNAPSHOTS:
+                        oldest = min(self._snapshots, key=lambda k: self._snapshot_times.get(k, 0))
+                        old_path, _ = self._snapshots.pop(oldest)
+                        self._snapshot_times.pop(oldest, None)
+                        self._snapshot_sources.pop(oldest, None)
+                        with contextlib.suppress(OSError):
+                            old_path.unlink()
+                    kennung = hashlib.sha1(schluessel.encode(), usedforsecurity=False).hexdigest()
+                    ziel = self.dir / "tmp" / f"{kennung}.db"
+                    snapshot_sqlite(pfad, ziel)
+                    abzug = (ziel, sig)
                     self._snapshots[schluessel] = abzug
-            quelle = abzug[0]
-        with quelle.open("rb") as datei:
-            datei.seek(max(0, versatz))
-            daten = datei.read(CHUNK)
-            eof = datei.tell() >= os.fstat(datei.fileno()).st_size
-        if eof and quelle != pfad:
-            with self._lock:
+                    self._snapshot_times[schluessel] = _now()
+                    self._snapshot_sources[schluessel] = pfad
+                quelle = abzug[0]
+            with quelle.open("rb") as datei:
+                datei.seek(max(0, versatz))
+                daten = datei.read(CHUNK)
+                eof = datei.tell() >= os.fstat(datei.fileno()).st_size
+            if eof and quelle != pfad:
                 self._snapshots.pop(schluessel, None)
-            with contextlib.suppress(OSError):
-                quelle.unlink()
-        return {"data": _b64(daten), "eof": eof}
+                self._snapshot_times.pop(schluessel, None)
+                self._snapshot_sources.pop(schluessel, None)
+                with contextlib.suppress(OSError):
+                    quelle.unlink()
+            return {"data": _b64(daten), "eof": eof}
 
     def _sweep_orphans(self) -> None:
         """Profilordner geloeschter Konten verschwinden auch auf den Kopien."""
@@ -1928,7 +2006,7 @@ class Cluster:
         jetzt = _now()
         for ordner in users.iterdir():
             user = ordner.name
-            if (not ordner.is_dir() or not _USER_RE.match(user) or user in bekannt
+            if (not ordner.is_dir() or not _USER_RE.fullmatch(user) or user in bekannt
                     or self.homes.get(user) == self.node_id or self.is_master):
                 self._orphans.pop(user, None)
                 continue
@@ -1938,7 +2016,6 @@ class Cluster:
                 self._orphans.pop(user, None)
                 self.synced.pop(user, None)
 
-    # -- Beitritt: Daten des Masters uebernehmen --------------------------
     def _root_files(self) -> list[str]:
         out = []
         for eintrag in self.data_dir.iterdir():
@@ -1952,10 +2029,11 @@ class Cluster:
         if name not in self._root_files():
             raise ClusterError("Unbekannte Datei.")
         pfad = self.data_dir / name
+        key = self._transfer_key("@" + name, args)
         if name == SHARED_DB:
-            return self._chunk(pfad, "@" + name, str(args.get("sig") or "join"),
+            return self._chunk(pfad, key, str(args.get("sig") or "join"),
                                int(args.get("offset", 0)))
-        return self._chunk(pfad, "@" + name, "", int(args.get("offset", 0)))
+        return self._chunk(pfad, key, "", int(args.get("offset", 0)))
 
     def complete_join(self) -> None:
         """Holt beim Beitritt alle gemeinsamen Daten und startet neu.
@@ -1968,43 +2046,67 @@ class Cluster:
         shutil.rmtree(staging, ignore_errors=True)
         staging.mkdir(parents=True)
         kennung = secrets.token_hex(4)
-        for name in self.call(master, "rootlist", {}, timeout=30.0, key=self.key).get(
-                "files", []):
+        names = self.call(master, "rootlist", {}, timeout=30.0, key=self.key).get("files", [])
+        if not isinstance(names, list) or SHARED_DB not in names:
+            raise ClusterError("Dem Beitritt fehlt die Datenbank des Masters.")
+        for name in names:
             name = str(name)
-            if "/" in name or "\\" in name or name.startswith("."):
+            if (not name or "/" in name or "\\" in name or name.startswith(".")
+                    or any(c in name for c in ':<>"|?*') or not name.isprintable()
+                    or name.endswith((" ", "."))):
                 continue
             daten = self._fetch(master, {"name": name, "sig": kennung}, op="rootfile")
-            if daten is not None:
-                (staging / name).write_bytes(daten)
+            if daten is None:
+                raise ClusterError("Eine Datei des Masters hat sich beim Beitritt geändert.")
+            write_atomic(staging / name, daten)
+        if not (staging / SHARED_DB).is_file():
+            raise ClusterError("Die Datenbank des Masters wurde nicht vollständig übertragen.")
         db = SharedDb(staging / SHARED_DB)
         db.install()
-        # Was der Master schon von den anderen eingespielt hat, steht in seinem
-        # Abzug -- seine Zeiger gelten damit auch hier. Fuer ihn selbst: bis zu
-        # seinem letzten eigenen Eintrag im Abzug. Sein Protokoll ist seins.
+
         zeiger = db.cursors()
         zeiger.pop(self.node_id, None)
         zeiger[master] = db.last_seq()
         db.set_cursors(zeiger, clear_log=True)
-        sicherung = self.dir / f"backup-{time.strftime('%Y%m%d-%H%M%S')}"
+        sicherung = self.dir / (f"backup-{time.strftime('%Y%m%d-%H%M%S')}-"
+                                + secrets.token_hex(4))
         sicherung.mkdir(parents=True)
-        for eintrag in list(self.data_dir.iterdir()):
-            if eintrag.name in _NODE_LOCAL:
-                continue
-            shutil.move(str(eintrag), str(sicherung / eintrag.name))
-        for eintrag in staging.iterdir():
-            shutil.move(str(eintrag), str(self.data_dir / eintrag.name))
+        originals: list[Path] = []
+        installed: list[Path] = []
+        previous = json.loads(json.dumps(self.state))
+        previous_synced = self.synced
+        try:
+            for eintrag in list(self.data_dir.iterdir()):
+                if eintrag.name in _NODE_LOCAL:
+                    continue
+                shutil.move(str(eintrag), str(sicherung / eintrag.name))
+                originals.append(eintrag)
+            for eintrag in list(staging.iterdir()):
+                target = self.data_dir / eintrag.name
+                shutil.move(str(eintrag), str(target))
+                installed.append(target)
+            users = self.data_dir / "users"
+            if not users.exists():
+                users.mkdir()
+                installed.append(users)
+            with self._lock:
+                self.synced = {}
+                self._save_json("sync.json", self.synced)
+                self.state["cluster"].pop("joining", None)
+                self.state["enabled"] = True
+                self._save()
+        except BaseException:
+            self.state, self.synced = previous, previous_synced
+            for target in reversed(installed):
+                if target.exists():
+                    shutil.move(str(target), str(staging / target.name))
+            for original in reversed(originals):
+                shutil.move(str(sicherung / original.name), str(original))
+            raise
         shutil.rmtree(staging, ignore_errors=True)
-        (self.data_dir / "users").mkdir(exist_ok=True)
-        with self._lock:
-            self.state["cluster"].pop("joining", None)
-            self.state["enabled"] = True
-            self._save()
-            self.synced = {}
-            self._save_json("sync.json", {})
         print(f"  [Verbund] Beigetreten. Die bisherigen Daten liegen unter {sicherung}.")
         self.hooks.restart()
 
-    # -- Einladen (Master-Seite) ------------------------------------------
     def invite(self, address: str, port: int) -> Invite:
         """Schickt eine Einladung an einen anderen Server."""
         from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
@@ -2033,7 +2135,7 @@ class Cluster:
             raise ClusterError(str(antwort["error"]))
         fremd = _unb64(antwort.get("pub"))
         knoten = str(antwort.get("node", ""))
-        if not _NODE_RE.match(knoten) or len(fremd) != 32:
+        if not _NODE_RE.fullmatch(knoten) or len(fremd) != 32:
             raise ClusterError("Der andere Server hat ungültig geantwortet.")
         if self.member(knoten) is not None:
             raise ClusterError("Dieser Server ist schon im Verbund.")
@@ -2076,8 +2178,7 @@ class Cluster:
 
     def confirm(self, invite_id: str, code: str) -> Invite:
         """Master: Code vom anderen Server pruefen -- und erst dann Daten freigeben."""
-        # Auch verschiedene Einladungen duerfen nicht denselben letzten freien
-        # Platz belegen. Der Netzwerkaufruf haelt nicht den allgemeinen Lock.
+
         with self._confirm_lock:
             return self._confirm(invite_id, code)
 
@@ -2145,7 +2246,6 @@ class Cluster:
         threading.Thread(target=self.broadcast, daemon=True).start()
         return einladung
 
-    # -- Eingeladen werden (Seite des anderen Servers) --------------------
     def handle_hello(self, payload: dict[str, Any], source_ip: str) -> dict[str, Any]:
         from cryptography.hazmat.primitives.asymmetric.x25519 import (
             X25519PrivateKey,
@@ -2162,7 +2262,7 @@ class Cluster:
         einladung_id = str(payload.get("id", ""))
         knoten = str(payload.get("node", ""))
         fremd = _unb64(payload.get("pub"))
-        if not re.fullmatch(r"[0-9a-f]{32}", einladung_id) or not _NODE_RE.match(knoten) \
+        if not re.fullmatch(r"[0-9a-f]{32}", einladung_id) or not _NODE_RE.fullmatch(knoten) \
                 or len(fremd) != 32:
             return {"error": "Ungültige Einladung."}
         with self._lock:
@@ -2182,6 +2282,12 @@ class Cluster:
             "port": port,
             "version": str(payload.get("version", ""))[:40]})
         with self._lock:
+            current = [e for e in self.invites_in.values() if e.status == "pending"
+                       and _now() - e.created < INVITE_SECONDS]
+            if len(current) >= 3:
+                return {"error": "Zu viele offene Anfragen."}
+            if einladung_id in self.invites_in:
+                return {"error": "Diese Einladung ist schon da."}
             self.invites_in[einladung_id] = einladung
         self._write_pending()
         if self.hooks.ask is not None:
@@ -2224,7 +2330,7 @@ class Cluster:
             einladung.status = "failed"
             return {"error": "Der Schlüssel passt nicht."}
         info = paket.get("cluster") if isinstance(paket, dict) else None
-        if (not isinstance(info, dict) or not _NODE_RE.match(str(info.get("master", "")))
+        if (not isinstance(info, dict) or not _NODE_RE.fullmatch(str(info.get("master", "")))
                 or len(_unb64(info.get("secret"))) != 32
                 or not any(m.get("node") == self.node_id for m in info.get("members", []))):
             einladung.status = "failed"
@@ -2248,7 +2354,7 @@ class Cluster:
                                  .encode(), "joined"))}
 
     def _join_worker(self) -> None:
-        time.sleep(1.0)  # der Master traegt uns erst nach unserer Antwort ein
+        time.sleep(1.0)
         for versuch in range(5):
             try:
                 self.complete_join()
@@ -2286,7 +2392,6 @@ class Cluster:
             with contextlib.suppress(OSError):
                 datei.unlink()
 
-    # -- Weiterleiten an den Heimserver -----------------------------------
     def forward(self, handler: Any, user: str, body: bytes, https: bool,
                 client_ip: str) -> bool:
         """Reicht eine Anfrage an den Heimserver weiter. False = selbst bedienen."""
@@ -2304,8 +2409,7 @@ class Cluster:
             except (ClusterError, OSError, ValueError, httpx.HTTPError) as exc:
                 self.last_ok.pop(heim, None)
                 self.forget_home(user)
-                # Ohne Antwort ist unbekannt, ob z.B. ein Auftrag schon angelegt
-                # wurde. Ein neuer Versuch mit neuer Nonce wuerde ihn verdoppeln.
+
                 raise ForwardingError(
                     "Die Antwort des Heimservers fehlt oder ist unvollständig. "
                     "Prüfe vor einer Wiederholung, ob die Aktion bereits ausgeführt wurde."
@@ -2323,7 +2427,7 @@ class Cluster:
         import httpx
 
         kopf = [(k, v) for k, v in handler.headers.items() if k.lower() not in _HOP]
-        key = self.key  # auch die Antwort gehoert zu diesem Schluessel, trotz Wechsel
+        key = self.key
         nonce = secrets.token_hex(12)
         innen = json.dumps({"op": "proxy", "ts": _now(), "n": nonce, "a": {
             "m": handler.command, "p": handler.path, "h": kopf, "b": _b64(body), "u": user,
@@ -2332,12 +2436,16 @@ class Cluster:
         url = f"http://{_host(ziel)}:{int(ziel['port'])}/cluster/proxy"
         geschrieben = False
         with httpx.Client(timeout=httpx.Timeout(10.0, read=90.0), trust_env=False) as client, \
-                client.stream("POST", url, content=anfrage.encode()) as antwort:
+                client.stream("POST", url, content=anfrage.encode(), follow_redirects=False,
+                              headers={"Accept-Encoding": "identity"}) as antwort:
+            if antwort.headers.get("Content-Encoding", "identity").lower() not in ("", "identity"):
+                raise ClusterError("Verschlüsselte Verbund-Antworten dürfen nicht "
+                                   "komprimiert sein.")
             if antwort.status_code != 200:
                 raise ClusterError(f"Weiterleitung abgelehnt ({antwort.status_code}).")
             salz = _unb64(antwort.headers.get("X-Aquaticy-Salt", ""))
             try:
-                for stueck in read_frames(antwort.iter_bytes(), key, salz,
+                for stueck in read_frames(antwort.iter_raw(chunk_size=65536), key, salz,
                                           f"stream:{nonce}"):
                     if not geschrieben:
                         if f"\r\n{MOVED_HEADER}: moved\r\n".encode() in stueck:
@@ -2361,11 +2469,10 @@ class Cluster:
         if not self.joined or not lan_ip_ok(source_ip):
             raise ClusterError("Kein Verbund.")
         _, op, args, nonce, key = self._unwrap(raw, self._member_keys)
-        if op != "proxy" or not _USER_RE.match(str(args.get("u", ""))):
+        if op != "proxy" or not _USER_RE.fullmatch(str(args.get("u", ""))):
             raise ClusterError("Ungültige Weiterleitung.")
         return args, nonce, key
 
-    # -- Oberflaeche -------------------------------------------------------
     def view(self) -> dict[str, Any]:
         self.poll_answers()
         mitglieder = []
@@ -2397,7 +2504,7 @@ class Cluster:
 
 def _zahl(roh: Any, hoechstens: float) -> float:
     """Eine Zahl aus der Meldung eines anderen Servers -- sonst 0 (auch NaN, Unendlich)."""
-    # Nur echte Zahlen: Text wie "16" kommt so von keinem Aquaticy.
+
     if isinstance(roh, bool) or not isinstance(roh, (int, float)):
         return 0.0
     try:
@@ -2455,11 +2562,11 @@ def _split_status(roh: Any) -> dict[str, Any]:
         speicher = float(roh.get("mem_gb") or 0)
     except (TypeError, ValueError, OverflowError):
         speicher = 0.0
-    if not 0.0 <= speicher <= 100_000.0:  # auch NaN und Unendlich
+    if not 0.0 <= speicher <= 100_000.0:
         speicher = 0.0
     return {"ready": roh.get("ready") is True, "mem_gb": round(speicher, 1),
             "direct": roh.get("direct") is True, "error": str(roh.get("error") or "")[:200],
-            # Kein Fehler: llama.cpp wird auf diesem Server gerade geladen (11.0.0).
+
             "note": str(roh.get("note") or "")[:200]}
 
 
@@ -2468,22 +2575,75 @@ def _host(ziel: dict[str, Any]) -> str:
     return f"[{adresse}]" if ":" in adresse else adresse
 
 
+class _DeadlineSocket:
+    def __init__(self, sock: Any, deadline: float) -> None:
+        self.sock, self.deadline = sock, deadline
+
+    def _remaining(self) -> None:
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Die Verbund-Anfrage hat zu lange gedauert.")
+        self.sock.settimeout(remaining)
+
+    def sendall(self, data: bytes) -> None:
+        self._remaining()
+        self.sock.sendall(data)
+
+    def makefile(self, mode: str) -> Any:
+        outer = self
+        raw = self.sock.makefile(mode, buffering=0)
+
+        class Reader(io.RawIOBase):
+            def readable(self) -> bool:
+                return True
+
+            def readinto(self, buffer: Any) -> int:
+                outer._remaining()
+                return int(raw.readinto(buffer))
+
+            def close(self) -> None:
+                try:
+                    raw.close()
+                finally:
+                    super().close()
+
+        return io.BufferedReader(Reader())
+
+    def close(self) -> None:
+        self.sock.close()
+
+
 def _http_post(ziel: dict[str, Any], pfad: str, body: bytes, timeout: float) -> bytes:
-    """Ein Aufruf ueber das Netz -- schlicht, ohne Umleitungen, ohne Proxy."""
     adresse = str(ziel.get("address", ""))
     if not adresse or not lan_ip_ok(adresse):
         raise ClusterError("Keine Adresse im eigenen Netz.")
+    deadline = time.monotonic() + timeout
     verbindung = http.client.HTTPConnection(adresse, int(ziel.get("port", 0)), timeout=timeout)
     try:
+        verbindung.connect()
+        from typing import cast
+
+        verbindung.sock = cast(Any, _DeadlineSocket(verbindung.sock, deadline))
         verbindung.request("POST", pfad, body=body,
                            headers={"Content-Type": "application/json"})
         antwort = verbindung.getresponse()
-        daten = antwort.read(64 * CHUNK)
+        data = bytearray()
+        while True:
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Die Verbund-Anfrage hat zu lange gedauert.")
+            chunk = antwort.read1(min(CHUNK, 64 * CHUNK + 1 - len(data)))
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Die Verbund-Anfrage hat zu lange gedauert.")
+            if not chunk:
+                break
+            data.extend(chunk)
+            if len(data) > 64 * CHUNK:
+                raise ClusterError("Die Verbund-Antwort ist zu groß.")
     finally:
         verbindung.close()
     if antwort.status != 200:
         raise ClusterError(f"Der andere Server antwortet mit {antwort.status}.")
-    return daten
+    return bytes(data)
 
 
 class TerminalPrompt:
@@ -2514,7 +2674,7 @@ class TerminalPrompt:
                 while not self._queue:
                     self._cond.wait()
                 invite = self._queue.pop(0)
-            # Eine Rueckfrage, die scheitert, darf die naechsten nicht verhindern (11.2.1).
+
             try:
                 self._ask(invite)
             except Exception as exc:

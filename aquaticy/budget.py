@@ -27,25 +27,40 @@ import contextlib
 import sqlite3
 import threading
 import time
+import weakref
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
-#: Mehr als das darf ein Profil nie belegen. Bewusst 400 Millionen Byte und
-#: nicht 400 MiB: die Anzeige soll dieselbe Zahl nennen, die hier steht.
 MAX_BYTES = 400_000_000
 
-#: Ab hier wird aufgeraeumt, statt bis zum Anschlag zu warten.
+
 CLEANUP_AT = 0.9
 
-#: Aufgeraeumt wird bis hierher -- sonst stuende man gleich wieder davor.
+
 CLEANUP_TO = 0.7
 
-#: Wie lange eine Messung gilt. Das Durchzaehlen eines Ordners mit ein paar
-#: hundert Bildern kostet Millisekunden; bei jedem Zwischenspeicher-Eintrag
-#: waere es trotzdem zu oft.
+
 MEASURE_SECONDS = 3.0
 
 _messungen: dict[str, tuple[float, int]] = {}
 _lock = threading.Lock()
+
+
+_WRITE_LOCKS: weakref.WeakValueDictionary[str, Any] = weakref.WeakValueDictionary()
+
+
+@contextmanager
+def writing(data_dir: Path | str) -> Iterator[None]:
+    key = str(Path(data_dir).resolve())
+    with _lock:
+        lock = _WRITE_LOCKS.setdefault(key, threading.RLock())
+    with lock:
+        try:
+            yield
+        finally:
+            forget(data_dir)
 
 
 class StorageFull(OSError):
@@ -58,10 +73,12 @@ def _dateien(data_dir: Path) -> list[Path]:
         return []
     gefunden: list[Path] = []
     for eintrag in data_dir.iterdir():
+        if eintrag.is_symlink():
+            continue
         if eintrag.is_dir():
-            if eintrag.name == "users" and eintrag.parent == data_dir:
+            if eintrag.name in {"users", "voice-models"} and eintrag.parent == data_dir:
                 continue
-            gefunden.extend(p for p in eintrag.rglob("*") if p.is_file())
+            gefunden.extend(p for p in eintrag.rglob("*") if p.is_file() and not p.is_symlink())
         elif eintrag.is_file():
             gefunden.append(eintrag)
     return gefunden
@@ -133,8 +150,7 @@ def _zwischenspeicher_leeren(data_dir: Path, alles: bool) -> None:
                 geloescht = conn.execute("DELETE FROM cache WHERE expires_at < ?",
                                          (time.time(),)).rowcount
             conn.commit()
-            # VACUUM nur, wenn es etwas zu verdichten gibt (9.5.34: vorher bei
-            # jedem Aufruf -- nahe am Deckel bei jedem Schreiben).
+
             if geloescht:
                 conn.execute("VACUUM")
         finally:
@@ -142,9 +158,10 @@ def _zwischenspeicher_leeren(data_dir: Path, alles: bool) -> None:
 
 
 def _aelteste_zuerst(ordner: Path, passt: object) -> list[Path]:
-    if not ordner.is_dir():
+    if ordner.is_symlink() or not ordner.is_dir():
         return []
-    dateien = [p for p in ordner.iterdir() if p.is_file() and passt(p.name)]  # type: ignore[operator]
+    dateien = [p for p in ordner.iterdir()
+               if not p.is_symlink() and p.is_file() and passt(p.name)]  # type: ignore[operator]
 
     def alter(datei: Path) -> float:
         try:
@@ -176,9 +193,7 @@ def make_room(data_dir: Path | str) -> int:
         _aelteste_zuerst(ordner / "uploads", lambda n: True),
         _aelteste_zuerst(ordner / "media", lambda n: AI_MARK in n),
     )
-    # Reicht selbst alles Loeschbare nicht, um unter das Ziel zu kommen (der
-    # Verlauf allein ist zu gross), werden Uploads und Bilder NICHT geopfert
-    # (9.5.34) -- vorher verschwanden sie bei jedem Schreiben, ohne dass es half.
+
     entfernbar = 0
     for dateien in stufen:
         for datei in dateien:

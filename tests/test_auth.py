@@ -44,7 +44,7 @@ def test_registration_keeps_the_chosen_username_and_needs_twelve_characters(
     )
     assert account.username == "Jonas"
     assert store.authenticate(account.email, "123456789012") == account
-    # Ein Konto aus der Zeit mit 7 Zeichen meldet sich weiter an.
+
     monkeypatch.setattr(auth_modul, "MIN_PASSWORD", 7)
     alt = store.register("alt@example.org", "1234567", "normal", username="Alt", **TERMS)
     monkeypatch.setattr(auth_modul, "MIN_PASSWORD", 12)
@@ -164,4 +164,4 @@ def test_normal_profile_cannot_enable_pro_integrations(tmp_path, monkeypatch) ->
     assert settings.ha_url == "" and settings.ha_token == ""
     assert settings.storage_url == "" and settings.storage_access == "off"
     assert settings.vm_size == "normal"
-    assert (settings.vm_cpus, settings.vm_memory_mb, settings.vm_disk_gb) == (1, 1024, 4)
+    assert (settings.vm_cpus, settings.vm_memory_mb, settings.vm_disk_gb) == (2, 3072, 4)

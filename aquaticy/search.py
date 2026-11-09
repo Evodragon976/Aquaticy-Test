@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from html import unescape
 from html.parser import HTMLParser
+from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -25,18 +26,15 @@ import httpx
 from aquaticy.models import SearchResult, domain_of
 from aquaticy.queries import fuse
 
-#: Abstand, mit dem parallele Anfragen losgeschickt werden. Gleichzeitig
-#: abgefeuert quittieren die offenen Engines das gern mit einem Rate-Limit.
 STAGGER_SECONDS = 0.35
 
-#: Offene Engines, die `ddgs` ohne Key abfragt.
+
 OPEN_ENGINES = ("duckduckgo", "mojeek", "startpage", "brave", "yahoo", "wikipedia")
 
-#: Backends, die ohne Key auskommen.
+
 KEYLESS_BACKENDS = ("duckduckgo", "ddg", "open", "searxng")
 
-#: Die Namen der offenen Metasuche selbst -- von hier gibt es kein weiteres
-#: Fallback, sie IST das Fallback.
+
 OPEN_BACKEND_NAMES = frozenset({"duckduckgo", "ddg", "open"})
 
 
@@ -67,7 +65,7 @@ class _DuckDuckGoHTML(HTMLParser):
             self._depth += 1
 
     def handle_endtag(self, tag: str) -> None:
-        if not self._field:
+        if not self._field or tag in _LEERE_TAGS:
             return
         self._depth -= 1
         if self._depth > 0:
@@ -81,7 +79,6 @@ class _DuckDuckGoHTML(HTMLParser):
             self._item[self._field] += data
 
 
-#: Tags ohne End-Tag -- sie duerfen die Tiefe nicht erhoehen (9.5.34).
 _LEERE_TAGS = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
                          "meta", "source", "track", "wbr"})
 
@@ -89,9 +86,13 @@ _LEERE_TAGS = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "inp
 def _result_url(value: str) -> str:
     """Entpackt DuckDuckGos Weiterleitungs-URL, falls eine geliefert wird."""
     value = unescape(value).strip()
-    parsed = urlsplit(value)
-    if parsed.netloc.endswith("duckduckgo.com") and parsed.path.startswith("/l/"):
-        # parse_qs dekodiert schon -- ein zweites unquote machte aus "%26" ein "&".
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return ""
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if (host == "duckduckgo.com" or host.endswith(".duckduckgo.com")) \
+            and parsed.path.startswith("/l/"):
         return (parse_qs(parsed.query).get("uddg") or [""])[0]
     return value
 
@@ -141,16 +142,13 @@ class SearchOptions:
     count: int = 8
     country: str = "de"
     lang: str = "de"
-    #: Der Schluessel der Suchmaschine. ``None`` = aus der Umgebung des Servers
-    #: (Kommandozeile); ein Text -- auch ein leerer -- gilt genau so (seit
-    #: 9.5.16: ein Konto ohne eigenen Schluessel bekommt nicht still den
-    #: des Betreibers).
+
     api_key: str | None = None
-    #: Komma-Liste fuer die offene Metasuche, z.B. "duckduckgo,mojeek".
+
     engines: str = ""
-    #: Basis-URL der eigenen SearXNG-Instanz.
+
     instance_url: str = ""
-    #: Wohin Fehler einzelner Engines gemeldet werden (fuer die Anzeige).
+
     notes: list[str] = field(default_factory=list)
 
 
@@ -171,9 +169,6 @@ def _dedupe(results: list[SearchResult], count: int) -> list[SearchResult]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# Backends ohne Schluessel
-# ---------------------------------------------------------------------------
 def _search_open(query: str, options: SearchOptions) -> list[SearchResult]:
     """Metasuche ueber offene Engines -- kein API-Key, kein Konto.
 
@@ -201,10 +196,6 @@ def _search_open(query: str, options: SearchOptions) -> list[SearchResult]:
             backend=backend,
         )
     except DDGSException as exc:
-        # `ddgs` benutzt `primp` (Rust/rustls). Einige Gegenstellen beenden
-        # HTTP/2 ohne TLS close_notify; das ist ein Serverfehler, darf aber
-        # nicht die Recherche des Nutzers beenden. Der HTML-Endpunkt läuft
-        # über httpx und HTTP/1.1 und ist deshalb davon unabhängig.
         try:
             return _search_duckduckgo_html(query, options)
         except (httpx.HTTPError, SearchError) as fallback:
@@ -218,7 +209,7 @@ def _search_open(query: str, options: SearchOptions) -> list[SearchResult]:
 
     return [
         SearchResult(
-            title=(item.get("title") or "").strip(),
+            title=_plain(item.get("title")),
             url=(item.get("href") or item.get("url") or "").strip(),
             snippet=(item.get("body") or item.get("description") or "").strip(),
         )
@@ -277,17 +268,37 @@ def _search_searxng(query: str, options: SearchOptions) -> list[SearchResult]:
 
     return [
         SearchResult(
-            title=(item.get("title") or "").strip(),
+            title=_plain(item.get("title")),
             url=(item.get("url") or "").strip(),
-            snippet=(item.get("content") or "").strip(),
+            snippet=_plain(item.get("content")),
         )
         for item in payload
     ]
 
 
-# ---------------------------------------------------------------------------
-# Backends mit Schluessel
-# ---------------------------------------------------------------------------
+def _plain(value: Any) -> str:
+    class Text(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__(convert_charrefs=True)
+            self.parts: list[str] = []
+
+        def handle_data(self, data: str) -> None:
+            self.parts.append(data)
+
+        def handle_starttag(self, tag: str, attrs: Any) -> None:
+            if tag in {"p", "br", "div", "li"}:
+                self.parts.append(" ")
+
+        def handle_endtag(self, tag: str) -> None:
+            if tag in {"p", "br", "div", "li"}:
+                self.parts.append(" ")
+
+    parser = Text()
+    parser.feed(str(value or ""))
+    parser.close()
+    return " ".join("".join(parser.parts).split())
+
+
 def _search_brave(query: str, options: SearchOptions) -> list[SearchResult]:
     key = options.api_key if options.api_key is not None else os.environ.get(
         "BRAVE_API_KEY", "")
@@ -299,7 +310,7 @@ def _search_brave(query: str, options: SearchOptions) -> list[SearchResult]:
             "q": query,
             "count": min(max(options.count, 1), 20),
             "country": (options.country or "de").upper(),
-            "search_lang": options.lang or "de",
+            "search_lang": (options.lang or "de").strip().lower(),
         },
         headers={"Accept": "application/json", "X-Subscription-Token": key},
         timeout=20,
@@ -309,9 +320,9 @@ def _search_brave(query: str, options: SearchOptions) -> list[SearchResult]:
     payload = response.json().get("web", {}).get("results", [])
     return [
         SearchResult(
-            title=(item.get("title") or "").strip(),
+            title=_plain(item.get("title")),
             url=(item.get("url") or "").strip(),
-            snippet=(item.get("description") or "").strip(),
+            snippet=_plain(item.get("description")),
         )
         for item in payload
     ]
@@ -331,9 +342,9 @@ def _search_tavily(query: str, options: SearchOptions) -> list[SearchResult]:
         raise SearchError(f"Tavily-Suche antwortete mit {response.status_code}")
     return [
         SearchResult(
-            title=(item.get("title") or "").strip(),
+            title=_plain(item.get("title")),
             url=(item.get("url") or "").strip(),
-            snippet=(item.get("content") or "").strip(),
+            snippet=_plain(item.get("content")),
         )
         for item in response.json().get("results", [])
     ]
@@ -342,7 +353,7 @@ def _search_tavily(query: str, options: SearchOptions) -> list[SearchResult]:
 Backend = Callable[[str, SearchOptions], list[SearchResult]]
 
 BACKENDS: dict[str, Backend] = {
-    "duckduckgo": _search_open,  # historischer Name der offenen Metasuche
+    "duckduckgo": _search_open,
     "ddg": _search_open,
     "open": _search_open,
     "searxng": _search_searxng,
@@ -402,9 +413,6 @@ def search_web(
     except SearchError:
         raise
     except (httpx.HTTPError, ValueError, AttributeError, TypeError, KeyError) as exc:
-        # Seit 9.5.34: Netzfehler und unerwartete Antworten (eine Liste statt
-        # eines Objekts, "web": null) kommen als SearchError -- sonst brach eine
-        # einzige gestoerte Anfrage die ganze Mehrfachsuche ab.
         raise SearchError(f"Die Suche ist gerade gestört ({type(exc).__name__}).") from exc
     return _dedupe(roh, count)
 
@@ -448,13 +456,12 @@ def search_news(
         prefix = " · ".join(part for part in (date[:10], source) if part)
         results.append(
             SearchResult(
-                title=(item.get("title") or "").strip(),
+                title=_plain(item.get("title")),
                 url=(item.get("url") or item.get("href") or "").strip(),
                 snippet=f"[{prefix}] {snippet}" if prefix else snippet,
             )
         )
     return _dedupe(results, count)
-
 
 
 def search_broadly(
@@ -490,8 +497,6 @@ def search_broadly(
     if len(wanted) == 1:
         return runner(wanted[0], count), wanted
 
-    # Etwas mehr je Anfrage holen, als am Ende gebraucht wird: erst die
-    # Ueberlappung zwischen den Listen macht das Mischen aussagekraeftig.
     per_query = min(count + 4, 20)
 
     def one(position: int, query: str) -> list[SearchResult]:

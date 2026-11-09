@@ -12,7 +12,9 @@ Ausschnitt.
 from __future__ import annotations
 
 import contextlib
+import json
 import subprocess
+import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -29,6 +31,7 @@ from aquaticy.fetch import Fetcher, load_rules
 from aquaticy.guardrails import SENSITIVE_TOOLS, Guard, event_payload, tool_refusal
 from aquaticy.models import PageResult, Product, SearchResult, domain_of
 from aquaticy.queries import MAX_VARIANTS, keywords, mentions_place, variants, with_place
+from aquaticy.sandbox import CPUS, DISK_GB, MEMORY_MB
 from aquaticy.search import (
     OPEN_BACKEND_NAMES,
     SearchError,
@@ -37,32 +40,28 @@ from aquaticy.search import (
     search_web,
 )
 
-#: Callback fuer die Live-Anzeige: (event, payload)
+_GITHUB_CHECKOUT_LOCK = threading.Lock()
+
 EventHook = Callable[[str, dict[str, Any]], None]
-#: LLM-Fallback fuer Specs: (seitentext, url) -> {"CPU": "...", ...}
+
 SpecExtractor = Callable[[str, str], dict[str, str]]
-#: Rueckfrage an den Nutzer: (frage, moeglichkeiten) -> antwort ("" = keine)
+
 AskHandler = Callable[[str, list[str]], str]
 VisualInspector = Callable[[str, str], str]
 
-#: So oft darf der Agent je Anfrage nachfragen. Wer dreimal fragt, hat die
-#: Anfrage nicht verstanden -- dann ist eine begruendete Annahme besser.
+
 MAX_QUESTIONS = 2
 
-#: So viele Fragen darf EIN Aufruf von ask_user hintereinander stellen (12.1.1 Luna):
-#: "Wo wohnst du?", "Was interessiert dich?" -- das Fenster zeigt 1/3, 2/3, 3/3.
+
 MAX_BATCH = 5
 
-#: Eine leere Antwort nach so vielen Sekunden ist keine Entscheidung, sondern ein
-#: Ablauf der Wartezeit (web.py: ANSWER_TIMEOUT = 180) -- dann keine Frage mehr.
+
 ASK_GAVE_UP_AFTER = 120.0
 
-#: Was als "ja" gilt, wenn Aquaticy vor einer Wirkung nachfragt -- an jeder
-#: Stelle dasselbe (seit 9.5.16; vorher kannte ha_call "klar" nicht).
+
 YES_WORDS = frozenset({"ja", "j", "yes", "ok", "mach", "los", "klar", "ja, mach"})
 
-#: Drittes Werkzeug, das nur der Hauptagent bekommt -- Subagenten duerfen
-#: keine weiteren Subagenten starten.
+
 SUBAGENT_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -190,7 +189,6 @@ PUBLIC_VISUAL_SCHEMA: dict[str, Any] = {
 }
 
 
-
 NEWS_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -212,17 +210,7 @@ NEWS_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Wo eine Marke, eine Firma oder eine Person ausser auf der eigenen Seite
-#: noch steht. Die Reihenfolge ist die Reihenfolge der Ausbeute: bei Marken
-#: und Laeden bringt Instagram am meisten, bei Firmen LinkedIn, und Wikipedia
-#: klaert, ob es ueberhaupt dieselbe Sache ist.
-#:
-#: Gesucht wird ueber die Suchmaschine mit `site:` -- nicht, indem Adressen
-#: durchprobiert werden. Das ist der Unterschied zwischen Recherche und
-#: Abgrasen: wir fragen, was oeffentlich indexiert ist, statt ein Verzeichnis
-#: von Profilnamen abzuklappern. Und was eine Seite nicht hergibt (Instagram
-#: und LinkedIn sperren Abrufe aus), bleibt eben beim Titel und dem
-#: Suchausschnitt -- umgangen wird nichts.
+
 PROFILE_SITES: tuple[tuple[str, str], ...] = (
     ("Instagram", "instagram.com"),
     ("LinkedIn", "linkedin.com"),
@@ -238,8 +226,7 @@ PROFILE_SITES: tuple[tuple[str, str], ...] = (
     ("Reddit", "reddit.com"),
 )
 
-#: So viele Plattformen fragt ein Aufruf hoechstens ab. Zwoelf Suchanfragen
-#: auf einmal sind fuer eine offene Suchmaschine ein Ausschlag.
+
 MAX_PROFILE_SITES = 8
 
 PROFILE_SCHEMA: dict[str, Any] = {
@@ -338,9 +325,7 @@ CALC_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Etwas fuer spaeter behalten. Der Merkzettel ist fuer ausdrueckliche
-#: Bitten des Nutzers; der Speicher fuer alles, was der Agent selbst als
-#: wichtig erkennt.
+
 MEMORY_WRITE_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -370,7 +355,47 @@ MEMORY_WRITE_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Im Speicher nachsehen.
+
+MESSENGER_SEND_SCHEMA: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "messenger_send",
+        "description": (
+            "Schickt dem Nutzer eine Nachricht in SEINEN EIGENEN Chat auf WhatsApp oder Signal "
+            "(\"Nachricht an dich selbst\"). Nimm es, wenn er darum bittet (\"schreib mir das "
+            "auf WhatsApp\", \"schick mir die Liste per Signal\"). An andere Personen geht "
+            "damit nichts. Schreib den Text fertig ausformuliert, ohne Markdown-Tabellen."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "messenger": {"type": "string", "enum": ["whatsapp", "signal", ""],
+                              "description": "Leer: der erste gekoppelte Messenger."},
+                "text": {"type": "string", "description": "Die Nachricht, höchstens 3000 Zeichen."},
+            },
+            "required": ["text"],
+        },
+    },
+}
+
+
+MEMORY_FORGET_SCHEMA: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "forget_memory",
+        "description": (
+            "Loescht eine Notiz aus dem Langzeitspeicher. NUR wenn der Nutzer darum bittet "
+            "(\"vergiss das\", \"das stimmt nicht mehr\"). Die id kommt aus recall_memory."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"id": {"type": "integer", "description": "id der Notiz."}},
+            "required": ["id"],
+        },
+    },
+}
+
+
 MEMORY_READ_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -396,8 +421,7 @@ MEMORY_READ_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Das eigene Netz ansehen. Kein Ersatz fuer die Websuche, sondern die Antwort
-#: auf Fragen, die im Web gar nicht stehen koennen.
+
 LAN_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -432,7 +456,7 @@ LAN_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Ein einzelnes Geraet gezielt pruefen -- schneller als das ganze Netz.
+
 LAN_HOST_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -455,7 +479,7 @@ LAN_HOST_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Home Assistant lesen.
+
 HA_STATES_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -486,7 +510,7 @@ HA_STATES_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Home Assistant schalten -- nur wenn ausdruecklich erlaubt.
+
 HA_CALL_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -520,8 +544,7 @@ HA_CALL_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Nur fuer den Hauptagenten: ein Subagent sitzt niemandem gegenueber, den er
-#: fragen koennte.
+
 ASK_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -582,7 +605,7 @@ ASK_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Nur fuer den Hauptagenten -- Subagenten sollen keine Notizen anlegen.
+
 MEMORY_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -603,11 +626,6 @@ MEMORY_SCHEMA: dict[str, Any] = {
 }
 
 
-# News-Suche und Rechner gehoeren zum Kern -- auch Subagenten sollen aktuelle
-# Meldungen finden und richtig rechnen koennen.
-# ---------------------------------------------------------------------------
-# Gmail und Kalender -- nur lesen, und nur wenn eingeschaltet
-# ---------------------------------------------------------------------------
 CALENDAR_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -673,7 +691,6 @@ MAIL_READ_SCHEMA: dict[str, Any] = {
         },
     },
 }
-
 
 
 CALENDAR_ADD_SCHEMA: dict[str, Any] = {
@@ -762,9 +779,7 @@ GOOGLE_WRITE_SCHEMAS: tuple[dict[str, Any], ...] = (
     MAIL_DRAFT_SCHEMA,
 )
 
-# ---------------------------------------------------------------------------
-# Lagerverwaltung -- Raum > Moebel > Artikel
-# ---------------------------------------------------------------------------
+
 STORAGE_FIND_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -860,14 +875,6 @@ STORAGE_EDIT_SCHEMA: dict[str, Any] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Die virtual machine -- nur im Code-Modus, nur wenn sie eingeschaltet ist
-# ---------------------------------------------------------------------------
-#: Vorlage fuer die vm_run-Beschreibung -- die Zahlen haengen von der
-#: gewaehlten Groesse der virtual machine ab (normal/plus, siehe AQUATICY_VM_SIZE) und
-#: werden erst in `vm_schemas_for` eingesetzt. Falsche Zahlen waeren
-#: schlimmer als gar keine: das Modell plant damit, wie viel es sich leisten
-#: kann.
 VM_RUN_DESCRIPTION = (
     "Fuehrt einen Shell-Befehl in der abgeschotteten virtual machine aus und gibt "
     "Ausgabe und Rueckgabewert zurueck. Dort darfst du alles: Dateien anlegen, "
@@ -876,16 +883,16 @@ VM_RUN_DESCRIPTION = (
     "Nutze es, um deinen Code wirklich auszuprobieren, statt zu behaupten, er laufe."
 )
 
-#: Der Satz ueber das Netz -- ohne und mit User mode.
+
 VM_NET_OFF = "Es gibt KEIN Netz (kein pip install, kein curl)"
 VM_NET_USER = (
     "Es gibt Internet, aber kein Heimnetz (User mode) -- pip install und curl gehen"
 )
-#: Internet ohne Desktop -- nur Ultra, per Schalter (9.5.31).
+
 VM_NET_INTERNET = (
     "Es gibt Internet, aber kein Heimnetz -- pip install und curl gehen"
 )
-#: Internet UND lokales Netz -- nur Ultra, per Schalter (9.5.34).
+
 VM_NET_LAN = (
     "Es gibt Internet und das lokale Netz (vom Nutzer freigegeben) -- pip install, curl "
     "und Geraete im Haus gehen"
@@ -896,7 +903,8 @@ VM_RUN_SCHEMA: dict[str, Any] = {
     "function": {
         "name": "vm_run",
         "description": VM_RUN_DESCRIPTION.format(
-            netz=VM_NET_OFF, memory_mb=1024, cpus=1, kern_wort="Prozessorkern", disk_gb=4
+            netz=VM_NET_OFF, memory_mb=MEMORY_MB, cpus=CPUS,
+            kern_wort="Prozessorkern" if CPUS == 1 else "Prozessorkerne", disk_gb=DISK_GB
         ),
         "parameters": {
             "type": "object",
@@ -968,13 +976,7 @@ VM_FILES_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Blender arbeitet nur im Code-Modus, in der virtual machine -- nie auf dem
-#: Rechner des Nutzers, und nie ohne die Abschottung. Ob es das Werkzeug
-#: wirklich gibt, haengt am Abbild der virtual machine (AQUATICY_VM_IMAGE): das
-#: mitgelieferte Standardabbild bringt es nicht mit, sondern nur eins, das
-#: Blender selbst enthaelt (siehe docker/workshop-blender.Dockerfile). Fehlt
-#: es, kommt "command not found" zurueck -- das ist keine Stoerung, sondern
-#: die ehrliche Antwort.
+
 BLENDER_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -1022,40 +1024,36 @@ BLENDER_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Welche Werkzeuge Arbeit auf dem Server machen -- und in welcher Einheit
-#: sie zaehlen (aquaticy/metering.py, WORK_COSTS). Was hier fehlt (rechnen,
-#: merken, nachfragen ...), kostet den Server nichts Nennenswertes.
+
 WORK_TOOLS: dict[str, str] = {
+    "secure_advisories": "suche", "secure_read_advisory": "seite",
+    "secure_ssh": "werkstatt", "secure_defend": "werkstatt",
     "web_search": "suche", "search_news": "suche", "local_places": "suche",
-    "find_profiles": "suche", "weather": "suche", "github": "suche",
+    "find_profiles": "suche", "weather": "suche", "github": "suche", "github_write": "suche",
     "fetch_page": "seite", "inspect_public_visual": "seite", "read_feeds": "seite",
     "news_tagesschau": "suche", "wikipedia": "suche", "currency": "suche",
     "holidays": "suche",
-    "vm_run": "werkstatt", "blender_run": "werkstatt",
+    "vm_run": "werkstatt", "blender_run": "werkstatt", "lan_ssh": "werkstatt",
     "vm_write": "datei", "vm_read": "datei", "vm_files": "datei",
     "desktop_look": "desktop", "desktop_click": "desktop", "desktop_type": "desktop",
     "desktop_key": "desktop", "desktop_open": "desktop", "desktop_scroll": "desktop",
     "desktop_windows": "desktop",
 }
 
-#: Werkzeuge, deren Ergebnis fremder Text ist -- von Webseiten, aus Suchen,
-#: Feeds, Mails, Kalendereinladungen oder vom Bildschirm im User mode. Darin
-#: kann eine Anweisung stecken, die wie vom Nutzer klingt (Prompt-Injection).
+
 UNTRUSTED_SOURCES = frozenset({
     "web_search", "search_news", "fetch_page", "inspect_public_visual", "find_profiles",
-    "local_places", "github", "weather", "read_feeds", "mail_search", "mail_read",
+    "local_places", "github", "github_write", "weather", "read_feeds", "mail_search",
+    "mail_read",
     "news_tagesschau", "wikipedia", "currency", "holidays",
     "calendar_events", "desktop_look", "desktop_windows", "research_subtasks",
-    # Seit 9.5.16: was in der virtual machine ausgegeben wird (im User mode mit
-    # Internet: curl, heruntergeladene Dateien), und Namen/Zustaende aus Home
-    # Assistant (ein Mediaplayer meldet den Titel, den ein Fremder vergibt).
-    "vm_run", "vm_read", "vm_files", "blender_run", "ha_states",
+
+    "vm_run", "vm_read", "vm_files", "blender_run", "ha_states", "lan_ssh",
+    "secure_status", "secure_scan", "secure_inspect", "secure_advisories", "secure_read_advisory",
+    "secure_devices", "secure_findings", "secure_ssh", "secure_defend", "secure_nmap",
 })
 
-#: Was danach nur noch mit ausdruecklicher Bestaetigung laeuft (seit 9.5.15):
-#: alles, was nach aussen wirkt oder bleibt. Eine Regel im Systemtext allein
-#: haelt eine gut gemachte Injection nicht auf -- diese Grenze schon, denn sie
-#: liegt im Code und fragt den Menschen.
+
 CONFIRM_AFTER_UNTRUSTED: dict[str, str] = {
     "ha_call": "im Haus etwas schalten",
     "change_setting": "eine Einstellung ändern",
@@ -1063,11 +1061,43 @@ CONFIRM_AFTER_UNTRUSTED: dict[str, str] = {
     "storage_edit": "etwas in der Lagerverwaltung ändern",
     "remember": "sich etwas dauerhaft merken",
     "save_memory": "etwas im Speicher ablegen",
-    # Seit 9.5.22: eine Seite soll nicht unbemerkt das Heimnetz auskundschaften
-    # lassen -- das Ergebnis koennte sie sich danach abholen wollen.
+    "forget_memory": "etwas aus dem Speicher löschen",
+    "messenger_send": "dir eine Nachricht per WhatsApp oder Signal schicken",
+
     "lan_scan": "das Heimnetz durchsuchen",
     "lan_check": "ein Gerät im Heimnetz abfragen",
 }
+
+SSH_SCHEMA: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "lan_ssh",
+        "description": (
+            "OpenSSH in der freigegebenen VM zum eigenen Heimnetz. action=key erzeugt "
+            "einen VM-Schluessel und zeigt nur den oeffentlichen Teil. Der Nutzer traegt "
+            "ihn am Zielgeraet ein. action=inspect liest oeffentliche Hostschluessel ohne "
+            "Anmeldung. action=run braucht host, user, command und server_key aus inspect. "
+            "Der Nutzer prueft den SHA256-Fingerabdruck am Geraet und bestaetigt jeden Befehl. "
+            "Keine Passwoerter oder privaten Schluessel im Chat. Nur private IPv4-Adressen."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["key", "inspect", "run"]},
+                "host": {"type": "string", "description": "Private IPv4-Adresse aus lan_check."},
+                "user": {"type": "string", "description": "SSH-Nutzer am eigenen Geraet."},
+                "command": {"type": "string", "description": "Genau ein freizugebender Befehl."},
+                "server_key": {"type": "string", "description": "Oeffentlicher Hostschluessel."},
+                "key_file": {"type": "string",
+                             "description": "VM-Datei, Standard /work/.ssh/id_ed25519."},
+                "port": {"type": "integer", "description": "Standard 22."},
+                "timeout": {"type": "integer", "description": "1 bis 120 Sekunden, Standard 30."},
+            },
+            "required": ["action"],
+        },
+    },
+}
+
 
 VM_SCHEMAS: tuple[dict[str, Any], ...] = (
     VM_RUN_SCHEMA,
@@ -1077,9 +1107,7 @@ VM_SCHEMAS: tuple[dict[str, Any], ...] = (
     BLENDER_SCHEMA,
 )
 
-# ---------------------------------------------------------------------------
-# User mode: die virtual machine bedienen wie ein Mensch (siehe aquaticy/desktop.py)
-# ---------------------------------------------------------------------------
+
 DESKTOP_SCHEMAS: tuple[dict[str, Any], ...] = (
     {
         "type": "function",
@@ -1233,19 +1261,18 @@ def vm_schemas_for(settings: Any) -> tuple[dict[str, Any], ...]:
     """
     import copy
 
-    cpus = max(1, int(getattr(settings, "vm_cpus", 1) or 1))
-    memory_mb = max(1, int(getattr(settings, "vm_memory_mb", 1024) or 1024))
-    disk_gb = max(1, int(getattr(settings, "vm_disk_gb", 4) or 4))
+    cpus = max(1, int(getattr(settings, "vm_cpus", CPUS) or CPUS))
+    memory_mb = max(1, int(getattr(settings, "vm_memory_mb", MEMORY_MB) or MEMORY_MB))
+    disk_gb = max(1, int(getattr(settings, "vm_disk_gb", DISK_GB) or DISK_GB))
     user_mode = bool(getattr(settings, "vm_user_mode", False))
-    # Im User mode kommen die Desktop-Werkzeuge dazu -- ohne ihn gibt es sie
-    # fuer das Modell gar nicht.
+
     schemas = list(copy.deepcopy(VM_SCHEMAS + (DESKTOP_SCHEMAS if user_mode else ())))
+    if getattr(settings, "vm_lan", False) and getattr(settings, "lan_enabled", False):
+        schemas.append(copy.deepcopy(SSH_SCHEMA))
     from aquaticy import addons
 
     aktiv = addons.active_ids(settings) if getattr(settings, "data_dir", None) else []
     if user_mode and "blender" not in aktiv:
-        # Im User mode kommt Blender als Add-on. Ist es nicht eingeschaltet,
-        # gibt es das Werkzeug nicht -- statt eines "command not found".
         schemas = [s for s in schemas if s["function"]["name"] != "blender_run"]
     apps = addons.desktop_apps(settings) if user_mode and aktiv else []
     zusatz = (
@@ -1271,32 +1298,89 @@ def vm_schemas_for(settings: Any) -> tuple[dict[str, Any], ...]:
     return tuple(schemas)
 
 
-# ---------------------------------------------------------------------------
-# Add-ons (aquaticy/addons.py) -- nur, wenn installiert und eingeschaltet
-# ---------------------------------------------------------------------------
 GITHUB_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
         "name": "github",
         "description": (
-            "Liest bei GitHub mit dem Konto des Nutzers -- NUR lesen, nie schreiben. "
+            "Liest bei GitHub mit dem Konto des Nutzers (aendern: github_write). "
             "action: ich (wer bin ich), repos (eigene Repos), repo, issues, issue, pulls, "
-            "pull (mit geaenderten Dateien), datei (Datei oder Ordner, path + optional ref), "
-            "commits, suche (Issues/PRs, query, optional repo). repo immer als "
-            "'besitzer/name'. Inhalte privater Repos nie in eine Websuche uebernehmen."
+            "pull (Dateien und Patches), datei (path, ref, start_line, max_lines), "
+            "baum (Dateibaum), branches, review (Codeauszuege eines festen Commits; "
+            "bei PRs number angeben), commits (ref, path, page), commit (ref = SHA: "
+            "Nachricht und Patches), vergleich (base...ref), suche (nur Issues/PRs, kein "
+            "Code: Code liest du mit baum und datei). "
+            "repo ohne Besitzer sucht in den eigenen Repos. Kommt ein error, gib Ursache und "
+            "Loesung daraus woertlich weiter, statt selbst zu raten. Zum Codepruefen zuerst "
+            "review, danach fehlenden Kontext mit datei nachlesen. repo als 'besitzer/name' "
+            "oder GitHub-URL. page fuer weitere Ergebnisse. Private Inhalte nie ungefragt "
+            "in oeffentliche Suchanfragen uebernehmen. Keine vollstaendige Pruefung behaupten. "
+            "Nenne nur Dateien und Befunde, die ein Ergebnis wirklich zeigt; erfinde keine. "
+            "Fehlt eine Datei, schau im baum nach dem Ersatz (z.B. pyproject.toml statt "
+            "requirements.txt), bevor du etwas als Mangel meldest."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "action": {"type": "string"},
+                "action": {"type": "string", "enum": ["ich", "repos", "repo", "issues", "issue",
+                           "pulls", "pull", "datei", "commits", "commit", "vergleich", "suche",
+                           "baum", "branches", "review"]},
+                "base": {"type": "string",
+                         "description": "Basis fuer vergleich, z.B. der Standard-Branch."},
                 "repo": {"type": "string"},
                 "number": {"type": "integer"},
                 "path": {"type": "string"},
-                "ref": {"type": "string"},
+                "ref": {"type": "string",
+                        "description": "Branch, Tag oder SHA. Weglassen = Standard-Branch; "
+                                       "nie main raten."},
                 "state": {"type": "string", "description": "open, closed oder all."},
                 "query": {"type": "string"},
+                "page": {"type": "integer", "minimum": 1, "maximum": 1000},
+                "start_line": {"type": "integer", "minimum": 1},
+                "max_lines": {"type": "integer", "minimum": 1, "maximum": 400},
+                "recursive": {"type": "boolean"},
+                "paths": {"type": "array", "maxItems": 6, "items": {"type": "string"}},
             },
             "required": ["action"],
+        },
+    },
+}
+
+GITHUB_WRITE_SCHEMA: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "github_write",
+        "description": (
+            "Aendert bei GitHub wie Codex: checkout holt repo (ref) als Ordner dir in die VM "
+            "(nur im Code-Chat mit VM; der Schluessel bleibt draussen). Dort mit vm_run/"
+            "vm_write aendern und testen. push committet alle Aenderungen im Ordner und pusht "
+            "sie auf branch (Standard: neuer aquaticy/...-Branch). Ohne VM: commit mit files "
+            "[{path, content} oder {path, delete: true}]. branch legt einen Branch an, "
+            "pull_request oeffnet einen PR (title, body, branch, base), comment schreibt zu "
+            "number. Jeder Schritt fragt den Nutzer. Nie force, nie auf den Standard-Branch, "
+            "kein Mergen, keine GitHub Actions, nie Schluessel oder Passwoerter in Dateien."),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["checkout", "branch", "commit", "push",
+                                                      "pull_request", "comment"]},
+                "repo": {"type": "string"},
+                "ref": {"type": "string", "description": "Was checkout holt (Standard: "
+                                                         "Standard-Branch)."},
+                "dir": {"type": "string", "description": "Ordnername in /work."},
+                "branch": {"type": "string"},
+                "base": {"type": "string"},
+                "message": {"type": "string"},
+                "files": {"type": "array", "maxItems": 20, "items": {
+                    "type": "object", "properties": {
+                        "path": {"type": "string"}, "content": {"type": "string"},
+                        "delete": {"type": "boolean"}}, "required": ["path"]}},
+                "title": {"type": "string"},
+                "body": {"type": "string"},
+                "draft": {"type": "boolean"},
+                "number": {"type": "integer"},
+            },
+            "required": ["action", "repo"],
         },
     },
 }
@@ -1418,9 +1502,9 @@ HOLIDAYS_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: Werkzeugname -> Add-on, zu dem es gehoert.
+
 ADDON_TOOLS: dict[str, str] = {
-    "github": "github", "weather": "wetter", "read_feeds": "feeds",
+    "github": "github", "github_write": "github", "weather": "wetter", "read_feeds": "feeds",
     "news_tagesschau": "nachrichten", "wikipedia": "wikipedia",
     "currency": "waehrung", "holidays": "feiertage",
 }
@@ -1436,6 +1520,8 @@ def addon_schemas_for(settings: Any, pro: bool = True) -> list[dict[str, Any]]:
     schemas: list[dict[str, Any]] = []
     if "github" in aktiv and addons.github_token(settings):
         schemas.append(GITHUB_SCHEMA)
+        if addons.github_write_level(addons.rights_of(settings, "github")) != "nein":
+            schemas.append(GITHUB_WRITE_SCHEMA)
     if "wetter" in aktiv:
         schemas.append(WEATHER_SCHEMA)
     if "feeds" in aktiv and addons.feeds_of(settings):
@@ -1447,9 +1533,6 @@ def addon_schemas_for(settings: Any, pro: bool = True) -> list[dict[str, Any]]:
     return schemas
 
 
-# ---------------------------------------------------------------------------
-# Einstellungen aus dem Gespraech heraus
-# ---------------------------------------------------------------------------
 SETTING_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -1465,16 +1548,50 @@ SETTING_SCHEMA: dict[str, Any] = {
             "NICHT aenderbar sind Zugangsdaten und alles, was mir mehr Zugriff gaebe: "
             "Schalten im Haus, Mail und Kalender, Schreibrechte im Lager, Netzzugriff, "
             "Gedaechtnis. Frag danach gar nicht erst -- verweise auf die Einstellungen. "
-            "Aendere nur, worum ausdruecklich gebeten wurde, eine Sache je Aufruf, und "
-            "sag hinterher in einem Satz, was jetzt gilt."
+            "Braucht ein Auftrag eine dieser erlaubten Einstellungen (etwa Englisch fuer "
+            "englische Quellen), stell sie mit reason=auftrag selbst ein: dann fragt "
+            "Aquaticy den Nutzer vorher. reason=nutzer nur, wenn er genau darum gebeten hat. "
+            "Eine Sache je Aufruf; sag hinterher in einem Satz, was jetzt gilt."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "setting": {"type": "string", "description": "Name der Einstellung."},
                 "value": {"type": "string", "description": "Der neue Wert."},
+                "reason": {"type": "string", "enum": ["nutzer", "auftrag"],
+                           "description": "nutzer: ausdruecklich gewuenscht; auftrag: "
+                                          "fuer eine Aufgabe noetig (fragt vorher)."},
+                "why": {"type": "string", "description": "Kurz, wofuer (bei auftrag)."},
             },
             "required": ["setting", "value"],
+        },
+    },
+}
+
+
+COWORKER_CREATE_SCHEMA: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "coworker_create",
+        "description": (
+            "Legt einen Coworker an, wenn der Nutzer etwas Wiederkehrendes oder Dauerhaftes "
+            "will: 'nenne mir jeden Morgen die neusten Nachrichten', 'sag mir stündlich, ob "
+            "der Preis sinkt', 'kümmere dich ab jetzt um ...'. rhythm: daily, hourly, weekly "
+            "oder dauerhaft (ohne Zeitplan, arbeitet selbstständig). hour/minute fuer daily und "
+            "weekly, weekday 0=Montag. goal ist der Auftrag in einem bis zwei Saetzen. "
+            "Aquaticy fragt den Nutzer vorher."),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Kurzer Vorname, z.B. Ava."},
+                "goal": {"type": "string"},
+                "rhythm": {"type": "string",
+                           "enum": ["daily", "hourly", "weekly", "dauerhaft"]},
+                "hour": {"type": "integer", "minimum": 0, "maximum": 23},
+                "minute": {"type": "integer", "minimum": 0, "maximum": 59},
+                "weekday": {"type": "integer", "minimum": 0, "maximum": 6},
+            },
+            "required": ["name", "goal", "rhythm"],
         },
     },
 }
@@ -1498,8 +1615,7 @@ class ToolStats:
     research_pages: list[tuple[str, str]] = field(default_factory=list)
     calculations: int = 0
     notes_saved: int = 0
-    #: Rueckfragen zaehlen NICHT als Werkzeugaufruf -- eine Nachfrage soll den
-    #: Rechercheetat nicht schmaelern.
+
     questions: int = 0
     memories: int = 0
     lan_scans: int = 0
@@ -1510,7 +1626,7 @@ class ToolStats:
     storage_reads: int = 0
     storage_writes: int = 0
     settings_changed: int = 0
-    #: Aufrufe in der virtual machine -- ausfuehren, schreiben, lesen.
+
     vm_calls: int = 0
     addon_calls: int = 0
 
@@ -1562,14 +1678,11 @@ class ToolStats:
         self.addon_calls = 0
 
 
-#: Gruende, die meist gleich wieder vorbei sind. Sie werden nie gemerkt: ein
-#: Aussetzer von jetzt sagt nichts ueber die Seite in fuenf Minuten.
 TRANSIENT_SKIPS = frozenset({
     "timeout", "network_error", "dns_error", "robots_unavailable", "blocked_http_429",
 })
 
-#: Wie lange ein Fehlschlag gemerkt wird. Bis 11.0 waren es 24 Stunden -- eine
-#: Seite, die einmal hakte, blieb einen Tag lang "kaputt".
+
 FAILED_PAGE_SECONDS = 3600
 
 
@@ -1605,22 +1718,44 @@ class Toolbox:
         self.visual_inspector = visual_inspector
         self.rules = load_rules()
         self.stats = ToolStats()
-        #: Setzt der Agent, wenn Subagenten erlaubt sind.
+
         self.subagent_runner: Callable[[list[str]], list[dict[str, Any]]] | None = None
-        #: Setzt die Oberflaeche, wenn jemand da ist, der antworten kann.
+
         self.ask_handler: AskHandler | None = None
-        #: Steht fremder Text im Gespraech (Web, Mails, Bildschirm)? Dann
-        #: laufen Werkzeuge mit Wirkung nur noch mit Bestaetigung (9.5.15).
+        self.ssh_allowed: Callable[[], bool] | None = None
+        # Darf github_write die VM nutzen (checkout/push)? Setzt der Agent: nur im Code-Chat.
+        self.github_vm_ready: Callable[[], bool] | None = None
+        # Legt einen Coworker an (15.0.0). Setzt die Website fuer den Chat des Kontos.
+        self.coworker_creator: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+        self.secure_mode = False
+        self.secure_online = True
+        self.secure_provider: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None
+        self._secure_sources: set[str] = set()
+        self._secure_dns: set[str] = set()
+        self._secure_dns_full = False
+        self._github_private = False
+        self._secure_checks = 0
+        self._secure_nmaps = 0
+
         self.untrusted_seen = False
-        #: Fuer das gemeinsame Lernen dieses Turns ("" = keins).
+
+        self.coworker_write_ok: Callable[[str], bool] | None = None
+
         self.learning_ticket = ""
-        #: Was der Nutzer in diesem Chat selbst geschrieben hat (setzt der
-        #: Agent). Ein Wort, das er selbst nennt, ist fuer den Abfluss-Schutz
-        #: kein Geheimnis (aquaticy/injection.py, seit 9.5.22).
+
         self.user_said = ""
-        #: Wird beim ersten Zugriff geoeffnet, nicht beim Start -- wer den
-        #: Speicher nie benutzt, soll auch keine Datei dafuer anlegen.
+
         self._memory_store: Any = None
+        # 15.5.5: "schreib mir das auf WhatsApp" -- setzt der Server fuer den Besitzer.
+        self.messenger_sender: Callable[[str, str], dict[str, Any]] | None = None
+        # 15.3.4: im Code-Modus kein Gedaechtnis (setzt der Agent je Turn).
+        self.memory_blocked = False
+        self.memory_request: str | None = None
+        self.memory_optout = False
+        self.cancel_check: Callable[[], bool] | None = None
+        self.review_mode = False
+        self._review_runs = 0
+        self._review_box: Any = None
         self._fetcher = fetcher or Fetcher(
             user_agent=settings.user_agent,
             timeout=settings.fetch_timeout,
@@ -1628,40 +1763,26 @@ class Toolbox:
             rules=self.rules,
             enable_browser=settings.enable_playwright,
         )
-        #: Suchtreffer nach URL, damit blockierte Seiten wenigstens als Link taugen.
+
         self.seen_results: dict[str, SearchResult] = {}
-        #: In der Gegenpruefung: Quellen, die schon gelesen wurden. Sie fallen
-        #: dann aus den Suchtreffern heraus -- eine zweite Runde, die dieselben
-        #: Seiten noch einmal liest, ist keine zweite Runde.
+
         self.avoid_domains: set[str] = set()
-        #: Traegt jede gelesene Seite selbst in `avoid_domains` ein. Teilen
-        #: sich mehrere Agenten dieselbe Menge, meidet jeder von ihnen, was ein
-        #: anderer schon gelesen hat -- so kommen aus einer Zerlegung wirklich
-        #: verschiedene Quellen zurueck und nicht dreimal dieselbe Seite.
+
         self.claim_sources = False
-        #: Der Google-Zugriff wird erst beim ersten Aufruf gebaut -- ohne
-        #: verbundenes Konto soll gar nichts davon geladen werden.
+
         self._google_client: Any = None
-        #: Ebenso das Lager -- ohne eingetragene Adresse wird nichts gebaut.
+
         self._storage_client: Any = None
-        #: Und die virtual machine: sie entsteht erst, wenn wirklich Code laufen soll.
+
         self._sandbox_box: Any = None
-        #: Wird gerufen, wenn sich eine Einstellung geaendert hat. Die
-        #: Oberflaeche baut daraufhin den Agenten fuer die naechste Frage neu.
+
         self.on_settings_changed: Any = None
-        #: Der Rechtspruefer (aquaticy/guardrails.py). Er sitzt hier und nicht
-        #: im Agenten: durch diesen Werkzeugkasten laufen auch die Subagenten,
-        #: die Pruefer und die Notloesung fuer Bilder -- keiner davon kommt so
-        #: an ihm vorbei.
-        # Ohne Leitplanken bleibt der Grundschutz (10.1.4): Schadsoftware in der
-        # virtual machine und Bilder, die echte Menschen verletzen.
+
         self.guard: Guard | None = Guard(
             settings, baseline=not getattr(settings, "legal_guard", True))
-        #: Ersetzt im User mode das Vision-Modell (Tests). None = das echte.
+
         self.screen_reader: Callable[[bytes, str], str] | None = None
-        #: Eine Pruefung vor jedem Aufruf (11.0.0 Luna, aquaticy/coworker.py): gibt
-        #: sie ein Ergebnis zurueck, laeuft das Werkzeug nicht. Coworker setzen
-        #: hier ihre Regeln durch -- erlauben, fragen, sperren.
+
         self.coworker_ha_approval: Callable[[dict[str, Any]], bool] | None = None
         self.private_context: list[str] = []
         self.gate: Callable[[str, dict[str, Any]], dict[str, Any] | None] | None = None
@@ -1678,12 +1799,15 @@ class Toolbox:
             self._google_client.close()
         if self._storage_client is not None:
             self._storage_client.close()
+        review = getattr(self, "_review_box", None)
+        if review is not None:
+            review.stop()
+            self._review_box = None
 
     def _emit(self, event: str, **payload: Any) -> None:
         if self.on_event:
             self.on_event(event, payload)
 
-    # -- Werkzeug 1 -------------------------------------------------------
     def _plan_queries(self, query: str, extra: list[str] | None) -> list[str]:
         """Welche Anfragen wirklich rausgehen.
 
@@ -1706,15 +1830,6 @@ class Toolbox:
                     wanted.append(candidate)
         wanted = wanted[:limit]
 
-        # Und dann der Ortsfilter. Bisher war er eine Bitte im Systemtext --
-        # das Hauptmodell hielt sich meistens daran, die Subagenten sahen ihn
-        # nie, und bei "Cafes mit WLAN" kamen Treffer aus dem ganzen
-        # Sprachraum zurueck. Jetzt kommt eine Fassung MIT Ort dazu, sofern
-        # nicht ohnehin schon einer dasteht. Sie ersetzt keine der anderen
-        # Anfragen, sondern tritt daneben: beim Mischen (RRF) gewinnt, was
-        # mehrere Listen uebereinstimmend oben haben -- bei einer oertlichen
-        # Frage also das Oertliche, bei einer allgemeinen bleibt es beim
-        # Bisherigen.
         ort = (self.settings.location or "").strip()
         if ort and not any(mentions_place(anfrage, ort) for anfrage in wanted):
             mit_ort = with_place(keywords(wanted[0]) or wanted[0], ort)
@@ -1784,9 +1899,6 @@ class Toolbox:
             try:
                 results, used = search_broadly(wanted, count, configured)
             except SearchError as exc:
-                # Fallback: faellt das konfigurierte Backend aus (SearXNG down,
-                # API-Limit), uebernimmt die offene Metasuche -- die braucht
-                # nichts und ist praktisch immer da.
                 if self.settings.search_backend in OPEN_BACKEND_NAMES:
                     self._emit("error", message=str(exc))
                     return {"query": label, "results": [], "error": str(exc)}
@@ -1815,8 +1927,7 @@ class Toolbox:
                 if (result.source_domain or domain_of(result.url)) not in self.avoid_domains
             ]
             skipped = len(results) - len(fresh)
-            # Bleibt nach dem Aussortieren nichts uebrig, ist die alte Liste
-            # immer noch besser als gar keine -- dann sagt die Notiz es eben.
+
             if fresh:
                 results = fresh
 
@@ -1829,7 +1940,6 @@ class Toolbox:
             "results": [result.as_tool_dict() for result in results],
         }
         if cached is not None:
-            # Aus dem Zwischenspeicher: keine neue Arbeit auf dem Server.
             payload["cached"] = True
         if skipped:
             payload["note"] = (
@@ -1838,15 +1948,13 @@ class Toolbox:
             )
         return payload
 
-    # -- Werkzeug 2 -------------------------------------------------------
     def fetch_page(self, url: str) -> dict[str, Any]:
         """Laedt eine Seite und gibt lesbaren Text plus Produktdaten zurueck."""
         url = (url or "").strip()
         self._emit("fetch", url=url)
 
         key = cache_key("page", url)
-        # Parallele Helfer lesen dieselbe Seite haeufig gleichzeitig.
-        # Nach dem Warten erneut lesen; nur der erste Cache-Miss holt sie.
+
         with self.cache.filling(key) if self.cache else contextlib.nullcontext():
             cached = self.cache.get(key) if self.cache else None
             if cached is not None:
@@ -1877,13 +1985,12 @@ class Toolbox:
             self.stats.sources.append(
                 {
                     "url": page.final_url or url,
+                    "requested_url": url,
                     "title": page.title,
                     "domain": domain,
                 }
             )
             if self.claim_sources and domain:
-                # Ab jetzt gehoert diese Seite mir -- andere Agenten suchen
-                # weiter, ohne sie noch einmal vorgeschlagen zu bekommen.
                 self.avoid_domains.add(domain)
             for product in page.products:
                 self.stats.products.append(product)
@@ -1896,7 +2003,6 @@ class Toolbox:
         if not page.ok:
             hint = self.seen_results.get(url)
             if hint:
-                # Blockierte Seiten bleiben als Kauf-/Referenzlink brauchbar.
                 payload["search_title"] = hint.title
                 payload["search_snippet"] = hint.snippet
         return payload
@@ -1906,7 +2012,6 @@ class Toolbox:
         if not (page.ok and self.spec_extractor and page.text):
             return
         if not page.product_hint:
-            # Kein Produkt in Sicht -- kein Grund, das LLM zu bemuehen.
             return
         if page.products and page.products[0].specs:
             return
@@ -1926,7 +2031,6 @@ class Toolbox:
                 )
             ]
 
-    # -- Werkzeug: Gmail und Kalender -------------------------------------
     def _google(self) -> Any:
         """Der Zugriff auf das verbundene Konto, einmal je Toolbox aufgebaut."""
         from aquaticy.google import Google, TokenStore
@@ -2026,16 +2130,7 @@ class Toolbox:
         self._emit("mail_done", found=1)
         return mail
 
-    # -- Werkzeug: bei Google etwas aendern -------------------------------
-    # Drei Dinge sind hier festgeschrieben und stehen nicht im Prompt, wo ein
-    # geschickter Satz sie wegreden koennte:
-    #
-    # 1. Ohne "Aendern erlaubt" gibt es diese Werkzeuge gar nicht (agent.py).
-    # 2. Vor jedem Schreiben wird gefragt. Kann niemand antworten, wird nicht
-    #    geschrieben -- lieber gar nichts als etwas Ungefragtes im Kalender.
-    # 3. Verschickt wird nie eine Mail. Es gibt nur Entwuerfe, und dafuer
-    #    fehlt Aquaticy sogar das Recht bei Google selbst.
-    def _google_write_ready(self) -> str:
+    def _google_write_ready(self, tool: str = "") -> str:
         problem = self._google_ready()
         if problem:
             return problem
@@ -2045,10 +2140,37 @@ class Toolbox:
                 "Aendern in den Einstellungen unter 'Gmail & Kalender' frei und "
                 "verbindet danach neu. Sag ihm das, statt es zu umgehen."
             )
+
+        erlaubt = self._google().write_access() if tool else None
+        if erlaubt is not None:
+            kalender = tool.startswith("calendar")
+            if not (erlaubt[0] if kalender else erlaubt[1]):
+                return (
+                    "Google hat bei der Anmeldung das Recht dafuer nicht erteilt "
+                    f"({'Termine aendern' if kalender else 'Mail-Entwuerfe anlegen'}). "
+                    "Der Nutzer klickt in den Einstellungen unter 'Gmail & Kalender' noch "
+                    "einmal auf 'Verbinden' und setzt bei Google alle Haken. Sag ihm das, "
+                    "statt es zu umgehen."
+                )
         return ""
 
-    def _confirm(self, question: str) -> str:
+    def _write_without_asking(self, tool: str) -> bool:
+        """Darf dieses Schreiben ohne Rueckfrage laufen (12.5.6 Sol)?
+
+        Mit "Auf Befehl ohne Rueckfrage aendern" -- aber nie nach Mails oder Webseiten.
+        Ein Coworker mit der Regel "erlauben" meldet sich ueber coworker_write_ok.
+        """
+        s = self.settings
+        if (getattr(s, "google_direct", False) and getattr(s, "google_write", False)
+                and not getattr(self, "_untrusted_hard", False)):
+            return True
+        pruefung = self.coworker_write_ok
+        return bool(pruefung is not None and pruefung(tool))
+
+    def _confirm(self, question: str, tool: str = "") -> str:
         """Fragt nach. Returns: "" wenn zugestimmt, sonst der Grund dagegen."""
+        if tool and self._write_without_asking(tool):
+            return ""
         if self.ask_handler is None:
             return (
                 "Hier kann gerade niemand bestaetigen -- und ohne Bestaetigung "
@@ -2074,11 +2196,12 @@ class Toolbox:
         """Traegt einen Termin ein -- nach Rueckfrage."""
         from aquaticy.google import GoogleError
 
-        problem = self._google_write_ready()
+        problem = self._google_write_ready("calendar_add")
         if problem:
             return {"error": problem}
         wann = start + (f" bis {end}" if end else "")
-        nein = self._confirm(f"Soll ich \u201e{summary}\u201c am {wann} eintragen?")
+        nein = self._confirm(f"Soll ich \u201e{summary}\u201c am {wann} eintragen?",
+                             "calendar_add")
         if nein:
             return {"created": False, "note": nein}
         self._emit("calendar_write", what="anlegen", summary=summary, start=start)
@@ -2104,14 +2227,14 @@ class Toolbox:
         summary: str = "",
         start: str = "",
         end: str = "",
-        description: str = "",
-        location: str = "",
+        description: str | None = None,
+        location: str | None = None,
         whole_day: bool = False,
     ) -> dict[str, Any]:
         """Aendert einen Termin -- nach Rueckfrage."""
         from aquaticy.google import GoogleError
 
-        problem = self._google_write_ready()
+        problem = self._google_write_ready("calendar_edit")
         if problem:
             return {"error": problem}
         was = ", ".join(
@@ -2119,12 +2242,12 @@ class Toolbox:
             for teil in (
                 f"Titel \u201e{summary}\u201c" if summary else "",
                 f"Zeit {start}" + (f" bis {end}" if end else "") if start else "",
-                f"Ort {location}" if location else "",
-                "Notiz" if description else "",
+                (f"Ort {location}" if location else "Ort löschen") if location is not None else "",
+                ("Notiz" if description else "Notiz löschen") if description is not None else "",
             )
             if teil
         )
-        nein = self._confirm(f"Soll ich den Termin wirklich aendern ({was})?")
+        nein = self._confirm(f"Soll ich den Termin wirklich aendern ({was})?", "calendar_edit")
         if nein:
             return {"updated": False, "note": nein}
         self._emit("calendar_write", what="aendern", summary=summary or event_id)
@@ -2149,12 +2272,10 @@ class Toolbox:
         """Legt einen Mail-Entwurf an -- nach Rueckfrage. Verschickt wird nie."""
         from aquaticy.google import GoogleError
 
-        problem = self._google_write_ready()
+        problem = self._google_write_ready("mail_draft")
         if problem:
             return {"error": problem}
         try:
-            # Vor der Rueckfrage: der Mensch soll genau die Empfaenger sehen,
-            # die im Entwurf landen (seit 9.5.16, siehe google.mail_addresses).
             from aquaticy.google import mail_addresses
 
             to = mail_addresses(to) if to else ""
@@ -2164,7 +2285,7 @@ class Toolbox:
         an = (to + (f", Kopie an {cc}" if cc else "")) or "ohne Empfaenger"
         nein = self._confirm(
             f"Soll ich einen Entwurf an {an} mit dem Betreff "
-            f"\u201e{subject}\u201c anlegen? (Verschickt wird nichts.)"
+            f"\u201e{subject}\u201c anlegen? (Verschickt wird nichts.)", "mail_draft"
         )
         if nein:
             return {"drafted": False, "note": nein}
@@ -2178,7 +2299,6 @@ class Toolbox:
         self._emit("mail_written", subject=subject)
         return answer
 
-    # -- Werkzeug: Lagerverwaltung ----------------------------------------
     def _storage(self) -> Any:
         """Der Zugriff aufs Lager, einmal je Toolbox aufgebaut."""
         from aquaticy.storage import Storage
@@ -2269,6 +2389,11 @@ class Toolbox:
             return {"error": problem}
         client = self._storage()
         try:
+            from aquaticy.storage import integer
+
+            furniture_id = integer(furniture_id, minimum=0)
+            room_id = integer(room_id, minimum=0)
+            quantity = integer(quantity, minimum=0)
             if furniture_id:
                 created = client.add_item(furniture_id, name, quantity)
                 kind = "Artikel"
@@ -2301,6 +2426,12 @@ class Toolbox:
         client = self._storage()
         self._emit("storage", action="aendern", detail=f"Artikel {item_id}")
         try:
+            from aquaticy.storage import integer
+
+            item_id = integer(item_id, minimum=1)
+            delta = integer(delta)
+            if quantity is not None:
+                quantity = integer(quantity, minimum=0)
             if delta:
                 entry = client.change_quantity(item_id, delta)
             else:
@@ -2312,7 +2443,6 @@ class Toolbox:
         self._emit("storage_done", found=1, action="geaendert")
         return {"changed": entry}
 
-    # -- Werkzeug: Einstellungen ------------------------------------------
     def _profile_env(self) -> Path | None:
         """Die `.env` des Kontos -- oder None, wenn Aquaticy allein laeuft.
 
@@ -2332,8 +2462,56 @@ class Toolbox:
             pass
         return Path(eigen)
 
-    def change_setting(self, setting: str, value: str) -> dict[str, Any]:
-        """Aendert eine Einstellung -- soweit sie dafuer vorgesehen ist."""
+    def coworker_create(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Ein Auftrag im Chat wird ein Coworker (15.0.0) -- erst nach dem Ja des Nutzers."""
+        if self.coworker_creator is None:
+            return {"error": "Coworker gibt es hier nicht. Lege ihn in der Coworker-Übersicht "
+                             "an."}
+        if self.ask_handler is None:
+            return {"error": "Hier kann gerade niemand bestätigen. Sag dem Nutzer, dass ein "
+                             "Coworker das übernehmen kann."}
+        name = " ".join(str(arguments.get("name") or "").split())[:40]
+        ziel = " ".join(str(arguments.get("goal") or "").split())[:2000]
+        takt = str(arguments.get("rhythm") or "daily")
+        if not name or not ziel or takt not in ("daily", "hourly", "weekly", "dauerhaft"):
+            return {"error": "coworker_create braucht name, goal und rhythm (daily, hourly, "
+                             "weekly oder dauerhaft)."}
+
+        def zahl(feld: str, standard: int, hoechstens: int) -> int:
+            wert = arguments.get(feld, standard)
+            return wert if type(wert) is int and 0 <= wert <= hoechstens else standard
+
+        stunde, minute, tag = zahl("hour", 8, 23), zahl("minute", 0, 59), zahl("weekday", 0, 6)
+        tage = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+        wann = {"daily": f"täglich um {stunde:02d}:{minute:02d} Uhr", "hourly": "stündlich",
+                "weekly": f"jeden {tage[tag]} um {stunde:02d}:{minute:02d} Uhr",
+                "dauerhaft": "dauerhaft, er entscheidet selbst, wann er arbeitet"}[takt]
+        nein = self._confirm(f"Soll ich dafür einen Coworker anlegen?\nName: {name}\n"
+                             f"Auftrag: {ziel[:400]}\nWann: {wann}")
+        if nein:
+            return {"error": nein}
+        nutzlast: dict[str, Any] = {"name": name, "goal": ziel}
+        if takt != "dauerhaft":
+            nutzlast["schedule"] = {"kind": "research", "rhythm": takt, "hour": stunde,
+                                    "minute": minute, "weekday": tag}
+        ergebnis = self.coworker_creator(nutzlast)
+        if not ergebnis.get("ok"):
+            return {"error": str(ergebnis.get("error") or "Der Coworker ließ sich nicht "
+                                                            "anlegen.")}
+        self._emit("note", text=f"Coworker {name} angelegt: {wann}.",
+                   text_en=f"Coworker {name} created.")
+        return {"created": name, "when": wann,
+                "note": "Er erscheint in der Coworker-Übersicht. Dort kann der Nutzer ihn "
+                        "ändern, pausieren oder löschen."}
+
+    def change_setting(self, setting: str, value: str, reason: str = "nutzer",
+                       why: str = "") -> dict[str, Any]:
+        """Aendert eine Einstellung -- soweit sie dafuer vorgesehen ist.
+
+        Seit 15.0.0 stellt Aquaticy erlaubte Einstellungen auch selbst ein, wenn ein Auftrag
+        sie braucht (reason="auftrag"). Dann fragt es den Nutzer vorher. Rechte (Haus, Mail,
+        Heimnetz, Gedaechtnis, Leitplanken ...) bleiben wie immer beim Menschen.
+        """
         from aquaticy import preferences
 
         preference = preferences.find(setting)
@@ -2352,12 +2530,20 @@ class Toolbox:
             stored = preferences.coerce(preference, value)
         except preferences.BadValue as exc:
             return {"error": str(exc)}
+        if reason == "auftrag":
+            if self.ask_handler is None:
+                return {"error": "Hier kann gerade niemand bestätigen. Sag dem Nutzer, welche "
+                                 "Einstellung hilft."}
+            grund = " ".join(str(why or "").split())[:200]
+            nein = self._confirm(f"Für deinen Auftrag stelle ich „{preference.label}“ auf "
+                                 f"„{stored}“ um" + (f" ({grund})" if grund else "")
+                                 + ". Einverstanden?")
+            if nein:
+                return {"error": nein}
 
         self._emit("setting", label=preference.label, value=stored)
 
         if preference.name in (preferences.APPEARANCE, preferences.PALETTE):
-            # Aussehen ist Sache des Browsers -- es steht in keiner Datei. Die
-            # Oberflaeche hoert auf dieses Ereignis und stellt es um.
             if preference.name == preferences.APPEARANCE:
                 self._emit("appearance", theme="light" if stored == "hell" else "dark")
             else:
@@ -2388,12 +2574,17 @@ class Toolbox:
             ),
         }
 
-    # -- Dispatch ---------------------------------------------------------
-    # -- Werkzeug: die virtual machine ------------------------------------------
     def _sandbox(self) -> Any:
         """Die gemeinsame virtual machine -- gebaut beim ersten Zugriff."""
         from aquaticy import sandbox as werkstatt
 
+        if getattr(self, "review_mode", False):
+            box = getattr(self, "_review_box", None)
+            if box is None:
+                box = werkstatt.review_box(self.settings, on_event=self._emit_pair)
+                self._review_box = box
+            box.on_event = self._emit_pair
+            return box
         if self._sandbox_box is None:
             self._sandbox_box = werkstatt.shared(self.settings, on_event=self._emit_pair)
         else:
@@ -2409,6 +2600,13 @@ class Toolbox:
         """Fuehrt einen Befehl in der virtual machine aus."""
         from aquaticy.sandbox import COMMAND_TIMEOUT, SandboxUnavailable
 
+        review = getattr(self, "review_mode", False)
+        if review:
+            used = getattr(self, "_review_runs", 0)
+            if used >= 5:
+                return {"error": "Fünf Testläufe sind erreicht. Prüfe weiter durch Lesen."}
+            self._review_runs = used + 1
+            timeout = min(max(1, int(timeout or 20)), 20)
         try:
             box = self._sandbox()
             result = box.run(command, timeout=int(timeout or COMMAND_TIMEOUT))
@@ -2416,10 +2614,76 @@ class Toolbox:
             return {"error": str(exc)}
         except ValueError as exc:
             return {"error": str(exc)}
-        except Exception as exc:  # pragma: no cover - Laufzeit meldet Unerwartetes
+        except Exception as exc:  # pragma: no cover
             return {"error": f"Die virtual machine antwortet nicht: {exc}"}
         self.stats.vm_calls += 1
         return result.as_dict()
+
+    def lan_ssh(self, *, _secure_scope: tuple[str, str] | None = None,
+                **arguments: Any) -> dict[str, Any]:
+        import ipaddress
+
+        from aquaticy import vm_ssh
+        from aquaticy.sandbox import SandboxUnavailable
+
+        def allowed() -> bool:
+            if getattr(self, "secure_mode", False):
+                if _secure_scope is None or self.secure_provider is None:
+                    return False
+                grant = self.secure_provider("secure_vm", {})
+                if (grant.get("ok") is not True or
+                        (grant.get("subnet"), grant.get("router", "")) != _secure_scope):
+                    return False
+                if arguments.get("action") != "key":
+                    try:
+                        if ipaddress.IPv4Address(str(arguments.get("host", ""))) not in \
+                                ipaddress.IPv4Network(_secure_scope[0]):
+                            return False
+                    except ValueError:
+                        return False
+            return bool(self.ssh_allowed and self.ssh_allowed()
+                        and self.settings.lan_enabled and self.settings.vm_lan)
+
+        if not allowed():
+            return {"error": "SSH braucht eine eingeschaltete VM und beide Heimnetz-Freigaben."}
+        try:
+            data = vm_ssh.prepare(**arguments)
+            box = self._sandbox()
+            if not box.lan or not box.netz_offen:
+                return {"error": "Diese VM hat keine Heimnetz-Freigabe."}
+            name = box.ensure()
+            if not allowed() or not box.lan or not box.netz_offen:
+                return {"error": "Die VM oder ihre Freigabe hat sich geändert. "
+                                 "Erneut anfragen."}
+            if data["action"] == "run":
+                if self.ask_handler is None:
+                    return {"error": "Ohne persönliche Bestätigung wird kein SSH-Befehl "
+                                     "ausgeführt."}
+                question = (
+                    f"Gehört {data['user']}@{data['host']}:{data['port']} zu deinem freigegebenen "
+                    f"Gerät? Prüfe dessen Hostschlüssel dort selbst: {data['fingerprint']}. "
+                    f"Diesen SSH-Befehl ausführen?\n{data['command']}")
+                refusal = self._confirm(question)
+                if refusal:
+                    return {"error": refusal}
+                if (not allowed() or box.name != name or not box.alive or not box.lan
+                        or not box.netz_offen):
+                    return {"error": "Die VM oder ihre Freigabe hat sich geändert. "
+                                     "Erneut anfragen."}
+            result = box.run(vm_ssh.vm_command(data), timeout=min(120, data["timeout"] + 10))
+            self.stats.vm_calls += 1
+            payload = result.as_dict()
+            if result.exit_code == 127:
+                payload["error"] = ("OpenSSH fehlt im VM-Abbild. Beende die alte VM. "
+                                    "Das Standardabbild wird beim nächsten Start aktualisiert. "
+                                    "Eigene Abbilder brauchen openssh-client.")
+            if data["action"] == "inspect":
+                payload["keys"] = vm_ssh.inspected_keys(result.stdout)
+                payload["note"] = ("Diese Schlüssel sind noch nicht vertrauenswürdig. "
+                                   "Vergleiche den Fingerabdruck direkt am Zielgerät.")
+            return payload
+        except (ValueError, TypeError, SandboxUnavailable) as exc:
+            return {"error": str(exc)}
 
     def vm_write(self, path: str, text: str) -> dict[str, Any]:
         """Legt eine Datei in der virtual machine an."""
@@ -2490,7 +2754,7 @@ class Toolbox:
             return {"error": str(exc)}
         except subprocess.TimeoutExpired:
             return {"error": "Die virtual machine hat nicht rechtzeitig geantwortet."}
-        except Exception as exc:  # pragma: no cover - Laufzeit meldet Unerwartetes
+        except Exception as exc:  # pragma: no cover
             return {"error": f"Die virtual machine antwortet nicht: {exc}"}
         self.stats.vm_calls += 1
         bild = answer.pop("_bild", b"") if isinstance(answer, dict) else b""
@@ -2519,7 +2783,6 @@ class Toolbox:
                 )
         return answer
 
-
     def _addon_call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Die Werkzeuge der Add-ons. Ausgeschaltet heisst: gibt es nicht."""
         from aquaticy import addons
@@ -2534,7 +2797,8 @@ class Toolbox:
         self.stats.addon_calls += 1
         rechte = addons.rights_of(self.settings, erforderlich)
         if name == "github":
-            return addons.github_call(
+            before = addons.load_state(self.settings).get("github")
+            result = addons.github_call(
                 addons.github_token(self.settings),
                 str(arguments.get("action") or ""),
                 repo=str(arguments.get("repo") or ""),
@@ -2544,12 +2808,22 @@ class Toolbox:
                 state=str(arguments.get("state") or "open"),
                 query=str(arguments.get("query") or ""),
                 nur_oeffentlich=rechte["repos"] == "oeffentlich",
-                inhalte=rechte["inhalte"] == "ja",
+                inhalte=addons.github_reads_content(rechte),
+                page=arguments.get("page", 1), start_line=arguments.get("start_line", 1),
+                max_lines=arguments.get("max_lines", 300),
+                recursive=arguments.get("recursive", True), paths=arguments.get("paths"),
+                base=str(arguments.get("base") or ""),
             )
+            if (not addons.active(self.settings, "github")
+                    or addons.load_state(self.settings).get("github") != before):
+                return {"error": "Die GitHub-Freigabe hat sich während des Abrufs geändert. "
+                                 "Starte die Anfrage erneut."}
+            return result
+        if name == "github_write":
+            return self.github_write(arguments)
         if name == "weather":
             ort = str(arguments.get("place") or self.settings.location or "")
             if rechte["orte"] == "meiner":
-                # Recht "Nur mein Ort": der Ortsfilter gilt, egal was gefragt wurde.
                 ort = str(self.settings.location or "")
                 if not ort:
                     return {"error": (
@@ -2570,7 +2844,10 @@ class Toolbox:
         if name == "currency":
             basis = str(arguments.get("base") or "EUR")
             ziel = str(arguments.get("to") or "")
-            if rechte["waehrungen"] == "euro" and "EUR" not in (basis + "," + ziel).upper():
+            targets = {part.strip().upper() for part in ziel.replace(";", ",").split(",")
+                       if part.strip()}
+            if (rechte["waehrungen"] == "euro" and basis.strip().upper() != "EUR"
+                    and (not targets or targets != {"EUR"})):
                 return {"error": "Der Nutzer hat den Währungsrechner auf 'Nur von oder nach "
                                  "Euro' gestellt -- rechne über EUR."}
             return addons.currency(arguments.get("amount"), basis, ziel)
@@ -2613,8 +2890,6 @@ class Toolbox:
             pfad = geschrieben["written"]
             from aquaticy.addons import werkstatt_command_for_blender
 
-            # Im User mode kommt Blender vom Add-on (/addons/blender), sonst aus
-            # dem Abbild -- der Befehl nimmt, was da ist.
             programm = (
                 werkstatt_command_for_blender()
                 if getattr(self.settings, "vm_user_mode", False)
@@ -2656,20 +2931,31 @@ class Toolbox:
         laeuft (aquaticy/metering.py, seit 9.5.14 Seashell). Ist nichts mehr
         uebrig, lehnt das Werkzeug ab -- das Modell antwortet dann ohne.
         """
+        cancelled = getattr(self, "cancel_check", None)
+        if callable(cancelled) and cancelled():
+            return {"error": "Abgebrochen."}
+        if getattr(self, "secure_mode", False):
+            from aquaticy.secure_chat import ALLOWED
+
+            if name not in ALLOWED:
+                return {"error": "Dieses Werkzeug ist im Secure-Pro-Chat nicht freigegeben."}
         pruefung = getattr(self, "gate", None)
         if pruefung is not None:
             vorab = pruefung(name, arguments)
             if vorab is not None:
                 return vorab
-        nein = self._untrusted_gate(name, arguments) or self._leak_gate(name, arguments)
+        guard_name = {"secure_advisories": "web_search",
+                      "secure_read_advisory": "fetch_page"}.get(name, name)
+        nein = (self._untrusted_gate(guard_name, arguments)
+                or self._leak_gate(guard_name, arguments))
         if nein:
             return nein
+        if callable(cancelled) and cancelled():
+            return {"error": "Abgebrochen."}
         art = WORK_TOOLS.get(name)
         if art is None or metering.quota_of(self.settings) is None:
             return self._after_untrusted(name, self._call(name, arguments))
         try:
-            # Atomar (9.5.15): die Mindestkosten werden reserviert, solange die
-            # Arbeit laeuft -- parallele Werkzeuge sehen den Rest schon belegt.
             vorab = metering.reserve_work(self.settings, art)
         except metering.QuotaExceeded as exc:
             return {"error": str(exc), "kontingent": True}
@@ -2677,8 +2963,6 @@ class Toolbox:
         try:
             payload = self._call(name, arguments)
         except Exception as exc:
-            # Auch ein Werkzeug, das abbricht, hat auf dem Server gearbeitet --
-            # bis 9.5.15 wurde es dann gar nicht gebucht.
             payload = {"error": f"{type(exc).__name__}: {exc}"}
         try:
             vorab.settle_work(self._work_cost(name, art, payload, vorher))
@@ -2689,6 +2973,17 @@ class Toolbox:
             vorab.settle_work(metering.work_cost(art))
         return self._after_untrusted(name, payload)
 
+    @property
+    def untrusted_seen(self) -> bool:
+        """Steht fremder Text im Gespraech? Auch der eigene Kalender zaehlt dazu."""
+        return bool(getattr(self, "_untrusted_hard", False)
+                    or getattr(self, "_untrusted_soft", False))
+
+    @untrusted_seen.setter
+    def untrusted_seen(self, wert: bool) -> None:
+        self._untrusted_hard = bool(wert)
+        self._untrusted_soft = False
+
     def _after_untrusted(self, name: str, payload: Any) -> Any:
         """Merkt sich, dass fremder Text im Gespraech ist -- und kennzeichnet ihn.
 
@@ -2697,18 +2992,49 @@ class Toolbox:
         Hinweis, dass es nur Daten sind; stehen darin Anweisungen an eine KI,
         kommt eine Warnung dazu (aquaticy/injection.py).
         """
+        if (name in ("github", "github_write") and isinstance(payload, dict)
+                and not payload.get("error")
+                and (payload.get("privat") is True or any(
+                    r.get("privat") is True for r in payload.get("repos", [])))):
+            self._github_private = True
+        if name.startswith("secure_") and isinstance(payload, dict):
+            self.remember_secure_dns(payload)
         if name not in UNTRUSTED_SOURCES or not isinstance(payload, dict):
             return payload
         from aquaticy import injection
 
         if payload.get("error"):
-            # Auch eine Fehlermeldung kann fremden Text tragen (Grund einer Seite).
             return injection.clean(payload)
-        self.untrusted_seen = True
         markiert, arten = injection.mark(name, payload)
+
+        eigenes_haus = (name == "ha_states" and getattr(self.settings, "ha_direct", False)
+                        and getattr(self.settings, "ha_control", False))
+
+        eigener_kalender = (name == "calendar_events"
+                            and getattr(self.settings, "google_direct", False)
+                            and getattr(self.settings, "google_write", False))
+        if arten or not (eigenes_haus or eigener_kalender):
+            self.untrusted_seen = True
+        elif eigener_kalender:
+            self._untrusted_soft = True
         if arten:
             self._emit("injection", tool=name, kinds=arten)
         return markiert
+
+    def remember_secure_dns(self, state: dict[str, Any]) -> None:
+        if not getattr(self, "secure_mode", False):
+            return
+        names = [name for event in state.get("events", [])
+                 for name in event.get("dns_names", [])]
+        names.extend(state.get("domains", []))
+        for name in names:
+            if isinstance(name, str) and 0 < len(name) <= 253:
+                if name.lower() in self._secure_dns:
+                    continue
+                if len(self._secure_dns) >= 4096:
+                    self._secure_dns_full = True
+                    break
+                self._secure_dns.add(name.lower())
 
     def _private_terms(self) -> tuple[set[str], set[str]]:
         """Private Angaben dieses Kontos: Merkzettel, Speicher, Ort, E-Mail."""
@@ -2724,6 +3050,9 @@ class Toolbox:
             if store is not None:
                 texte += [e.text for e in store.all_entries(limit=200)]
         hart = [str(getattr(self.settings, "account_email", "") or "")]
+        if getattr(self, "secure_mode", False) and self.secure_provider is not None:
+            self.remember_secure_dns(self.secure_provider("secure_privacy", {}))
+            hart.extend(self._secure_dns)
         return injection.private_terms(texte, hart)
 
     def _leak_gate(self, name: str, arguments: dict[str, Any]) -> dict[str, Any] | None:
@@ -2737,6 +3066,20 @@ class Toolbox:
         from aquaticy import injection
 
         if not getattr(self, "untrusted_seen", False):
+            return None
+        if getattr(self, "_github_private", False) and (
+                name in injection.SEARCHES or name in {"fetch_page", "inspect_public_visual"}):
+            import json
+
+            data = json.dumps(arguments, ensure_ascii=False)
+            if len(data) > 2000 or self.ask_handler is None:
+                return {"error": "Nach privaten GitHub-Inhalten braucht öffentliche Recherche "
+                                 "eine persönliche Bestätigung.", "skipped_reason": "private_data"}
+            refusal = self._confirm("Private GitHub-Inhalte wurden gelesen. Diese öffentliche "
+                                    f"Anfrage an {name} erlauben? Prüfe, ob sie Code oder private "
+                                    f"Angaben enthält:\n{data}")
+            if refusal:
+                return {"error": refusal, "skipped_reason": "private_data"}
             return None
         if name not in injection.OUTBOUND and name not in injection.SEARCHES:
             return None
@@ -2773,11 +3116,11 @@ class Toolbox:
         if name == "ha_call":
             approval = getattr(self, "coworker_ha_approval", None)
             if approval is not None and approval(arguments):
-                return None  # explizite, eng begrenzte Dauerfreigabe des Besitzers
+                return None
             from aquaticy.homeassistant import PROTECTED_DOMAINS
 
             if str(arguments.get("domain", "")).strip().lower() in PROTECTED_DOMAINS:
-                return None  # fragt ohnehin selbst nach
+                return None
         detail = ", ".join(f"{k}={str(v)[:60]}" for k, v in list(arguments.items())[:4])
         frage = (f"In diesem Gespräch stehen Inhalte aus dem Web oder aus Mails. "
                  f"Soll Aquaticy jetzt wirklich {was}? ({detail})")
@@ -2810,7 +3153,7 @@ class Toolbox:
             elif not payload.get("error"):
                 kosten += metering.work_cost("datei")
             return kosten
-        if name == "fetch_page":
+        if name in ("fetch_page", "secure_read_advisory"):
             ohne_abruf = {"invalid_url", "blocked_by_list", "robots_disallowed", "legal_guard",
                           "timeout", "network_error", "not_public"}
             if payload.get("via") != "cache" and payload.get("skipped_reason") not in ohne_abruf:
@@ -2818,7 +3161,7 @@ class Toolbox:
             return 0
         if payload.get("error"):
             return 0
-        if name in ("web_search", "search_news"):
+        if name in ("web_search", "search_news", "secure_advisories"):
             if not payload.get("cached"):
                 anzahl = len(payload.get("queries") or []) or 1
                 return metering.work_cost("suche", anzahl)
@@ -2833,12 +3176,11 @@ class Toolbox:
 
     def _call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Fuehrt den Tool-Call *name* mit *arguments* aus."""
+        if name.startswith("secure_"):
+            return self.secure_tool(name, arguments)
         if self.guard is not None and name in SENSITIVE_TOOLS:
             verdict = self.guard.check_call(name, arguments)
             if verdict.abuse:
-                # Wächter der virtual machine (9.5.24): Schadsoftware oder Angriffshilfe
-                # wird gestoppt, bevor sie läuft -- und Ai-guard erfährt davon
-                # (härtere Sperre, aquaticy/aiguard.py).
                 from aquaticy.aiguard import normalize_category
                 from aquaticy.guardrails import STOP_TOOL_ABUSE
 
@@ -2863,7 +3205,7 @@ class Toolbox:
                 count=self._anzahl(arguments.get("count")),
                 country=str(arguments.get("country") or ""),
                 lang=str(arguments.get("lang") or ""),
-                # Manche Modelle schicken einen String statt einer Liste.
+
                 queries=[str(item) for item in more] if isinstance(more, list) else [str(more)],
             )
         if name == "fetch_page":
@@ -2948,14 +3290,14 @@ class Toolbox:
                 where=str(arguments.get("where") or ""),
                 radius_km=radius,
             )
+        if name == "lan_ssh":
+            return self.lan_ssh(**arguments)
         if name == "vm_run":
             return self.vm_run(
                 command=str(arguments.get("command", "")),
                 timeout=int(arguments.get("timeout") or 0),
             )
         if name == "vm_write":
-            # Kleine Modelle schreiben gern "content" statt "text" (11.2.2 Sol). Bisher
-            # entstand dann still eine leere Datei, und der Lauf danach gab nichts aus.
             inhalt = arguments.get("text", arguments.get("content"))
             if inhalt is None:
                 return {"error": "vm_write braucht den Dateiinhalt im Feld 'text'."}
@@ -2984,6 +3326,11 @@ class Toolbox:
             )
         if name == "recall_memory":
             return self.recall_memory(query=str(arguments.get("query") or ""))
+        if name == "forget_memory":
+            return self.forget_memory(arguments.get("id"))
+        if name == "messenger_send":
+            return self.messenger_send(str(arguments.get("messenger") or ""),
+                                       str(arguments.get("text") or ""))
         if name == "lan_scan":
             return self.lan_scan(
                 subnet=str(arguments.get("subnet") or ""),
@@ -2993,7 +3340,11 @@ class Toolbox:
             return self.change_setting(
                 setting=str(arguments.get("setting", "")),
                 value=str(arguments.get("value", "")),
+                reason=str(arguments.get("reason") or "nutzer"),
+                why=str(arguments.get("why") or ""),
             )
+        if name == "coworker_create":
+            return self.coworker_create(arguments)
         if name == "storage_find":
             return self.storage_find(
                 query=str(arguments.get("query", "")),
@@ -3001,23 +3352,23 @@ class Toolbox:
             )
         if name == "storage_browse":
             return self.storage_browse(
-                room_id=int(arguments.get("room_id") or 0),
-                furniture_id=int(arguments.get("furniture_id") or 0),
+                room_id=arguments.get("room_id", 0),
+                furniture_id=arguments.get("furniture_id", 0),
             )
         if name == "storage_add":
             return self.storage_add(
                 name=str(arguments.get("name", "")),
-                furniture_id=int(arguments.get("furniture_id") or 0),
-                room_id=int(arguments.get("room_id") or 0),
-                quantity=int(arguments.get("quantity") or 1),
+                furniture_id=arguments.get("furniture_id", 0),
+                room_id=arguments.get("room_id", 0),
+                quantity=arguments.get("quantity", 1),
             )
         if name == "storage_edit":
             raw_quantity = arguments.get("quantity")
             return self.storage_edit(
-                item_id=int(arguments.get("item_id") or 0),
+                item_id=arguments.get("item_id", 0),
                 name=str(arguments.get("name") or ""),
-                quantity=None if raw_quantity is None else int(raw_quantity),
-                delta=int(arguments.get("delta") or 0),
+                quantity=raw_quantity,
+                delta=arguments.get("delta", 0),
             )
         if name == "calendar_events":
             return self.calendar_events(
@@ -3045,8 +3396,10 @@ class Toolbox:
                 summary=str(arguments.get("summary", "") or ""),
                 start=str(arguments.get("start", "") or ""),
                 end=str(arguments.get("end", "") or ""),
-                description=str(arguments.get("description", "") or ""),
-                location=str(arguments.get("location", "") or ""),
+                description=(str(arguments["description"] or "")
+                             if "description" in arguments else None),
+                location=(str(arguments["location"] or "")
+                          if "location" in arguments else None),
                 whole_day=bool(arguments.get("whole_day", False)),
             )
         if name == "mail_draft":
@@ -3104,7 +3457,7 @@ class Toolbox:
                 x=arguments.get("x"),
                 y=arguments.get("y"),
                 button=str(arguments.get("button") or "left"),
-                # "false" ist ein Wort, kein Ja -- bool("false") waere True.
+
                 double=str(arguments.get("double", "")).strip().lower()
                 in ("true", "1", "ja", "yes"),
             )
@@ -3136,7 +3489,6 @@ class Toolbox:
             return self.desktop_action("windows")
         return {"error": f"Unbekanntes Werkzeug '{name}'."}
 
-    # -- Werkzeug 3: News -------------------------------------------------
     def search_news(self, query: str, count: int = 0) -> dict[str, Any]:
         """News-Suche; faellt bei Ausfall auf die normale Websuche zurueck.
 
@@ -3150,8 +3502,7 @@ class Toolbox:
             schlagzeilen = self._headlines(count)
             if schlagzeilen is not None:
                 return schlagzeilen
-        # Auch hier gilt der Ortsfilter: "Baustellen" ohne Ort ist eine
-        # andere Frage als "Baustellen Bremen".
+
         query = with_place((query or "").strip(), self.settings.location)
         count = int(count or self.settings.max_results_default)
         self.stats.news_searches.append(query)
@@ -3169,7 +3520,6 @@ class Toolbox:
                     query, count=count, country=self.settings.country, lang=self.settings.lang
                 )
             except SearchError:
-                # Fallback: lieber normale Treffer als gar keine.
                 self._emit("fallback", source="news", target="websuche")
                 try:
                     results = search_web(
@@ -3182,7 +3532,6 @@ class Toolbox:
                     self._emit("error", message=str(exc))
                     return {"query": query, "results": [], "error": str(exc)}
             if self.cache:
-                # News veralten schnell -- eine Stunde statt 24.
                 self.cache.set(
                     key,
                     [result.model_dump() for result in results],
@@ -3211,7 +3560,6 @@ class Toolbox:
         else:
             results = headlines(land, sprache, menge)
             if results and self.cache:
-                # Schlagzeilen veralten in Minuten, nicht in Stunden.
                 self.cache.set(key, [r.model_dump() for r in results], kind="news",
                                label="Schlagzeilen", ttl=600)
         if not results:
@@ -3227,7 +3575,6 @@ class Toolbox:
                      "von Nachrichtenseiten."),
         }
 
-    # -- Werkzeug 4: Profile ----------------------------------------------
     def find_profiles(self, name: str, platforms: list[str] | None = None) -> dict[str, Any]:
         """Sucht, was es zu einem Namen ausserhalb der eigenen Website gibt.
 
@@ -3264,8 +3611,6 @@ class Toolbox:
             return dict(cached)
 
         def eine(position: int, label: str, domain: str) -> tuple[str, list[SearchResult]]:
-            # Leicht versetzt starten: acht Anfragen in derselben Millisekunde
-            # sind fuer eine offene Suchmaschine ein Ausschlag.
             if position:
                 time.sleep(min(position * 0.25, 2.0))
             try:
@@ -3300,8 +3645,7 @@ class Toolbox:
 
         for label, domain in sites:
             treffer = ergebnisse.get(label, [])
-            # Suchmaschinen liefern zu `site:` gern auch Nachbarn -- was nicht
-            # von der Plattform kommt, gehoert hier nicht hin.
+
             passend = [
                 item
                 for item in treffer
@@ -3338,7 +3682,6 @@ class Toolbox:
         self._emit("profiles_done", name=name, hits=len(gefunden))
         return payload
 
-    # -- Werkzeug 5: die Karte --------------------------------------------
     def local_places(self, what: str, where: str = "", radius_km: float = 0.0) -> dict[str, Any]:
         """Sucht Orte in OpenStreetMap statt in einer Suchmaschine.
 
@@ -3414,14 +3757,11 @@ class Toolbox:
                 "gehoeren gegengeprueft, sie veralten in der Karte am schnellsten."
             )
         if self.cache:
-            # Die Karte aendert sich langsam -- ein Tag ist reichlich. Ein leeres
-            # Ergebnis bleibt nur eine Stunde: vielleicht passt der Umkreis nicht.
             self.cache.set(key, payload, kind="places", label=f"{what} in {where}",
                            ttl=None if orte else FAILED_PAGE_SECONDS)
         self._emit("places_done", what=what, hits=len(orte))
         return payload
 
-    # -- Werkzeug 6: Rechner ----------------------------------------------
     def calculate(self, expression: str) -> dict[str, Any]:
         """Exakte Arithmetik -- damit das Modell nie selbst rechnen muss."""
         from aquaticy.calc import CalcError, calculate_pretty
@@ -3433,9 +3773,13 @@ class Toolbox:
         except CalcError as exc:
             return {"expression": expression, "error": str(exc)}
 
-    # -- Werkzeug 7: Merkzettel (nur Hauptagent) --------------------------
     def remember(self, text: str) -> dict[str, Any]:
         """Notiz auf den dauerhaften Merkzettel des Nutzers schreiben."""
+        if self.memory_blocked:
+            return {"error": "Im Code-Modus gibt es kein Gedächtnis."}
+        refusal = self._memory_write_gate(text)
+        if refusal:
+            return refusal
         text = (text or "").strip()
         if not text:
             return {"error": "Leere Notiz."}
@@ -3446,10 +3790,9 @@ class Toolbox:
         self._emit("remember", text=text)
         return {"saved": True, "note_id": note_id, "text": text}
 
-    # -- Werkzeug: Langzeitspeicher ---------------------------------------
     def _memory(self) -> Any:
-        """Den Speicher oeffnen -- oder None, wenn er abgeschaltet ist."""
-        if not self.settings.memory_enabled:
+        """Den Speicher oeffnen -- oder None, wenn er abgeschaltet ist (oder Code-Modus)."""
+        if not self.settings.memory_enabled or self.memory_blocked:
             return None
         if self._memory_store is None:
             from aquaticy.memory import Memory
@@ -3459,10 +3802,24 @@ class Toolbox:
             )
         return self._memory_store
 
+    def _memory_write_gate(self, text: str) -> dict[str, Any] | None:
+        from aquaticy import memory_auto
+
+        if getattr(self, "memory_optout", False):
+            return {"error": "Du hast das Speichern für diese Nachricht ausgeschlossen."}
+        request = getattr(self, "memory_request", None)
+        if (request is not None and memory_auto.sensitive(text)
+                and not memory_auto.explicit_request(request)):
+            return {"error": "Sensible Angaben speichere ich nur auf ausdrückliche Bitte."}
+        return None
+
     def save_memory(self, text: str, topic: str = "") -> dict[str, Any]:
         """Legt eine Textnotiz im Langzeitspeicher ab."""
         from aquaticy.memory import MemoryFull
 
+        refusal = self._memory_write_gate(text)
+        if refusal:
+            return refusal
         store = self._memory()
         if store is None:
             return {
@@ -3483,6 +3840,41 @@ class Toolbox:
         self.stats.memories += 1
         self._emit("memory_save", text=entry.text, topic=entry.topic)
         return {"saved": True, "id": entry.id, "topic": entry.topic}
+
+    def messenger_send(self, messenger: str, text: str) -> dict[str, Any]:
+        """Eine Nachricht in den eigenen WhatsApp/Signal-Chat des Nutzers (15.5.5)."""
+        if self.messenger_sender is None:
+            return {"error": "WhatsApp oder Signal ist hier nicht gekoppelt. Koppeln geht in "
+                             "der App unter Add-ons."}
+        text = str(text or "").strip()
+        if not text:
+            return {"error": "Leere Nachricht."}
+        if len(text) > 3000:
+            return {"error": "Die Nachricht ist zu lang (höchstens 3000 Zeichen)."}
+        messenger = str(messenger or "").strip().lower()
+        if messenger not in ("", "whatsapp", "signal"):
+            return {"error": "messenger bitte whatsapp oder signal."}
+        ergebnis = self.messenger_sender(messenger, text)
+        if not ergebnis.get("error"):
+            self._emit("messenger_send", messenger=ergebnis.get("messenger", messenger))
+        return ergebnis
+
+    def forget_memory(self, entry_id: Any) -> dict[str, Any]:
+        """Loescht eine Notiz -- nur auf Bitte des Nutzers (15.3.4)."""
+        store = self._memory()
+        if store is None:
+            return {"error": "Der Speicher ist abgeschaltet."}
+        try:
+            if isinstance(entry_id, bool) or (isinstance(entry_id, float)
+                                              and not entry_id.is_integer()):
+                raise ValueError
+            nummer = int(entry_id)
+        except (TypeError, ValueError, OverflowError):
+            return {"error": "id bitte als Zahl aus recall_memory."}
+        if nummer <= 0 or not store.forget(nummer):
+            return {"error": "Eine Notiz mit dieser id gibt es nicht."}
+        self._emit("memory_forget", text=f"Notiz {nummer}")
+        return {"deleted": True, "id": nummer}
 
     def recall_memory(self, query: str = "") -> dict[str, Any]:
         """Sucht im Langzeitspeicher."""
@@ -3507,7 +3899,473 @@ class Toolbox:
             ),
         }
 
-    # -- Werkzeug: das eigene Netz ----------------------------------------
+    def secure_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        from aquaticy.secure_chat import DEFENSE, LOCAL, public_query
+
+        if not getattr(self, "secure_mode", False) or self.secure_provider is None:
+            return {"error": "Kein freigegebener Secure-Pro-Chat."}
+        access = self.secure_provider("secure_status", {})
+        if access.get("error"):
+            return access
+        if name == "secure_knowledge":
+            from aquaticy import secure_knowledge
+
+            return secure_knowledge.lookup(str(arguments.get("query", "")))
+        if name in DEFENSE:
+            return self._secure_defense(name, arguments)
+        if name == "secure_nmap":
+            # nmap dauert Minuten und belastet das Netz: hoechstens zwei Laeufe je Nachricht.
+            if self._secure_nmaps >= 2:
+                return {"error": "Höchstens zwei nmap-Prüfungen je Nachricht."}
+            self._secure_nmaps += 1
+            self._emit("note", text="nmap prüft. Das kann einige Minuten dauern.",
+                       text_en="nmap is checking. This can take a few minutes.")
+            return self.secure_provider(name, arguments)
+        if name in LOCAL:
+            if name == "secure_inspect":
+                if self._secure_checks >= 6:
+                    return {"error": "Höchstens sechs gezielte Geräteprüfungen je Nachricht."}
+                self._secure_checks += 1
+            return access if name == "secure_status" else self.secure_provider(name, arguments)
+        if not self.secure_online:
+            return {"error": "Die öffentliche Recherche ist in diesem Chat ausgeschaltet."}
+        if self._secure_dns_full:
+            return {"error": "Zu viele private Netzangaben. Öffne einen neuen Secure-Pro-Chat "
+                             "für weitere öffentliche Recherche."}
+        if name == "secure_advisories":
+            query = str(arguments.get("query", "")).strip()
+            if not public_query(query):
+                return {"error": "Suche nur nach Produkt, Version oder CVE, ohne lokale Adressen "
+                                 "oder private Angaben."}
+            result = self.web_search(query=query + " security advisory CVE", count=5)
+            for item in result.get("results", []):
+                url = str(item.get("url", ""))
+                if url and public_query(url.replace("://", " ")):
+                    self._secure_sources.add(url)
+            return result
+        if name == "secure_read_advisory":
+            url = str(arguments.get("url", ""))
+            if url not in self._secure_sources:
+                return {"error": "Lies nur öffentliche Treffer aus der Sicherheitssuche."}
+            return self.fetch_page(url)
+        return {"error": "Unbekanntes Secure-Pro-Werkzeug."}
+
+    def _secure_defense(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """SSH und Abwehr im Secure-Pro-Chat (14.1.3 Luna).
+
+        Nur mit dem VM-Schalter in den Secure-Pro-Einstellungen, nur im freigegebenen Netz.
+        Die Befehle baut aquaticy/secure_defense.py aus festen Vorlagen; lan_ssh fragt vor
+        jedem Befehl nach dem Ja des Besitzers und prueft den Hostschluessel.
+        """
+        import ipaddress
+
+        from aquaticy import secure_defense
+        from aquaticy.secure_pro import own_addresses
+
+        assert self.secure_provider is not None
+        vm = self.secure_provider("secure_vm", {})
+        if vm.get("ok") is not True:
+            return {"error": str(vm.get("error") or "Secure Pro darf die VM nicht nutzen.")}
+        subnet, router = str(vm.get("subnet", "")), str(vm.get("router", ""))
+        grant = (subnet, router)
+        host = str(arguments.get("host", "")).strip()
+        if name == "secure_ssh":
+            action = arguments.get("action")
+            if action not in ("key", "inspect"):
+                return {"error": "secure_ssh: action key oder inspect."}
+            if action == "key":
+                return self.lan_ssh(action="key", _secure_scope=grant)
+            try:
+                if ipaddress.IPv4Address(host) not in ipaddress.IPv4Network(subnet):
+                    raise ValueError
+            except ValueError:
+                return {"error": "Das Gerät liegt außerhalb des freigegebenen Netzes."}
+            return self.lan_ssh(action="inspect", host=host, port=arguments.get("port", 22),
+                                _secure_scope=grant)
+        try:
+            data = secure_defense.build(
+                str(arguments.get("action", "")), system=str(arguments.get("system") or "linux"),
+                host=host, port=arguments.get("port", 0),
+                proto=str(arguments.get("proto") or "tcp"),
+                address=str(arguments.get("address", "")),
+                service=str(arguments.get("service", "")), subnet=subnet, router=router,
+                own=own_addresses(router))
+            if (data["action"] == "block_port" and data["proto"] == "tcp"
+                    and data["port"] == int(arguments.get("ssh_port", 22))):
+                raise ValueError("Der verwendete SSH-Port darf nicht gesperrt werden.")
+        except (ValueError, TypeError, OverflowError) as exc:
+            return {"error": str(exc)}
+        result = self.lan_ssh(action="run", host=data["host"], user=str(arguments.get("user", "")),
+                              command=data["command"],
+                              server_key=str(arguments.get("server_key", "")),
+                              port=arguments.get("ssh_port", 22), _secure_scope=grant)
+        result["measure"] = data["label"]
+        return result
+
+    # -- GitHub aendern (14.4.4) --------------------------------------------------------------
+    def _github_checkouts(self) -> dict[str, dict[str, Any]]:
+        """Welcher VM-Ordner zu welchem Repo gehoert. Der Rechner merkt es sich, nicht die VM."""
+        pfad = self.settings.data_dir / "github-checkouts.json"
+        try:
+            daten = json.loads(pfad.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return daten if isinstance(daten, dict) else {}
+
+    def _github_checkout_merken(self, ordner: str, eintrag: dict[str, Any] | None) -> None:
+        from aquaticy import private_json
+
+        with _GITHUB_CHECKOUT_LOCK:
+            daten = self._github_checkouts()
+            if eintrag is None:
+                daten.pop(ordner, None)
+            else:
+                daten[ordner] = eintrag
+            private_json.write(self.settings.data_dir / "github-checkouts.json",
+                               dict(list(daten.items())[-50:]))
+
+    def github_write(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Aendern bei GitHub: holen, committen, pushen, Pull Request, Kommentar.
+
+        Jeder Schritt, der etwas bei GitHub aendert, fragt den Nutzer (self._confirm). Der
+        Schluessel geht nie in die VM. Auf den Standard-Branch, ans Mergen und an GitHub
+        Actions geht es nie: Das bleibt beim Menschen auf GitHub.
+        """
+        import httpx
+
+        from aquaticy import addons, github_repo
+        from aquaticy import github_write as gw
+
+        if not addons.active(self.settings, "github"):
+            return {"error": "Das GitHub-Add-on ist aus."}
+        token = addons.github_token(self.settings)
+        if not token:
+            return {"error": "GitHub ist nicht angemeldet. Das macht der Nutzer im "
+                             "Add-on-Fenster."}
+        vorher = addons.load_state(self.settings).get("github")
+        rechte = addons.rights_of(self.settings, "github")
+        darf = addons.github_write_level(rechte)
+        if darf == "nein":
+            return {"error": "Ändern ist im GitHub-Add-on aus (Rechte: Dateien und "
+                             "Änderungen). Das stellt der Nutzer selbst ein."}
+        aktion = str(arguments.get("action") or "").strip().lower()
+        if aktion not in gw.ACTIONS:
+            return {"error": "Aktion: " + ", ".join(gw.ACTIONS) + "."}
+        if aktion != "checkout" and self.ask_handler is None:
+            return {"error": "Hier kann gerade niemand bestätigen. Ohne dein Ja ändert "
+                             "Aquaticy nichts bei GitHub."}
+        from urllib.parse import unquote, urlsplit
+
+        linked_tail = ""
+        raw_target = str(arguments.get("repo") or "")
+        try:
+            repo, linked_ref, _, pull_number = github_repo.target(
+                raw_target, str(arguments.get("ref") or ""))
+            if aktion == "checkout" and not arguments.get("ref"):
+                if pull_number:
+                    return {"error": "Nutze für checkout die Repo- oder Branch-Adresse oder "
+                                     "gib den Kopf-Commit des Pull Requests ausdrücklich "
+                                     "als ref an."}
+                if "://" in raw_target:
+                    parts = urlsplit(raw_target).path.strip("/").split("/")
+                    if len(parts) >= 4 and parts[2] in ("tree", "blob"):
+                        linked_tail = unquote("/".join(parts[3:]))
+        except github_repo.GitHubError as exc:
+            return {"error": str(exc)}
+        if aktion == "checkout" and linked_ref and not arguments.get("ref"):
+            arguments = {**arguments, "ref": linked_ref}
+
+        def gleich_geblieben() -> bool:
+            return (addons.active(self.settings, "github")
+                    and addons.load_state(self.settings).get("github") == vorher)
+
+        def zielbranch(name: str, standard: str) -> str:
+            gw.checked_text(name, "Der Branch-Name", 200)
+            if not gw.valid_branch(name):
+                raise gw.WriteError("Ungültiger Branch-Name.")
+            if name == standard:
+                raise gw.WriteError(
+                    f"Auf den Standard-Branch {standard} schreibt Aquaticy nicht. Nimm einen "
+                    "eigenen Branch und öffne danach einen Pull Request.")
+            return name
+
+        client = httpx.Client(timeout=30, follow_redirects=False)
+        api = gw.Api(client, addons._github_headers(token), addons._takt,
+                     allowed=gleich_geblieben)
+        try:
+            info = api.get(f"/repos/{repo}")
+            canonical = str(info.get("full_name") or repo)
+            if not github_repo.REPO.fullmatch(canonical):
+                raise gw.WriteError("GitHub hat keinen gültigen Repository-Namen geliefert.")
+            repo = canonical
+            if rechte.get("repos") == "oeffentlich" and info.get("private") is not False:
+                return {"error": "Das Repo ist privat. Erlaubt sind nur öffentliche Repos "
+                                 "(Add-on GitHub -> Rechte)."}
+            standard = str(info.get("default_branch") or "main")
+            if aktion == "checkout":
+                if linked_tail:
+                    pieces = linked_tail.split("/")
+                    for count in range(min(len(pieces), 10), 0, -1):
+                        candidate = "/".join(pieces[:count])
+                        try:
+                            gw.resolve(api, repo, candidate)
+                        except gw.Missing:
+                            continue
+                        arguments = {**arguments, "ref": candidate}
+                        break
+                    else:
+                        raise gw.WriteError(
+                            "Der Branch aus der GitHub-Adresse wurde nicht gefunden.")
+                if info.get("private") is not False:
+                    self._github_private = True
+                    self.untrusted_seen = True
+                result = self._github_checkout(api, client, repo, standard, arguments, rechte)
+                result["privat"] = info.get("private") is not False
+                return result
+            if aktion == "push":
+                return self._github_push(api, repo, standard, arguments, darf, zielbranch,
+                                         gleich_geblieben)
+            if aktion == "commit":
+                return self._github_commit(api, repo, standard, arguments, darf, zielbranch,
+                                           gleich_geblieben)
+            if aktion == "branch":
+                name = zielbranch(str(arguments.get("branch") or gw.default_branch_name()),
+                                  standard)
+                basis = str(arguments.get("base") or standard)
+                sha = gw.resolve(api, repo, basis)
+                nein = self._confirm(f"In {repo} den Branch {name} von {basis} anlegen?")
+                if nein:
+                    return {"error": nein}
+                if not gleich_geblieben():
+                    return {"error": "Die GitHub-Freigabe hat sich geändert."}
+                api.send("POST", f"/repos/{repo}/git/refs",
+                         {"ref": f"refs/heads/{name}", "sha": sha})
+                return {"branch": name, "from": basis, "sha": sha}
+            text = str(arguments.get("body") or "")
+            if len(text) > 20_000 or gw.secret_problem("Der Text", text.encode("utf-8")):
+                return {"error": "Der Text ist zu lang oder enthält einen Schlüssel oder ein "
+                                 "Passwort."}
+            if aktion == "pull_request":
+                kopf = str(arguments.get("branch") or "")
+                basis = str(arguments.get("base") or standard)
+                titel = " ".join(gw.checked_text(
+                    arguments.get("title"), "Der Titel", 250).split())
+                if not (gw.valid_branch(kopf) and gw.valid_branch(basis) and titel):
+                    return {"error": "pull_request braucht title, branch (der Kopf) und "
+                                     "optional base."}
+                nein = self._confirm(f"In {repo} einen Pull Request öffnen?\n{kopf} → {basis}\n"
+                                     f"Titel: {titel}\nText:\n{text}")
+                if nein:
+                    return {"error": nein}
+                if not gleich_geblieben():
+                    return {"error": "Die GitHub-Freigabe hat sich geändert."}
+                pr = api.send("POST", f"/repos/{repo}/pulls", {
+                    "title": titel, "head": kopf, "base": basis, "body": text,
+                    "draft": arguments.get("draft") is True})
+                return {"number": pr.get("number"), "url": pr.get("html_url"),
+                        "state": pr.get("state")}
+            nummer = arguments.get("number")
+            if type(nummer) is not int or nummer <= 0:
+                return {"error": "number bitte als ganze Zahl."}
+            if aktion == "comment":
+                if not text.strip():
+                    return {"error": "comment braucht einen Text (body)."}
+                vorschau = text if len(text) <= 600 else text[:600] + " …"
+                nein = self._confirm(f"In {repo} zu #{nummer} kommentieren?\n{vorschau}")
+                if nein:
+                    return {"error": nein}
+                if not gleich_geblieben():
+                    return {"error": "Die GitHub-Freigabe hat sich geändert."}
+                kommentar = api.send("POST", f"/repos/{repo}/issues/{nummer}/comments",
+                                     {"body": text})
+                return {"comment": kommentar.get("id"), "url": kommentar.get("html_url")}
+            return {"error": "Unbekannte Aktion."}
+        except gw.WriteError as exc:
+            return {"error": str(exc)}
+        except httpx.HTTPError as exc:
+            return {"error": f"GitHub nicht erreichbar ({type(exc).__name__})."}
+        except (AttributeError, TypeError, KeyError, ValueError):
+            return {"error": "GitHub hat unerwartet geantwortet."}
+        finally:
+            client.close()
+
+    def _github_vm(self) -> Any:
+        from aquaticy import github_write as gw
+
+        if self.github_vm_ready is None or not self.github_vm_ready():
+            raise gw.WriteError("Dafür braucht es einen Code-Chat mit virtual machine. Ohne "
+                                "VM geht commit mit files.")
+        return self._sandbox()
+
+    def _github_checkout(self, api: Any, client: Any, repo: str, standard: str,
+                         arguments: dict[str, Any], rechte: dict[str, str]) -> dict[str, Any]:
+        import shlex
+        import uuid
+
+        from aquaticy import github_write as gw
+        from aquaticy.addons import github_reads_content
+        from aquaticy.sandbox import SandboxUnavailable
+
+        if not github_reads_content(rechte):
+            return {"error": "Dateiinhalte sind nicht freigegeben (Add-on GitHub -> Rechte)."}
+        ref = str(arguments.get("ref") or standard)
+        ordner = gw.vm_dir(str(arguments.get("dir") or repo.split("/")[1]))
+        try:
+            box = self._github_vm()
+            sha = gw.resolve(api, repo, ref)
+            daten = gw.download_tarball(client, api.headers, repo, sha, check=api.check_allowed)
+            api.check_allowed()
+            archiv = f"/work/.aquaticy-github-{uuid.uuid4().hex[:8]}.tar.gz"
+            gelegt = box.put_bytes(archiv, daten)
+            if gelegt.get("error"):
+                return {"error": str(gelegt["error"])}
+            aus = box.run(shlex.join(["python3", "-c", gw.EXTRACT, archiv, ordner]), timeout=300)
+            if aus.exit_code == 3:
+                box.run(shlex.join(["rm", "-f", archiv]), timeout=30)
+                return {"error": f"Den Ordner {ordner} gibt es schon. Nimm einen anderen "
+                                 "Namen (dir) oder lösche ihn selbst."}
+            if aus.exit_code != 0:
+                return {"error": "Das Archiv ließ sich in der VM nicht auspacken."}
+            api.check_allowed()
+            liste = box.run(shlex.join(["python3", "-c", gw.MANIFEST, ordner,
+                                        json.dumps(list(gw.SKIP)), "write"]), timeout=300)
+            if liste.exit_code != 0:
+                return {"error": "Die Dateiliste in der VM ließ sich nicht anlegen."}
+            anzahl = gw.parse_helper(liste.stdout).get("files")
+            api.check_allowed()
+        except SandboxUnavailable as exc:
+            return {"error": str(exc)}
+        self.stats.vm_calls += 1
+        # Weitergefuehrt wird nur ein echter Branch -- nie ein Tag oder Commit-SHA.
+        weiter = ref if ref != standard and gw.branch_head(api, repo, ref) else ""
+        self._github_checkout_merken(ordner, {"repo": repo, "ref": ref, "sha": sha,
+                                              "branch": weiter})
+        return {"dir": ordner, "repo": repo, "ref": ref, "sha": sha, "files": anzahl,
+                "note": "Ändere und teste die Dateien mit vm_run und vm_write. Danach "
+                        "github_write action=push mit dir und einer Nachricht."}
+
+    def _github_push(self, api: Any, repo: str, standard: str, arguments: dict[str, Any],
+                     darf: str, zielbranch: Callable[[str, str], str],
+                     gleich_geblieben: Callable[[], bool]) -> dict[str, Any]:
+        import shlex
+
+        from aquaticy import github_write as gw
+        from aquaticy.sandbox import SandboxUnavailable
+
+        ordner = gw.vm_dir(str(arguments.get("dir") or repo.split("/")[1]))
+        eintrag = self._github_checkouts().get(ordner)
+        if not isinstance(eintrag, dict) or eintrag.get("repo") != repo:
+            return {"error": f"{ordner} wurde nicht mit checkout aus {repo} geholt. Hole das "
+                             "Repo zuerst mit github_write action=checkout."}
+        branch = zielbranch(str(arguments.get("branch") or eintrag.get("work_branch")
+                                or eintrag.get("branch") or gw.default_branch_name()), standard)
+        nachricht = gw.checked_text(arguments.get("message"), "Die Commit-Nachricht", 4000)
+        if not nachricht:
+            return {"error": "push braucht eine Commit-Nachricht (message)."}
+        try:
+            box = self._github_vm()
+            diff = box.run(shlex.join(["python3", "-c", gw.MANIFEST, ordner,
+                                       json.dumps(list(gw.SKIP)), "diff"]), timeout=300)
+            if diff.exit_code != 0:
+                return {"error": "Die Änderungen in der VM ließen sich nicht ermitteln."}
+            liste = gw.parse_helper(diff.stdout).get("changes")
+            if not isinstance(liste, list):
+                return {"error": "Die VM hat unerwartet geantwortet."}
+            if len(liste) > gw.MAX_FILES:
+                return {"error": f"Mehr als {gw.MAX_FILES} geänderte Dateien. Übertrage in "
+                                 "kleineren Schritten oder räume Build-Dateien auf."}
+            aenderungen: list[dict[str, Any]] = []
+            for item in liste:
+                pfad = str(item.get("path") or "")
+                if not gw.valid_repo_path(pfad):
+                    return {"error": f"Ungültiger Pfad in der VM: {pfad[:120]}"}
+                daten = None
+                if item.get("status") != "gelöscht":
+                    daten = box.get_bytes(f"{ordner}/{pfad}", gw.MAX_FILE_BYTES)
+                aenderungen.append({"path": pfad, "data": daten,
+                                    "status": str(item.get("status") or ""),
+                                    "mode": "100755" if item.get("mode") == "100755"
+                                    else "100644"})
+            gw.check_changes(aenderungen, workflows_allowed=darf == "alles")
+        except (SandboxUnavailable, FileNotFoundError) as exc:
+            return {"error": str(exc)}
+        nein = self._confirm(self._github_frage(repo, branch, nachricht, aenderungen,
+                                                gw.branch_head(api, repo, branch) == ""))
+        if nein:
+            return {"error": nein}
+        if not gleich_geblieben():
+            return {"error": "Die GitHub-Freigabe hat sich geändert."}
+        ergebnis = gw.commit(api, repo, branch, nachricht, aenderungen,
+                             parent=str(eintrag.get("sha") or ""))
+        self._github_checkout_merken(ordner, {**eintrag, "sha": ergebnis["commit"],
+                                              "work_branch": branch})
+        import hashlib
+
+        acknowledged = {
+            change["path"]: ([hashlib.sha1(
+                b"blob %d\0" % len(change["data"]) + change["data"],
+                usedforsecurity=False).hexdigest(), change["mode"], len(change["data"])]
+                if change["data"] is not None else None)
+            for change in aenderungen}
+        saved = box.run(shlex.join(["python3", "-c", gw.MANIFEST, ordner,
+                                    json.dumps(list(gw.SKIP)), "ack", json.dumps(acknowledged)]),
+                        timeout=300)
+        ergebnis["note"] = ("Gepusht. Einen Pull Request öffnest du mit github_write "
+                            "action=pull_request.")
+        if saved.exit_code != 0:
+            ergebnis["note"] += (" Die lokale Dateiliste konnte nicht aktualisiert werden. "
+                                 "Hole das Repo vor dem nächsten Push neu.")
+        return ergebnis
+
+    def _github_commit(self, api: Any, repo: str, standard: str, arguments: dict[str, Any],
+                       darf: str, zielbranch: Callable[[str, str], str],
+                       gleich_geblieben: Callable[[], bool]) -> dict[str, Any]:
+        from aquaticy import github_write as gw
+
+        dateien = arguments.get("files")
+        if not isinstance(dateien, list) or not 1 <= len(dateien) <= 20:
+            return {"error": "commit braucht files mit 1 bis 20 Einträgen."}
+        aenderungen: list[dict[str, Any]] = []
+        for datei in dateien:
+            if not isinstance(datei, dict):
+                return {"error": "Jeder Eintrag in files braucht path und content."}
+            pfad = str(datei.get("path") or "").strip()
+            if datei.get("delete") is True:
+                aenderungen.append({"path": pfad, "data": None, "status": "gelöscht"})
+                continue
+            inhalt = datei.get("content")
+            if not isinstance(inhalt, str):
+                return {"error": f"{pfad[:120]}: content fehlt."}
+            aenderungen.append({"path": pfad, "data": inhalt.encode("utf-8"),
+                                "status": "geändert"})
+        gw.check_changes(aenderungen, workflows_allowed=darf == "alles")
+        branch = zielbranch(str(arguments.get("branch") or gw.default_branch_name()), standard)
+        nachricht = gw.checked_text(arguments.get("message"), "Die Commit-Nachricht", 4000)
+        if not nachricht:
+            return {"error": "commit braucht eine Commit-Nachricht (message)."}
+        kopf = gw.branch_head(api, repo, branch)
+        eltern = kopf or gw.resolve(api, repo, str(arguments.get("base") or standard))
+        nein = self._confirm(self._github_frage(repo, branch, nachricht, aenderungen,
+                                                not kopf))
+        if nein:
+            return {"error": nein}
+        if not gleich_geblieben():
+            return {"error": "Die GitHub-Freigabe hat sich geändert."}
+        return gw.commit(api, repo, branch, nachricht, aenderungen, parent=eltern)
+
+    @staticmethod
+    def _github_frage(repo: str, branch: str, nachricht: str, aenderungen: list[dict[str, Any]],
+                      neu: bool) -> str:
+        zeilen = [f"{c.get('status') or 'geändert'}: {c['path']}" for c in aenderungen[:15]]
+        if len(aenderungen) > 15:
+            zeilen.append(f"… und {len(aenderungen) - 15} weitere")
+        warnung = ("\nAchtung: ändert GitHub Actions (.github/workflows)."
+                   if any(c["path"].startswith(".github/workflows/") for c in aenderungen)
+                   else "")
+        return (f"In {repo} auf {'den neuen ' if neu else ''}Branch {branch} committen und "
+                f"pushen ({len(aenderungen)} Dateien)?\nNachricht: {nachricht[:300]}\n"
+                + "\n".join(zeilen) + warnung)
+
     def lan_scan(self, subnet: str = "", thorough: bool = False) -> dict[str, Any]:
         """Sieht nach, welche Geraete im Heimnetz erreichbar sind."""
         from aquaticy.lan import NotPrivate, scan
@@ -3589,7 +4447,6 @@ class Toolbox:
             }
         return {"host": host, "reachable": True, **device.as_dict()}
 
-    # -- Werkzeug: Home Assistant -----------------------------------------
     def ha_states(self, search: str = "", domain: str = "") -> dict[str, Any]:
         """Liest Zustaende aus Home Assistant."""
         from aquaticy.homeassistant import MAX_ENTITIES, HomeAssistantError, from_settings
@@ -3669,15 +4526,10 @@ class Toolbox:
                 )
             }
         try:
-            # Vor der Rueckfrage: Dienst und Ziel muessen zum Bereich passen
-            # (seit 9.5.16 -- "light" mit "../lock/unlock" war ein Schloss).
             check_call(domain, service, entity_id, data)
         except HomeAssistantError as exc:
             return {"error": str(exc)}
 
-        # Schloesser, Alarmanlagen, Tore, Heizungen: hier wird nachgefragt,
-        # auch wenn Schalten erlaubt ist. Ein missverstandener Satz soll nicht
-        # die Haustuer aufschliessen.
         if domain in PROTECTED_DOMAINS:
             target = entity_id or domain
             if self.ask_handler is None:
@@ -3710,7 +4562,6 @@ class Toolbox:
             "changed": len(changed),
         }
 
-    # -- Werkzeug 6: Rueckfrage (nur fuer den Hauptagenten) ---------------
     def ask_user(self, question: str = "", options: Any = None,
                  questions: Any = None) -> dict[str, Any]:
         """Fragt beim Nutzer nach und wartet auf die Antwort -- auch auf mehrere.
@@ -3746,7 +4597,6 @@ class Toolbox:
         gesamt = len(fragen)
         antworten: list[dict[str, str]] = []
         for nummer, (frage, choices) in enumerate(fragen, start=1):
-            # Zaehler nur bei einer Reihe: eine einzelne Frage bleibt, wie sie war.
             zaehler = {"index": nummer, "total": gesamt} if gesamt > 1 else {}
             self._emit("ask", question=frage, options=choices, **zaehler)
             begonnen = time.monotonic()
@@ -3759,7 +4609,7 @@ class Toolbox:
             self._emit("ask_done", question=frage, answer=antwort, **zaehler)
             antworten.append({"question": frage, "answer": antwort})
             if not antwort and time.monotonic() - begonnen >= ASK_GAVE_UP_AFTER:
-                break  # Wartezeit abgelaufen: nicht auch noch die naechste Frage stellen
+                break
         gegeben = [a for a in antworten if a["answer"]]
         if not gegeben:
             return {
@@ -3801,7 +4651,6 @@ class Toolbox:
                 liste.append((text, optionen(wahl)))
         return liste[:MAX_BATCH]
 
-    # -- Werkzeug 7 (nur fuer den Hauptagenten) ---------------------------
     def research_subtasks(self, tasks: Any) -> dict[str, Any]:
         """Gibt Teilfragen an parallele Subagenten ab."""
         if self.subagent_runner is None:

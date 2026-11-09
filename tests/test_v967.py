@@ -49,8 +49,8 @@ def test_no_retroactive_learning_and_explicit_current_consent(learners):
             first.set_consent(enabled, version)
     first.set_consent(True, LEGAL_VERSION)
     assert contribute(first) == 1
-    # 9.6.8 Sol: das eigene Konto sieht den Auszug sofort, andere erst nach
-    # einer unabhaengigen Bestaetigung durch ein zweites Konto.
+
+
     assert first.recall(QUESTION) == [{"text": FACT, "source": SOURCE}]
     assert second.recall(QUESTION) == []
     assert contribute(first) == 0
@@ -61,7 +61,7 @@ def test_no_retroactive_learning_and_explicit_current_consent(learners):
     third.set_consent(True, LEGAL_VERSION)
     assert contribute(third) == 1
     assert second.recall(QUESTION) == [{"text": FACT, "source": SOURCE}]
-    assert not second.status()["enabled"]  # Reading does not grant contribution consent.
+    assert not second.status()["enabled"]
 
 
 def test_encrypted_data_and_blind_search_index(learners):
@@ -206,7 +206,7 @@ def test_agent_shares_after_safety_check_and_marks_recalled_material(settings, m
     try:
         agent.toolbox.learning_ticket = store.ticket()
         agent.toolbox.stats.learning_pages = [(SOURCE, FACT)]
-        monkeypatch.setattr(agent, "_check_answer", lambda result: None)
+        monkeypatch.setattr(agent, "_check_answer", lambda result, question="": None)
         agent._finish(AgentResult(answer=FACT), QUESTION)
         assert store.recall(QUESTION)
         context = agent._with_context(QUESTION)
@@ -219,7 +219,7 @@ def test_agent_shares_after_safety_check_and_marks_recalled_material(settings, m
         agent.toolbox.learning_ticket = store.ticket()
         agent.toolbox.stats.learning_pages = [(SOURCE, FACT)]
         monkeypatch.setattr(
-            agent, "_check_answer", lambda result: setattr(result, "answer", "Nein."))
+            agent, "_check_answer", lambda result, question="": setattr(result, "answer", "Nein."))
         agent._finish(AgentResult(answer=FACT), QUESTION)
         assert not store.recall(QUESTION)
     finally:
@@ -245,13 +245,13 @@ def test_real_chat_turn_then_another_account_uses_shared_knowledge(
                           _message(content=FACT))
 
     def completion(**kwargs):
-        # Consent changed during a turn does not authorize its earlier text.
+
         if not first.ticket():
             first.set_consent(True, LEGAL_VERSION)
         return scripted(**kwargs)
 
     monkeypatch.setattr("litellm.completion", completion)
-    monkeypatch.setattr("aquaticy.aiguard.answer_problem", lambda *args: None)
+    monkeypatch.setattr("aquaticy.aiguard.answer_problem", lambda *args, **kwargs: None)
     box = Toolbox(own_settings, fetcher=Fetcher())
     agent = Agent(own_settings, toolbox=box)
     agent.learning = first
@@ -259,8 +259,8 @@ def test_real_chat_turn_then_another_account_uses_shared_knowledge(
         assert agent.ask(QUESTION, stream=False).answer == FACT
         assert not second.recall(QUESTION)
         assert agent.ask(QUESTION, stream=False).answer == FACT
-        assert first.recall(QUESTION)  # der eigene Beitrag gilt sofort
-        assert not second.recall(QUESTION)  # fuer andere erst nach Bestaetigung (9.6.8 Sol)
+        assert first.recall(QUESTION)
+        assert not second.recall(QUESTION)
         drittes = auth.register("person8@example.org", "ein-test-passwort", "normal",
                                 terms_accepted=True, terms_version="old")
         third = Learning(auth.profile_dir(drittes.id))
@@ -290,7 +290,7 @@ def test_stopped_or_failed_runs_do_not_contribute(settings, monkeypatch, stopped
     store.set_consent(True, LEGAL_VERSION)
     agent = Agent(settings)
     agent.learning = store
-    monkeypatch.setattr(agent, "_check_answer", lambda result: None)
+    monkeypatch.setattr(agent, "_check_answer", lambda result, question="": None)
     try:
         agent.toolbox.learning_ticket = store.ticket()
         agent.toolbox.stats.learning_pages = [(SOURCE, FACT)]
@@ -306,7 +306,7 @@ def test_consent_and_knowledge_replicate_with_authenticated_cluster(tmp_path):
     first = Learning(tmp_path / "first")
     second = Learning(tmp_path / "second")
     shutil.copyfile(tmp_path / "first" / "data.key", tmp_path / "second" / "data.key")
-    # Key caches are installation-bound; construct the peer only after key adoption.
+
     from aquaticy import privacy
 
     privacy._masters.pop(str((tmp_path / "second").resolve()), None)
@@ -396,10 +396,11 @@ def test_browser_learning_controls_and_batched_renderer(parallel_site):
             playwright.expect(toggle).not_to_be_checked()
             toggle.check()
             playwright.expect(page.locator("#learning-status")).to_contain_text(
-                "Zustimmung gespeichert")
+                "Gespeichert. Ab jetzt helfen nur neue Chats mit.")
             assert client.get("/api/learning").json()["enabled"]
             toggle.uncheck()
-            playwright.expect(page.locator("#learning-status")).to_contain_text("widerrufen")
+            playwright.expect(page.locator("#learning-status")).to_contain_text(
+                "Zustimmung zurückgenommen. Deine Beiträge sind gelöscht.")
             assert not client.get("/api/learning").json()["enabled"]
             result = page.evaluate("""() => {
               const oldRAF = window.requestAnimationFrame, oldCancel = window.cancelAnimationFrame;

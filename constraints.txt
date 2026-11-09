@@ -1,12 +1,3 @@
-# Aquaticy 12.4.4 Sol -- feste Abhaengigkeiten fuer reproduzierbare Builds.
-#
-# Reproduzierbar installieren:
-#   pip install -c constraints.txt -e ".[browser,dev]"
-#   uv pip install -c constraints.txt -e ".[browser,dev]"
-#
-# Neu erzeugen (nach einem Update und einem gruenen Testlauf):
-#   uv pip compile pyproject.toml --extra browser --extra dev --python-version 3.11 \
-#       --no-annotate -o constraints.txt
 aiohappyeyeballs==2.7.1
 aiohttp==3.14.4
 aiosignal==1.4.0
@@ -28,7 +19,7 @@ dateparser==1.4.3
 ddgs==9.16.0
 distro==1.9.0
 fastuuid==0.14.0
-filelock==4.0.1
+filelock==4.2.4
 frozenlist==1.8.0
 fsspec==2026.9.0
 greenlet==3.5.6
@@ -48,7 +39,7 @@ jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 justext==3.0.2
 librt==0.12.0
-litellm==1.102.1
+litellm==1.102.2
 lxml==6.1.3
 lxml-html-clean==0.4.5
 markdown-it-py==4.2.0
@@ -70,7 +61,7 @@ pydantic-core==2.46.5
 pydantic-settings==2.15.0
 pyee==13.0.1
 pygments==2.21.0
-pypdf==6.19.0
+pypdf==6.21.4
 pytest==9.1.1
 pytest-asyncio==1.4.0
 python-dateutil==2.9.0.post0
@@ -102,3 +93,19 @@ tzlocal==5.4.4
 urllib3==2.8.0
 yarl==1.25.1
 zipp==4.1.0
+pillow==13.0.0
+zxing-cpp==3.1.1
+beautifulsoup4==4.15.0
+linkpreview==0.13.2
+neonize==0.5.2
+phonenumbers==9.0.42
+protobuf==7.36.2
+python-magic==0.4.27
+segno==1.6.6
+soupsieve==3.0.4
+av==18.1.0
+ctranslate2==4.8.5
+faster-whisper==1.2.1
+flatbuffers==25.12.19
+numpy==2.3.5
+onnxruntime==1.31.1

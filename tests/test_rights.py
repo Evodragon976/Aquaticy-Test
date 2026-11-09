@@ -35,10 +35,10 @@ def _an(konto: Settings, *ids: str) -> None:
         addons._update(konto, addon_id, installed=True, enabled=True)
 
 
-# -- Katalog und Speicher ----------------------------------------------------------
+
 def test_every_addon_has_simple_rights() -> None:
-    # NVIDIA NIM und Mistral (12.0.0 Luna) liefern Modelle, keine Werkzeuge --
-    # es gibt nichts, was Aquaticy dort in deinem Namen tun koennte.
+
+
     assert not any(addon_id in addons.RIGHTS for addon_id in addons.MODEL_ADDONS)
     for addon_id in set(addons.CATALOG) - addons.MODEL_ADDONS:
         rechte = addons.RIGHTS[addon_id]
@@ -71,9 +71,9 @@ def test_a_broken_state_falls_back_to_the_default(konto: Settings) -> None:
 
 
 def test_the_window_shows_rights_with_their_dependency(konto: Settings) -> None:
-    _an(konto, "telegram")
+    _an(konto, "signal")
     ansicht = next(a for a in addons.public_view(konto, pro=True)["addons"]
-                   if a["id"] == "telegram")
+                   if a["id"] == "signal")
     assert ansicht["rechte"] == {"zugriff": "lesen", "wo": "einzeln"}
     wo = next(r for r in ansicht["rechte_katalog"] if r["key"] == "wo")
     assert wo["nur_wenn"] == ["zugriff", "schreiben"]
@@ -90,7 +90,7 @@ def test_the_prompt_knows_the_rights(konto: Settings) -> None:
     assert "Lesen und schreiben; Schreiben in: Nur Einzelchats" in addons.prompt_for(konto)
 
 
-# -- GitHub -------------------------------------------------------------------------
+
 def _github(antworten: dict[str, Any], gefragt: list[httpx.Request]) -> httpx.Client:
     def handler(anfrage: httpx.Request) -> httpx.Response:
         gefragt.append(anfrage)
@@ -133,6 +133,7 @@ def test_overview_only_reads_no_file_contents() -> None:
 
     gefragt: list[httpx.Request] = []
     client = _github({
+        "/repos/a/b/contents/": [{"name": "src", "type": "dir"}],
         "/repos/a/b/contents/src": [{"name": "x.py", "type": "file", "size": 3}],
         "/repos/a/b/contents/src/x.py": {"encoding": "base64", "size": 3,
                                           "content": base64.b64encode(b"geheim").decode()},
@@ -143,6 +144,7 @@ def test_overview_only_reads_no_file_contents() -> None:
     datei = addons.github_call(TOKEN, "datei", repo="a/b", path="src/x.py", client=client,
                                inhalte=False)
     assert "text" not in datei and "geheim" not in json.dumps(datei)
+    assert all(r.url.path != "/repos/a/b/contents/src/x.py" for r in gefragt)
 
 
 def test_the_toolbox_passes_the_github_rights(konto: Settings,
@@ -162,7 +164,7 @@ def test_the_toolbox_passes_the_github_rights(konto: Settings,
     assert gesehen["nur_oeffentlich"] is True and gesehen["inhalte"] is False
 
 
-# -- Wetter und Feeds ------------------------------------------------------------------
+
 def test_weather_can_be_limited_to_my_place(konto: Settings,
                                             monkeypatch: pytest.MonkeyPatch) -> None:
     from aquaticy.tools import Toolbox
@@ -197,7 +199,7 @@ def test_feeds_never_return_more_than_allowed(konto: Settings,
     assert grenzen == [10, 10]
 
 
-# -- Blender -----------------------------------------------------------------------
+
 def test_blender_scripts_only_keeps_the_window_closed(konto: Settings) -> None:
     _an(konto, "blender")
     assert "blender" in addons.desktop_apps(konto)
@@ -210,7 +212,7 @@ def test_blender_scripts_only_keeps_the_window_closed(konto: Settings) -> None:
     assert "blender_run" in [s["function"]["name"] for s in vm_schemas_for(konto)]
 
 
-# -- Messenger im Desktop --------------------------------------------------------------
+
 class Box:
     """Die virtual machine: vorn ist das Fenster, das der Test will."""
 
@@ -274,7 +276,7 @@ def test_read_only_types_and_sends_nothing(konto: Settings) -> None:
     auge.art = "senden"
     assert desktop.click(target="Senden")["skipped_reason"] == "messenger_read_only"
     assert box.handgriffe() == [] and gefragt == [], "weder gehandelt noch gefragt"
-    # Lesen geht: blaettern und harmlose Klicks.
+
     assert desktop.key("Page_Down")["gedrueckt"] == ["Page_Down"]
     auge.art = "harmlos"
     assert desktop.click(target="Chat Mama")["geklickt"] == [900, 700]
@@ -299,9 +301,9 @@ def test_single_chats_only_refuses_groups_and_unclear_chats(konto: Settings) -> 
 
 
 def test_groups_allowed_still_asks_before_sending(konto: Settings) -> None:
-    _an(konto, "telegram")
-    addons.set_rights(konto, "telegram", {"zugriff": "schreiben", "wo": "alle"})
-    box = Box(klasse="Navigator.aquaticy-telegram", titel="Telegram Web")
+    _an(konto, "signal")
+    addons.set_rights(konto, "signal", {"zugriff": "schreiben", "wo": "alle"})
+    box = Box(klasse="signal.Signal", titel="Signal")
     desktop, gefragt = _desktop(konto, box, Auge(art="senden", gruppe=True), ["nein"])
     assert desktop.type("Hallo zusammen")["getippt"] == 14
     assert desktop.key("Return")["done"] is False
@@ -311,7 +313,8 @@ def test_groups_allowed_still_asks_before_sending(konto: Settings) -> None:
 def test_a_messenger_outside_its_addon_gets_the_strictest_rights(konto: Settings) -> None:
     _an(konto, "whatsapp")
     addons.set_rights(konto, "whatsapp", {"zugriff": "schreiben", "wo": "alle"})
-    # Telegram ist nicht eingeschaltet -- sein Fenster (etwa im Browser) gilt als "Nur lesen".
+
+
     box = Box(klasse="Falkon Browser.Falkon", titel="Telegram Web - Falkon")
     desktop, _ = _desktop(konto, box, Auge())
     assert desktop.type("x")["skipped_reason"] == "messenger_read_only"
@@ -343,11 +346,11 @@ def test_other_windows_are_not_affected(konto: Settings) -> None:
     ],
 )
 def test_messenger_windows_are_recognised(klasse: str, titel: str, erwartet: str) -> None:
-    # Im Zweifel eher als Messenger erkannt -- das ist die strengere Seite.
+
     assert addons.messenger_of(klasse, titel) == erwartet
 
 
-# -- Das Fenster im Web -----------------------------------------------------------------
+
 def test_changing_rights_keeps_the_workshop_running(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

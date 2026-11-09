@@ -6,9 +6,9 @@ import contextlib
 import difflib
 import os
 import re
+import subprocess
 import sys
 import threading
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +16,10 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from aquaticy import VERSION_LABEL
+from aquaticy import zeit as deutsche_zeit
 from aquaticy.cache import Cache
 from aquaticy.config import (
     DEFAULT_ENV_PATH,
@@ -42,9 +44,7 @@ app = typer.Typer(
 )
 console = Console()
 
-#: Aquaticy ist auf zwei Anbieter spezialisiert -- mehr dazu in
-#: `aquaticy/system.py`. Lokal bleibt lokal: Ollama ist kein Anbieter, sondern
-#: der Weg, ganz ohne einen auszukommen.
+
 MODEL_PRESETS: list[tuple[str, str]] = [
     ("mistral/mistral-large-latest", "Mistral Large – schnell, Server in der EU"),
     ("nvidia_nim/nvidia/llama-3.3-nemotron-super-49b-v1.5",
@@ -52,23 +52,16 @@ MODEL_PRESETS: list[tuple[str, str]] = [
     ("ollama_chat/qwen2.5:7b", "Lokal via Ollama – kein API-Key nötig"),
 ]
 
-#: Position des lokalen Modells in MODEL_PRESETS (1-basiert).
+
 LOCAL_CHOICE = 3
 
-#: Modelle ohne Tool-Calling koennen den Agenten nicht fahren -- darauf
-#: weisen wir bei der Einrichtung hin.
+
 TOOL_CALL_WARNING = (
     "Das Modell muss Tool-Calling (Function Calling) beherrschen – sonst kann "
     "der Agent weder suchen noch Seiten lesen."
 )
 
 
-# ---------------------------------------------------------------------------
-# setup
-# ---------------------------------------------------------------------------
-# Die Testanfragen selbst stehen in aquaticy/probe.py -- die Web-Einstellungen
-# pruefen mit demselben Code, und zwei Fassungen desselben Tests waeren eine
-# zu viel.
 _probe_llm = check_llm
 _probe_search = check_search
 
@@ -80,11 +73,17 @@ def setup_command(
     ),
     no_probe: bool = typer.Option(False, "--no-probe", help="Keine Testanfragen schicken."),
     yes: bool = typer.Option(
-        False, "--yes", "-y", help="Lokale Einrichtung ohne Rückfragen, auch beim Dienstneustart."
+        False, "--yes", "-y", help="Lokale Installation und Modellauswahl vorab bestätigen."
     ),
     ollama: bool = typer.Option(
-        True, "--ollama/--no-ollama", help="Ollama mit Parallelbetrieb direkt einrichten."
+        True, "--ollama/--no-ollama", help="Ollama bei Bedarf installieren und starten."
     ),
+    accounts: bool | None = typer.Option(
+        None, "--accounts/--no-accounts",
+        help="Kontensystem für mehrere Nutzer. Standard: aus (ein Konto, Ultra)."
+    ),
+    voice: bool = typer.Option(False, "--voice", help="Lokale Sprachnachrichten einrichten."),
+    secure_pro: bool = typer.Option(False, "--secure-pro", help="Secure Pro einrichten."),
 ) -> None:
     """Ersteinrichtung: Modell, Schlüssel und auf Wunsch eine eigene Domain."""
     load_env()
@@ -104,7 +103,6 @@ def setup_command(
                           "Für reinen Cloudbetrieb: aquaticy setup --no-ollama.[/yellow]")
             raise typer.Exit(code=1)
 
-    # -- LLM ---------------------------------------------------------------
     console.print("\n[bold]1. LLM-Anbieter[/bold]")
     local_api_base = ""
     table = Table(show_header=False, box=None, pad_edge=False)
@@ -120,16 +118,13 @@ def setup_command(
             "Modell-ID im LiteLLM-Format, z.B. nvidia_nim/nvidia/llama-3.3-nemotron-super-49b-v1.5"
         )
     elif choice.strip() == str(LOCAL_CHOICE):
-        # Lokales Modell: installieren, laden, pruefen -- danach ist der
-        # LLM-Teil erledigt und es geht direkt zur Suchmaschine weiter.
         local_id = _run_local_setup(assume_yes=yes, ollama_ready=ollama_ready)
         if not local_id:
             console.print("[yellow]Lokale Einrichtung abgebrochen.[/yellow]")
             raise typer.Exit(code=1)
-        from aquaticy.local_model import DEFAULT_OLLAMA_URL
 
         model = local_id
-        local_api_base = DEFAULT_OLLAMA_URL
+        local_api_base = _ollama_basis()
     else:
         try:
             model = MODEL_PRESETS[int(choice) - 1][0]
@@ -152,7 +147,6 @@ def setup_command(
     if local_api_base:
         console.print("  [dim]Läuft lokal – kein API-Key nötig.[/dim]")
     elif key_name:
-        # Seit 12.0.0 Luna gibt es API-Schluessel nur ueber Add-ons (NVIDIA NIM, Mistral).
         current = os.environ.get(key_name, "")
         api_key = current
         console.print("  [dim]Den Schlüssel verknüpfst du in der Weboberfläche "
@@ -166,7 +160,6 @@ def setup_command(
             "API-Basis-URL (leer lassen für Default)", default=default_base
         ).strip()
 
-    # -- Suche -------------------------------------------------------------
     console.print("\n[bold]2. Suchmaschine[/bold]")
     console.print(
         "  [cyan]1[/cyan] offene Metasuche  [green]kein Key[/green] "
@@ -193,10 +186,7 @@ def setup_command(
     searxng_url = ""
 
     if backend == "duckduckgo":
-        console.print(
-            "  [dim]Fragt mehrere offene Suchmaschinen an und mischt die Treffer. "
-            "Fällt eine aus, übernehmen die anderen.[/dim]"
-        )
+        console.print("  [dim]Mischt die Treffer mehrerer offener Suchmaschinen.[/dim]")
         engines = typer.prompt(
             f"  Engines einschränken? ({', '.join(OPEN_ENGINES)}) – leer = alle",
             default="",
@@ -219,34 +209,24 @@ def setup_command(
             backend_key_name, default=current, hide_input=not current
         ).strip()
 
-    # -- Subagenten ---------------------------------------------------------
-    console.print("\n[bold]3. Subagenten[/bold]")
-    console.print(
-        "  [dim]Aquaticy AI kann jede Anfrage in Teilfragen zerlegen und parallel "
-        "recherchieren.\n  Das ist gründlicher, kostet aber mehr Aufrufe.[/dim]"
-    )
-    subagents_on = typer.confirm("  Subagenten automatisch nutzen?", default=True)
-
-    # -- Ort ---------------------------------------------------------------
-    console.print("\n[bold]4. Voreinstellungen[/bold]")
+    # Die Agenten (Fragen aufteilen) sind ab 14.1.3 Luna immer an. Ausschalten geht in der
+    # Weboberflaeche unter Einstellungen -> Helfer & Grenzen.
+    console.print("\n[bold]3. Voreinstellungen[/bold]")
     location = typer.prompt("Standard-Ort (optional, z.B. Mönchengladbach)", default="").strip()
     lang = typer.prompt("Sprache (ISO-Code)", default="de").strip() or "de"
     country = typer.prompt("Land (ISO-Code)", default="de").strip() or "de"
 
-    # -- Website -----------------------------------------------------------
-    console.print("\n[bold]5. Eigene Website[/bold] [dim](optional)[/dim]")
+    console.print("\n[bold]4. Eigene Website[/bold] [dim](optional)[/dim]")
     website_values = _ask_website(no_probe=no_probe)
 
-    # -- Proben ------------------------------------------------------------
     if not no_probe:
-        console.print("\n[bold]6. Verbindungstest[/bold]")
+        console.print("\n[bold]5. Verbindungstest[/bold]")
         if api_key:
             os.environ[key_name] = api_key
         if backend_key:
             os.environ[backend_key_name] = backend_key
 
         if key_name and not api_key:
-            # Ohne verknuepften Schluessel gibt es noch nichts zu testen.
             llm_ok, llm_msg = True, "noch kein Schlüssel — erst unter Add-ons verknüpfen"
             console.print(f"  [yellow]--[/yellow]  LLM: {llm_msg}")
         else:
@@ -262,22 +242,18 @@ def setup_command(
 
         if not (llm_ok and search_ok):
             console.print(
-                "\n[yellow]Mindestens ein Test ist fehlgeschlagen.[/yellow] "
-                "Die Konfiguration wird trotzdem gespeichert – du kannst sie jederzeit "
-                "mit [bold]aquaticy setup[/bold] korrigieren."
+                "\n[yellow]Ein Test ist fehlgeschlagen.[/yellow] Gespeichert wird trotzdem. "
+                "Ändern: [bold]aquaticy setup[/bold]."
             )
 
-    # -- Schreiben ---------------------------------------------------------
     values: dict[str, str] = {
         "AQUATICY_MODEL": model,
         "AQUATICY_SEARCH_BACKEND": backend,
         "AQUATICY_LOCATION": location,
         "AQUATICY_LANG": lang,
         "AQUATICY_COUNTRY": country,
-        "AQUATICY_SUBAGENTS_AUTO": "true" if subagents_on else "false",
+        "AQUATICY_SUBAGENTS_AUTO": "true",
     }
-    if ollama_ready:
-        values["OLLAMA_NUM_PARALLEL"] = os.environ.get("OLLAMA_NUM_PARALLEL", "2")
     if backend_key_name and backend_key:
         values[backend_key_name] = backend_key
     if engines:
@@ -287,9 +263,28 @@ def setup_command(
     if api_base:
         values["AQUATICY_API_BASE"] = api_base
     values.update(website_values)
+    if accounts is None:
+        console.print("\n[bold]Konten[/bold]")
+        console.print("  [dim]Ohne Kontensystem gibt es ein Konto: deins, mit allen Rechten "
+                      "(Ultra).[/dim]")
+        accounts = False if yes else typer.confirm(
+            "  Kontensystem für mehrere Nutzer einschalten?", default=False)
+    values["AQUATICY_ACCOUNTS"] = "true" if accounts else "false"
+    run_background = False if yes else typer.confirm(
+        "Soll die Weboberfläche im Hintergrund über Heimnetz und Tailscale erreichbar bleiben?",
+        default=False)
+    values["AQUATICY_BACKGROUND"] = "true" if run_background else "false"
 
     written = write_env_file(values, target)
+    load_env(written, override=True)
     reset_settings_cache()
+    if voice is True:
+        _setup_voice(assume_yes=yes)
+    if secure_pro is True:
+        _setup_secure_pro()
+    if not (voice or secure_pro):
+        console.print("[dim]Später: aquaticy voice (Sprache), aquaticy secure-pro "
+                      "(Netzschutz).[/dim]")
     console.print(
         Panel.fit(
             f"Gespeichert in [cyan]{written}[/cyan]\n\n"
@@ -301,9 +296,202 @@ def setup_command(
             border_style="green",
         )
     )
-    # Die virtual machine gleich mit einrichten (11.2.2 Sol) -- fragt nur am Terminal.
-    _vm_beim_start(get_settings())
 
+    if not accounts:
+        _einzelkonto_einrichten(get_settings())
+    _vm_beim_start(get_settings())
+    _messenger_beim_start(get_settings())
+    if run_background:
+        web_command(port=8765, host="", lan=True, open_browser=True, token="", background=True)
+
+
+def _setup_voice(*, assume_yes: bool = False) -> None:
+    import importlib.util
+    import shutil
+
+    from aquaticy import voice
+
+    console.print("Sprache bleibt lokal. Das Whisper-Modell wird einmalig heruntergeladen.")
+    console.print("Sprachnachrichten: höchstens 90 Sekunden, nur freigegebene Einzelchats.")
+    if not (assume_yes or typer.confirm("Lokale Sprachverarbeitung einrichten?", default=False)):
+        return
+    missing = [name for name in ("ffmpeg", "espeak-ng") if not shutil.which(name)]
+    if missing:
+        apt = shutil.which("apt-get")
+        if not apt:
+            raise typer.BadParameter("Installiere ffmpeg und espeak-ng und starte erneut.")
+        if hasattr(os, "geteuid") and os.geteuid() != 0 and not shutil.which("sudo"):
+            raise typer.BadParameter("Installiere ffmpeg und espeak-ng als Administrator.")
+        command = (["sudo"] if hasattr(os, "geteuid") and os.geteuid() != 0 else [])
+        command += [apt, "install", "-y", "ffmpeg", "espeak-ng"]
+        console.print("Installationsbefehl: " + " ".join(command), markup=False)
+        if not (assume_yes or typer.confirm("Programme installieren?", default=False)):
+            return
+        subprocess.run(command, check=True)
+    if importlib.util.find_spec("faster_whisper") is None:
+        uv = shutil.which("uv")
+        command = ([uv, "pip", "install", "--python", sys.executable] if uv else
+                   [sys.executable, "-m", "pip", "install"])
+        subprocess.run([*command, "faster-whisper>=1.2,<2", "numpy>=1.24,<2.4", "av>=18,<19"],
+                       check=True, timeout=600)
+    voice.configure(get_settings().data_dir, True)
+    console.print("Sprachnachrichten sind an. Verbinde WhatsApp/Signal und aktiviere die Brücke.")
+
+
+def _setup_secure_pro() -> None:
+    from aquaticy import lan, secure_pro
+
+    console.print("Secure Pro prüft dein freigegebenes Heimnetz, ab Werk alle 15 Minuten.")
+    console.print("Es meldet Malware-Zeichen, Angriffe und riskante Dienste. Es nutzt keine "
+                  "Lücken aus.")
+    subnet = typer.prompt("Eigenes Netz (CIDR)", default=lan.own_subnet() or "192.168.1.0/24")
+    if not typer.confirm("Gehört dir dieses Netz oder darfst du es ausdrücklich prüfen?",
+                         default=False):
+        return
+    folder = typer.prompt("Lokaler Ordner für ClamAV (leer: keine Dateiprüfung)", default="")
+    try:
+        secure_pro.configure(get_settings().data_dir, subnet, folder)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    _install_nmap()
+    console.print("Secure Pro ist an. Wichtiges steht im Secure-Pro-Chat und kommt per "
+                  "WhatsApp/Signal.")
+    console.print("Zeitplan, Paketprüfung, nmap, VM und Aufgaben: Einstellungen → Zuhause & "
+                  "Netz → Secure Pro.")
+    console.print("Läuft die Weboberfläche schon, starte sie neu.")
+
+
+def _install_nmap(*, assume_yes: bool = False) -> bool:
+    """Bietet nmap fuer die Schwachstellenpruefung von Secure Pro an (14.1.3 Terra)."""
+    import shutil
+
+    if shutil.which("nmap"):
+        console.print("nmap ist da. Schalte es unter Einstellungen → Zuhause & Netz → Secure Pro "
+                      "ein.")
+        return True
+    apt = shutil.which("apt-get")
+    if not apt:
+        console.print("nmap fehlt. Installiere es mit deinem Paketverwalter, zum Beispiel: "
+                      "brew install nmap", markup=False)
+        return False
+    command = ([] if not hasattr(os, "geteuid") or os.geteuid() == 0 else ["sudo"])
+    command += [apt, "install", "-y", "nmap"]
+    if command[0] == "sudo" and not shutil.which("sudo"):
+        console.print("nmap fehlt. Installiere es als Administrator: apt-get install nmap")
+        return False
+    console.print("Installationsbefehl: " + " ".join(command), markup=False)
+    if not (assume_yes or typer.confirm("nmap für die Schwachstellenprüfung installieren?",
+                                        default=False)):
+        return False
+    try:
+        subprocess.run(command, check=True, timeout=900)
+    except (OSError, subprocess.SubprocessError) as exc:
+        console.print(f"[red]nmap ließ sich nicht installieren:[/red] {exc}", markup=False)
+        return False
+    return shutil.which("nmap") is not None
+
+
+@app.command("voice")
+def voice_command(disable: bool = typer.Option(False, "--disable", help="Sprache ausschalten.")):
+    """Lokale Sprachnachrichten einrichten oder ausschalten."""
+    from aquaticy import voice
+
+    if disable:
+        voice.configure(get_settings().data_dir, False)
+    else:
+        _setup_voice()
+
+
+@app.command("secure-pro")
+def secure_pro_command(disable: bool = typer.Option(False, "--disable", help="Überwachung aus.")):
+    """Defensive Netzueberwachung fuer den eigenen Rechner einrichten."""
+    if disable:
+        path = get_settings().data_dir / "secure-pro.json"
+        path.unlink(missing_ok=True)
+        (get_settings().data_dir / "secure-pro-log.json").unlink(missing_ok=True)
+        console.print("Secure Pro ist aus.")
+    else:
+        _setup_secure_pro()
+
+
+def _einzelkonto_store(settings: Any) -> Any:
+    from aquaticy.auth import AuthStore, pro_code_for, ultra_code_for
+
+    ordner = Path(settings.data_dir)
+    return AuthStore(ordner, pro_code_for(ordner), ultra_code_for(ordner), single=True)
+
+
+def _konto_abfragen(store: Any, vorschlag: str = "") -> Any:
+    """Fragt Nutzername und Passwort ab und speichert sie. Returns: das Konto oder None."""
+    for _ in range(3):
+        name = typer.prompt("  Nutzername", default=vorschlag or None).strip()
+        passwort = typer.prompt("  Passwort (mindestens 12 Zeichen)", hide_input=True,
+                                confirmation_prompt="  Passwort noch einmal")
+        try:
+            return store.reset_owner(name, passwort)
+        except ValueError as exc:
+            console.print(f"  [red]{exc}[/red]")
+    return None
+
+
+def _einzelkonto_einrichten(settings: Any) -> None:
+    """Nach dem Setup ohne Kontensystem: Gibt es das eine Konto? Sonst jetzt anlegen.
+
+    Nur mit einem Menschen am Terminal. Sonst steht da, wie es geht: ``aquaticy account``
+    oder beim ersten Öffnen im Browser mit dem Einrichtungscode.
+    """
+    try:
+        store = _einzelkonto_store(settings)
+        eins = store.ensure_owner_ultra()
+    except Exception as exc:  # pragma: no cover - kaputte Datenbank: das Setup bleibt gültig
+        console.print(f"[yellow]Konto:[/yellow] {type(exc).__name__}: {exc}")
+        return
+    if eins is not None:
+        console.print(f"[green]Konto:[/green] {eins.username} (Ultra). "
+                      "Neues Passwort: [bold]aquaticy account[/bold]")
+        return
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        console.print("[yellow]Konto:[/yellow] noch keins. Leg es mit "
+                      "[bold]aquaticy account[/bold] an – oder beim ersten Öffnen im Browser "
+                      "mit dem Einrichtungscode aus dem Terminal.")
+        return
+    console.print("\n[bold]Dein Konto[/bold]")
+    konto = _konto_abfragen(store)
+    if konto is not None:
+        console.print(f"[green]Konto angelegt:[/green] {konto.username} (Ultra)")
+
+
+@app.command("account")
+def account_command(
+    use: str = typer.Option("", "--use", help="Ein vorhandenes Konto wird das eine Konto "
+                            "(Name oder E-Mail; nach dem Umstieg vom Kontensystem)."),
+) -> None:
+    """Das eine Konto (ohne Kontensystem): anlegen oder Nutzername und Passwort neu setzen."""
+    load_env()
+    settings = get_settings()
+    if getattr(settings, "accounts", False):
+        console.print("[yellow]Das Kontensystem ist an.[/yellow] Jedes Konto ändert sein "
+                      "Passwort im Browser. [bold]aquaticy list[/bold] zeigt alle Konten.")
+        raise typer.Exit(code=1)
+    store = _einzelkonto_store(settings)
+    if use.strip():
+        try:
+            gewaehlt = store.choose_owner(use)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1) from None
+        console.print(f"[green]Das eine Konto ist jetzt:[/green] {gewaehlt.username} (Ultra)")
+        return
+    eins = store.owner()
+    if eins is None:
+        console.print("Noch kein Konto. Leg es jetzt an – es hat alle Rechte (Ultra).")
+    else:
+        console.print(f"Konto: [bold]{eins.username}[/bold]. Neues Passwort setzen – danach "
+                      "sind alle Geräte abgemeldet.")
+    konto = _konto_abfragen(store, eins.username if eins is not None else "")
+    if konto is None:
+        raise typer.Exit(code=1)
+    console.print(f"[green]Gespeichert:[/green] {konto.username} (Ultra)")
 
 def _ask_website(*, no_probe: bool = False) -> dict[str, str]:
     """Fragt nach Domain und Cloudflare-Token und richtet alles ein.
@@ -312,11 +500,8 @@ def _ask_website(*, no_probe: bool = False) -> dict[str, str]:
     """
     from aquaticy import website as website_mod
 
-    console.print(
-        "  [dim]Mit eigener Domain ist Aquaticy eine richtige Website: erreichbar im\n"
-        "  Heimnetz, über Tailscale und unter deiner Domain. Die Domain muss bei\n"
-        "  Cloudflare liegen. Am Router musst du nichts freigeben.[/dim]"
-    )
+    console.print("  [dim]Mit eigener Domain ist Aquaticy auch im Internet erreichbar. Die Domain "
+                  "muss bei Cloudflare liegen.[/dim]")
     jetzt = os.environ.get(website_mod.DOMAIN_ENV, "")
     while True:
         roh = typer.prompt("  Domain (leer = keine)", default=jetzt, show_default=bool(jetzt))
@@ -340,8 +525,7 @@ def _ask_website(*, no_probe: bool = False) -> dict[str, str]:
             break
         except website_mod.WebsiteError as exc:
             console.print(f"  [red]{exc}[/red]")
-    # Keine E-Mail-Frage: Let's Encrypt schickt seit Juni 2025 keine Ablauf-Hinweise
-    # mehr, und Aquaticy erneuert das Zertifikat selbst.
+
     email = os.environ.get(website_mod.EMAIL_ENV, "").strip()
     werte = {website_mod.DOMAIN_ENV: domain, website_mod.TOKEN_ENV: token}
     if not no_probe:
@@ -381,9 +565,6 @@ def _key_hint(key_name: str) -> str:
     }.get(key_name, "siehe Doku des Anbieters")
 
 
-# ---------------------------------------------------------------------------
-# config / version
-# ---------------------------------------------------------------------------
 @app.command("config")
 def config_command() -> None:
     """Zeigt die aktive Konfiguration und meldet fehlende Angaben."""
@@ -576,8 +757,7 @@ def list_users_command() -> None:
                   box=None, pad_edge=False)
     for account in accounts:
         profile = store.profile_dir(account.id)
-        # Nur Ultra ist unbegrenzt (seit 9.5.17); bis 9.5.24 stand hier
-        # "account.pro" -- Pro hiess dann "kein Limit", Ultra bekam Prozent.
+
         if account.ultra:
             sitzung = woche = "kein Limit"
         else:
@@ -585,15 +765,12 @@ def list_users_command() -> None:
             sitzung = (f"{stand['session']['percent']} %" if stand["session"]["active"]
                        else "—")
             woche = f"{stand['week']['percent']} %"
-        # Nur wie viele -- welche und was darin steht, sieht auch der Betreiber hier nicht.
+
         try:
             eigene = str(store.vault(account).count())
         except Exception:
             eigene = "?"
-        # Zuletzt gesehene Adresse -- seit 9.5.32 nur als "#" und acht Zeichen
-        # ihres Schluessel-Hashs. Sperren geht damit trotzdem:
-        # `aquaticy ban "#1a2b3c4d"`. Hardware und Browser sieht der Betreiber
-        # nicht mehr, nur wie viele Geraete das Konto hat.
+
         adresse = short_tag(account.last_ip)
         try:
             geraete = str(store.device_count(account.id))
@@ -601,7 +778,7 @@ def list_users_command() -> None:
             geraete = "?"
         gesperrt = guard.is_banned(user_id=account.id, ip=account.last_ip)
         punkte = guard.flag_count(account.id)
-        # Seit 9.5.24 mit Dauer: "gesperrt (noch 3 Tag(e))" oder "(dauerhaft)".
+
         stand_guard = (f"[red]gesperrt ({gesperrt.remaining_text()})[/red]"
                        if gesperrt is not None
                        else f"[yellow]{punkte} Anhaltspunkt(e)[/yellow]" if punkte
@@ -638,8 +815,7 @@ def remove_command(
         konto = store.account_by_name(account)
         if konto is None:
             raise ValueError("Kein Konto mit diesem Nutzernamen oder dieser E-Mail-Adresse.")
-        # Unwiderruflich -- also erst zeigen, WELCHES Konto es trifft (9.5.22).
-        # Ein Tippfehler im Namen soll nicht still ein fremdes Konto loeschen.
+
         if not yes and not typer.confirm(
             f"Konto „{konto.username}“ ({konto.email}, {konto.plan_label}) samt Chats, "
             "Speicher und Dateien endgültig löschen?", default=False
@@ -730,7 +906,6 @@ def unban_command(
     guard = guard_for(settings.data_dir)
     wen = wen.strip()
     if wen.startswith("#"):
-        # Das Kuerzel einer Sperre (aquaticy list, Ai-guard-Sperrliste).
         anfang = wen.lstrip("#").lower()
         treffer = [b.subject for b in guard.bans()
                    if b.subject.startswith("ip:#" + anfang)] if len(anfang) >= 6 else []
@@ -827,9 +1002,6 @@ def ultra_code_command() -> None:
     console.print(ultra_code_for(settings.data_dir))
 
 
-# ---------------------------------------------------------------------------
-# history / install-browser
-# ---------------------------------------------------------------------------
 @app.command("notes")
 def notes_command(
     delete: int = typer.Option(0, "--delete", help="Notiz mit dieser Nummer löschen."),
@@ -852,7 +1024,7 @@ def notes_command(
         console.print('[dim]Der Merkzettel ist leer. Im Chat: "merk dir ..."[/dim]')
         return
     for note in notes:
-        when = datetime.fromtimestamp(note.created_at).strftime("%d.%m.%Y")
+        when = deutsche_zeit.aus_stempel(note.created_at).strftime("%d.%m.%Y")
         console.print(f"  [cyan]{note.id:>3}[/cyan]  [dim]{when}[/dim]  {note.text}")
 
 
@@ -867,10 +1039,65 @@ def history_command(
         console.print("[dim]Noch keine Recherchen gespeichert.[/dim]")
         return
     for entry in entries:
-        when = datetime.fromtimestamp(entry.created_at).strftime("%d.%m.%Y %H:%M")
+        when = deutsche_zeit.aus_stempel(entry.created_at).strftime("%d.%m.%Y %H:%M")
         console.print(f"[dim]{when}[/dim]  [bold]{entry.question}[/bold]")
         first_line = entry.answer.strip().splitlines()[0] if entry.answer.strip() else ""
         console.print(f"    [dim]{first_line[:110]}[/dim]")
+
+
+def _altes_aquaticy(port: int) -> None:
+    """Laeuft auf *port* schon ein anderer Aquaticy-Prozess? Dann wird er beendet (15.0.0).
+
+    So zeigt der Browser unter der gewohnten Adresse immer die gerade gestartete Version
+    (vorher: "Terminal 15.0.0, Browser 14.3.4", weil der alte Hintergrundprozess weiterlief
+    und der neue auf einen anderen Port auswich). Beendet werden nur eigene Prozesse, die
+    wirklich Aquaticy sind -- nie ein fremdes Programm auf dem Port.
+    """
+    from aquaticy import old_server
+
+    laeuft = old_server.running_version(port)
+    # 15.5.6: Auch ohne Versionsnummer pruefen. Mit Konten zeigt der alte Server nur die
+    # Anmeldeseite, und die nennt keine Version. Dann blieb er laufen, die neue Version wich
+    # auf den naechsten Port aus, und der Browser zeigte unter der gewohnten Adresse weiter
+    # die alte ("Terminal 15.5.6, Website 15.4.4"). Der Prozess selbst verraet es sicher.
+    prozesse = [pid for pid in old_server.listener_pids(port) if old_server.is_aquaticy(pid)]
+    if not laeuft and not prozesse:
+        return
+    laeuft = laeuft or "ältere Version"
+    if not prozesse:
+        console.print(f"[yellow]Auf Port {port} läuft Aquaticy {laeuft}, aber der Prozess "
+                      "lässt sich hier nicht beenden. Beende ihn selbst.[/yellow]")
+        return
+    if all(old_server.stop(pid) for pid in prozesse):
+        console.print(f"Anderer Aquaticy-Prozess ({laeuft}) beendet. Aquaticy {VERSION_LABEL} "
+                      "startet.", markup=False)
+    else:
+        console.print(f"[yellow]Der andere Aquaticy-Prozess ({laeuft}) reagiert nicht. "
+                      f"Beende ihn mit: kill {' '.join(map(str, prozesse))}[/yellow]")
+
+
+@app.command("stop")
+def stop_command(
+    port: int = typer.Option(0, "--port", "-p", help="Nur den Server auf diesem Port."),
+) -> None:
+    """Beendet laufende Aquaticy-Server, auch im Hintergrund (15.0.1)."""
+    from aquaticy import old_server
+
+    if os.name == "nt":
+        console.print("Unter Windows beendest du Aquaticy im Task-Manager (python.exe mit "
+                      "„aquaticy web“).")
+        raise typer.Exit(code=1)
+    prozesse = ([pid for pid in old_server.listener_pids(port) if old_server.is_aquaticy(pid)]
+                if port else old_server.aquaticy_servers())
+    if not prozesse:
+        console.print("Es läuft kein Aquaticy-Server.")
+        return
+    beendet = [pid for pid in prozesse if old_server.stop(pid)]
+    for pid in prozesse:
+        console.print(f"Aquaticy (Prozess {pid}) "
+                      + ("ist beendet." if pid in beendet else "reagiert nicht."), markup=False)
+    if len(beendet) != len(prozesse):
+        raise typer.Exit(code=1)
 
 
 @app.command("web")
@@ -889,12 +1116,15 @@ def web_command(
         "--token",
         help="Freiwilliges Zugangswort. Ohne kommt jeder rein, der die Adresse erreicht.",
     ),
+    background: bool | None = typer.Option(
+        None, "--background/--foreground", help="Im Hintergrund mit Heimnetz und Tailscale laufen."
+    ),
 ) -> None:
     """Startet die Weboberfläche – derselbe Agent im Browser.
 
     Mit eigener Domain (aquaticy website setup) ist Aquaticy im Heimnetz, über
     Tailscale und unter der Domain erreichbar. Ohne Domain nur auf diesem
-    Rechner; --lan öffnet es dann fürs Heimnetz.
+    Rechner; --lan oder Hintergrundbetrieb öffnen es dann fürs Heimnetz.
     """
     from aquaticy import website as website_mod
     from aquaticy.web import (
@@ -906,24 +1136,23 @@ def web_command(
         token_problem,
     )
 
-    # Die Domain steht in der .env -- die muss vorher geladen sein, sonst liefe
-    # Aquaticy nur auf diesem Rechner, obwohl die Website eingerichtet ist.
     load_env()
     try:
         seite = website_mod.SiteConfig.from_env()
     except website_mod.WebsiteError as exc:
         console.print(f"[yellow]Website: {exc}[/yellow]")
         seite = None
-    # Mit Domain gibt es keinen "nur dieser Rechner" mehr: Heimnetz, Tailscale
-    # und Domain gehoeren dann zusammen (11.1).
-    bind = host or ("0.0.0.0" if (lan or seite) else "127.0.0.1")
-    # Ersatz-Port (9.6.8 Sol): ist der eingestellte belegt, gleich den naechsten
-    # freien nehmen und die richtige Adresse zeigen -- statt abzubrechen.
+
+    in_background = background if isinstance(background, bool) else (
+        os.environ.get("AQUATICY_BACKGROUND", "").lower() in {"true", "1", "yes", "on"})
+    bind = host or ("0.0.0.0" if (lan or seite or in_background) else "127.0.0.1")
+
     gewuenscht = port
+    _altes_aquaticy(port)
     with contextlib.suppress(OSError):
         port = free_port(bind, port)
     public = is_public_host(bind)
-    access = token.strip()
+    access = token.strip() or os.environ.pop("AQUATICY_BACKGROUND_TOKEN", "")
     problem = token_problem(access)
     if problem:
         console.print(f"[red]{problem}[/red]")
@@ -946,11 +1175,33 @@ def web_command(
         lines.append("[dim]Das Zugangswort steckt in der Adresse.[/dim]")
     elif public:
         lines.append("[dim]Kein Zugangswort nötig, die Adresse reicht.[/dim]")
-    lines.append("[dim]Einstellungen findest du in der Oberfläche. Beenden: Strg+C.[/dim]")
+    if in_background:
+        lines.append("[dim]Strg+C schließt die Anzeige. "
+                     "Aquaticy läuft im Hintergrund weiter.[/dim]")
+    else:
+        lines.append("[dim]Einstellungen findest du in der Oberfläche. Beenden: Strg+C.[/dim]")
     if port != gewuenscht:
         lines.append(f"[yellow]Port {gewuenscht} ist belegt – "
                      f"Aquaticy nimmt Port {port}.[/yellow]")
     console.print(Panel.fit("\n".join(line for line in lines if line), border_style="green"))
+
+    if in_background:
+        from aquaticy.startup import background as run_background
+
+        arguments = ["web", "--foreground", "--host", bind, "--port", str(port),
+                     "--open" if open_browser else "--no-open"]
+        if not host or lan:
+            arguments.append("--lan")
+        if access:
+            os.environ["AQUATICY_BACKGROUND_TOKEN"] = access
+        try:
+            run_background(arguments, settings.data_dir, console)
+        except (OSError, RuntimeError) as exc:
+            console.print(str(exc), markup=False)
+            raise typer.Exit(code=1) from exc
+        finally:
+            os.environ.pop("AQUATICY_BACKGROUND_TOKEN", None)
+        return
 
     problems = settings.missing_requirements()
     if problems:
@@ -959,22 +1210,19 @@ def web_command(
             + "; ".join(problems)
             + "\n[dim]Lässt sich in der Oberfläche unter Einstellungen beheben.[/dim]"
         )
-    # Ohne Podman/Docker keine virtual machine -- einmal anbieten (11.2.2 Sol).
+
     _vm_beim_start(settings)
-    # Was Ollama gerade hat -- bei jedem Start neu (11.3.0 Luna).
+    _messenger_beim_start(settings)
+
     _ollama_beim_start(settings)
     import time as _time
 
-    # Selbstheilung (9.6.8 Sol): stuerzt der Server unerwartet ab, startet er
-    # neu -- hoechstens fuenfmal in zehn Minuten, damit ein dauerhafter Fehler
-    # nicht in einer Endlosschleife kreist.
     neustarts: list[float] = []
     while True:
         try:
             serve(host=bind, port=port, open_browser=open_browser, token=access)
             break
         except AlreadyRunning as exc:
-            # Kein Neustart: ein zweites Aquaticy auf denselben Daten ist kein Absturz.
             console.print(f"[red]{exc}[/red]")
             console.print("[dim]Das laufende findest du unter der Adresse, die es beim "
                           "Start angezeigt hat.[/dim]")
@@ -1113,8 +1361,6 @@ def cluster_command() -> None:
         roh = verbund.get("split")
         aufteilen: dict[str, Any] = roh if isinstance(roh, dict) else {}
         if aufteilen.get("on"):
-            # Serverlast aufteilen (10.2.0 Luna). llama.cpp laedt Aquaticy seit
-            # 11.0.0 selbst -- in der Fassung, die der Master gewaehlt hat.
             from aquaticy import llamacpp, sharding
 
             console.print(f"Serverlast aufteilen: an ({aufteilen.get('model') or '?'}).")
@@ -1334,7 +1580,6 @@ def connect_ha_command(
         )
     )
 
-    # -- 1. Adresse --------------------------------------------------------
     if not url:
         with console.status("  Suche Home Assistant im Netz ..."):
             found = discover()
@@ -1362,7 +1607,6 @@ def connect_ha_command(
     url = normalize_url(url)
     console.print(f"  Adresse: [bold cyan]{url}[/bold cyan]")
 
-    # -- 2. Token ----------------------------------------------------------
     if not token:
         console.print(
             "\n[bold]Zugriffstoken[/bold]\n"
@@ -1377,7 +1621,6 @@ def connect_ha_command(
         console.print("[red]Ohne Token geht es nicht.[/red]")
         raise typer.Exit(code=1)
 
-    # -- 3. Probe ----------------------------------------------------------
     client = HomeAssistant(url, token)
     try:
         with console.status("  Teste die Verbindung ..."):
@@ -1393,7 +1636,6 @@ def connect_ha_command(
     top = ", ".join(f"{name} ({number})" for name, number in list(counts.items())[:6])
     console.print(f"  [dim]{top}[/dim]")
 
-    # -- 4. Schalten? ------------------------------------------------------
     console.print(
         "\n[bold]Darf Aquaticy AI auch schalten?[/bold]\n"
         "  [dim]Nein = er sieht nur nach (Temperaturen, Zustände, ob etwas an ist).\n"
@@ -1494,10 +1736,6 @@ def install_browser_command() -> None:
         raise typer.Exit(code=result.returncode)
 
 
-# ---------------------------------------------------------------------------
-# install-vm (11.2.2 Sol): Podman fuer die virtual machine
-# ---------------------------------------------------------------------------
-#: Steht diese Datei im Datenordner, fragt `aquaticy web` nicht mehr nach Podman.
 VM_INSTALL_NEIN = "vm-install-abgelehnt"
 
 
@@ -1565,7 +1803,7 @@ def _vm_beim_start(settings: Any) -> None:
     try:
         if sandbox.find_runtime() is not None:
             return
-        # Podman ist da, nur seine Maschine laeuft nicht (macOS/Windows nach einem Neustart).
+
         if vm_install.podman_installed() and vm_install.start_machine():
             console.print("[green]Podman-Maschine gestartet[/green] [dim](virtual machine)[/dim]")
             return
@@ -1577,11 +1815,110 @@ def _vm_beim_start(settings: Any) -> None:
         console.print("[yellow]virtual machine:[/yellow] Podman oder Docker fehlt – "
                       "[bold]aquaticy install-vm[/bold] richtet es ein.")
         return
-    # Nur ein Nein wird gemerkt -- nach einem Fehlschlag fragt der naechste Start wieder.
+
     if _ensure_vm() == "abgelehnt":
         with contextlib.suppress(OSError):
             nein.parent.mkdir(parents=True, exist_ok=True)
             nein.write_text("Podman beim Start nicht installieren.\n", encoding="utf-8")
+
+
+def _ensure_messenger(assume_yes: bool = False) -> str:
+    """Richtet die Direktverbindung zu WhatsApp und Signal ein (12.7.8 Terra v2).
+
+    WhatsApp: libmagic per Paketmanager (Befehle werden gezeigt, ohne --yes wird gefragt).
+    Signal: signal-cli von GitHub, mit Pruefsumme, ohne Verwalterrechte.
+    Returns: "bereit", "abgelehnt" oder "fehlgeschlagen".
+    """
+    from aquaticy import messenger_install as mi
+
+    ergebnis = "bereit"
+    problem = mi.whatsapp_problem()
+    if not problem:
+        console.print("[green]WhatsApp direkt:[/green] bereit")
+    else:
+        schritte = mi.libmagic_steps()
+        if "libmagic" not in problem or schritte is None:
+            console.print(f"[yellow]WhatsApp direkt:[/yellow] {problem}")
+            if "libmagic" in problem:
+                console.print(f"  {mi.libmagic_hint()}")
+            ergebnis = "fehlgeschlagen"
+        else:
+            console.print("\n[bold]libmagic für WhatsApp installieren[/bold]")
+            console.print("  [dim]Diese Befehle würden ausgeführt:[/dim]")
+            for befehl in schritte:
+                console.print(f"  [cyan]{' '.join(befehl)}[/cyan]")
+            if not (assume_yes or typer.confirm("  Ausführen?", default=True)):
+                console.print("  [dim]Abgebrochen. Später: aquaticy install-messenger[/dim]")
+                ergebnis = "abgelehnt"
+            elif mi.install_libmagic(on_step=lambda b: console.print(
+                    f"  [dim]→ {' '.join(b)}[/dim]")):
+                console.print("[green]WhatsApp direkt:[/green] bereit")
+            else:
+                console.print(f"[red]Installation fehlgeschlagen.[/red] {mi.libmagic_hint()}")
+                ergebnis = "fehlgeschlagen"
+
+    if mi.find_signal_cli() is not None:
+        console.print("[green]Signal direkt:[/green] bereit")
+        return ergebnis
+    name, art = mi.signal_asset_name("v0.0.0")
+    if not name:
+        console.print(f"[yellow]Signal direkt:[/yellow] {mi.signal_hint()}")
+        return "fehlgeschlagen"
+    console.print("\n[bold]signal-cli für Signal laden[/bold]")
+    java = "ohne Java" if art == "native" else "mit Java"
+    console.print(f"  [dim]Von github.com/AsamK/signal-cli ({java}), mit geprüfter Prüfsumme. "
+                  "Dafür brauchst du keine Verwalterrechte.[/dim]")
+    if not (assume_yes or typer.confirm("  Laden?", default=True)):
+        console.print("  [dim]Abgebrochen. Später: aquaticy install-messenger[/dim]")
+        return "abgelehnt" if ergebnis == "bereit" else ergebnis
+    settings = get_settings()
+    try:
+        with console.status("  lade signal-cli ..."):
+            mi.install_signal_cli(Path(settings.data_dir))
+    except mi.InstallError as exc:
+        console.print(f"[red]signal-cli:[/red] {exc}")
+        return "fehlgeschlagen"
+    console.print("[green]Signal direkt:[/green] bereit")
+    return ergebnis
+
+
+@app.command("install-messenger")
+def install_messenger_command(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Ohne Rückfrage installieren."),
+) -> None:
+    """Richtet WhatsApp und Signal für die Direktverbindung ein (ohne virtual machine)."""
+    load_env()
+    settings = get_settings()
+    with contextlib.suppress(OSError):
+        (Path(settings.data_dir) / "messenger-install-abgelehnt").unlink(missing_ok=True)
+    if _ensure_messenger(assume_yes=yes) != "bereit":
+        raise typer.Exit(code=1)
+
+
+def _messenger_beim_start(settings: Any) -> None:
+    """Beim Start von `aquaticy web` und nach `aquaticy setup`: fehlt etwas, wird es angeboten.
+
+    Wie bei Podman: einmal, nur mit einem Menschen am Terminal. Nach einem Nein fragt
+    Aquaticy nicht wieder; der Befehl `aquaticy install-messenger` bleibt.
+    """
+    from aquaticy import messenger_install as mi
+
+    try:
+        fehlt = [t for t in mi.status(Path(settings.data_dir)).values() if t]
+    except Exception:
+        return
+    if not fehlt:
+        return
+    nein = Path(settings.data_dir) / mi.NEIN
+    terminal = sys.stdin.isatty() and sys.stdout.isatty()
+    if not terminal or nein.exists():
+        console.print("[dim]WhatsApp und Signal direkt verbinden: "
+                      "[bold]aquaticy install-messenger[/bold] richtet es ein.[/dim]")
+        return
+    if _ensure_messenger() == "abgelehnt":
+        with contextlib.suppress(OSError):
+            nein.parent.mkdir(parents=True, exist_ok=True)
+            nein.write_text("WhatsApp und Signal beim Start nicht einrichten.\n", encoding="utf-8")
 
 
 def _ollama_beim_start(settings: Any) -> list[str]:
@@ -1599,7 +1936,8 @@ def _ollama_beim_start(settings: Any) -> list[str]:
     from aquaticy.system import model_usable, ollama_base
 
     basis = ollama_base(settings)
-    lokal = bool(lm.local_name(settings.model))
+    lokal = any(lm.local_name(str(getattr(settings, attr, "") or ""))
+                for attr in ("model", "vision_model", "subagent_model", "code_model"))
     try:
         laeuft = lm.server_running(basis, timeout=2.0)
         hier = urlsplit(basis).hostname in ("localhost", "127.0.0.1", "::1")
@@ -1626,9 +1964,13 @@ def _ollama_beim_start(settings: Any) -> list[str]:
     return modelle
 
 
-# ---------------------------------------------------------------------------
-# install-model
-# ---------------------------------------------------------------------------
+def _ollama_basis() -> str:
+    from aquaticy.local_model import native_base
+    from aquaticy.system import ollama_base
+
+    return native_base(ollama_base(get_settings()))
+
+
 def _ensure_ollama(assume_yes: bool = False) -> bool:
     """Sorgt dafür, dass Ollama installiert ist und läuft.
 
@@ -1637,7 +1979,15 @@ def _ensure_ollama(assume_yes: bool = False) -> bool:
     """
     from aquaticy import local_model as lm
 
-    # -- 1. Ollama ---------------------------------------------------------
+    basis = _ollama_basis()
+    if lm.server_running(basis):
+        console.print("  [green]Ollama erreichbar.[/green]")
+        return True
+    from urllib.parse import urlsplit
+
+    if urlsplit(basis).hostname not in {"localhost", "127.0.0.1", "::1"}:
+        console.print("Der eingestellte Ollama-Server ist nicht erreichbar.", markup=False)
+        return False
     if lm.ollama_binary() is None:
         command = lm.install_command()
         if command is None:
@@ -1663,43 +2013,15 @@ def _ensure_ollama(assume_yes: bool = False) -> bool:
             f"\n[bold]1. Ollama[/bold]  [green]gefunden[/green] [dim]({lm.ollama_binary()})[/dim]"
         )
 
-    # -- 2. Server ---------------------------------------------------------
     console.print("\n[bold]2. Server[/bold]")
-    if not _configure_ollama_parallel(assume_yes=assume_yes):
-        return False
     with console.status("  starte ollama serve ..."):
-        started = lm.start_server()
+        started = lm.start_server(basis)
     if not started:
         console.print(
             "  [red]Server startet nicht.[/red] Starte ihn von Hand: [bold]ollama serve[/bold]"
         )
         return False
-    console.print("  [green]Ollama erreichbar, Parallelbetrieb eingerichtet.[/green]")
-    return True
-
-
-def _configure_ollama_parallel(*, assume_yes: bool = False) -> bool:
-    """Bestaetigter Dienstneustart; kein Konto in der Weboberflaeche darf das ausloesen."""
-    from aquaticy import local_model as lm
-    from aquaticy.ollama_setup import SetupError, _parallel, configure_parallel
-
-    console.print("  Mindestens zwei parallele Modellaufrufe; weitere Anfragen warten bei Ollama.")
-    console.print("  [yellow]Ein vorhandener Ollama-Dienst wird neu gestartet. "
-                  "Laufende Antworten können dadurch abbrechen.[/yellow]")
-    if not (assume_yes or typer.confirm("  Parallelbetrieb einrichten?", default=True)):
-        return False
-    try:
-        managed = configure_parallel(running=lm.server_running())
-        if managed and not lm.wait_for_server():
-            raise SetupError("Der konfigurierte Ollama-Dienst antwortet nicht. "
-                             "Bitte den Dienststatus prüfen; es wird kein zweiter gestartet.")
-    except (SetupError, OSError) as exc:
-        console.print(f"  [red]{exc}[/red]")
-        return False
-    # Eigene Starts nach dem Setup erhalten denselben sicheren Mindestwert.
-    value = os.environ.get("OLLAMA_NUM_PARALLEL", "")
-    if not _parallel(value):
-        os.environ["OLLAMA_NUM_PARALLEL"] = "2"
+    console.print("  [green]Ollama erreichbar.[/green]")
     return True
 
 
@@ -1772,7 +2094,7 @@ def _pull_if_needed(name: str, already: set[str]) -> bool:
     console.print(f"  Lade [bold]{name}[/bold] – das dauert beim ersten Mal.")
     try:
         with console.status(f"  ollama pull {name} ...") as status:
-            for line in lm.pull_model(name):
+            for line in lm.pull_model(name, base_url=_ollama_basis()):
                 status.update(f"  {line[:90]}")
     except lm.LocalModelError as exc:
         console.print(f"  [red]{exc}[/red]")
@@ -1780,7 +2102,7 @@ def _pull_if_needed(name: str, already: set[str]) -> bool:
             "  [dim]Gibt es den Namen noch? Katalog: https://ollama.com/library[/dim]"
         )
         return False
-    size = lm.model_size_gb(name)
+    size = lm.model_size_gb(name, base_url=_ollama_basis())
     suffix = f" [dim]({size} GB)[/dim]" if size else ""
     console.print(f"  [green]geladen[/green]{suffix}")
     return True
@@ -1805,7 +2127,7 @@ def _run_subagent_setup(model_name: str = "", assume_yes: bool = False) -> str:
         console.print("  [dim]Übersprungen – die Subagenten nutzen das Hauptmodell.[/dim]")
         return ""
 
-    already = set(lm.installed_models())
+    already = set(lm.installed_models(_ollama_basis()))
     if model_name:
         chosen = model_name
         _note_size(chosen, lm.usable_memory_gb())
@@ -1820,9 +2142,9 @@ def _run_subagent_setup(model_name: str = "", assume_yes: bool = False) -> str:
         return ""
 
     model_id = f"{lm.MODEL_PREFIX}/{chosen}"
-    lm.free_memory()
+    lm.free_memory(_ollama_basis())
     console.print("  [dim]Tool-Calling prüfen ...[/dim]")
-    works, detail = lm.verify_tool_calling(model_id)
+    works, detail = lm.verify_tool_calling(model_id, api_base=_ollama_basis())
     if works:
         console.print(f"  [green]OK[/green]  {detail}")
         return model_id
@@ -1834,7 +2156,6 @@ def _run_subagent_setup(model_name: str = "", assume_yes: bool = False) -> str:
     return ""
 
 
-#: Merkt sich das gewaehlte Hauptmodell fuer die Speicherrechnung.
 _MAIN_MODEL_NAME = ""
 
 
@@ -1865,7 +2186,7 @@ def _run_vision_setup(
         console.print("  [dim]Übersprungen. Später: aquaticy install-model --vision-only[/dim]")
         return ""
 
-    already = set(lm.installed_models())
+    already = set(lm.installed_models(_ollama_basis()))
     if model_name:
         chosen = model_name
         _note_size(chosen, lm.usable_memory_gb())
@@ -1880,23 +2201,19 @@ def _run_vision_setup(
 
     model_id = f"{lm.MODEL_PREFIX}/{chosen}"
 
-    # Das Textmodell liegt nach seiner Pruefung noch im Speicher. Zwei Modelle
-    # gleichzeitig sprengen auf vielen Rechnern den VRAM und der Ollama-Runner
-    # stirbt -- also vorher aufraeumen.
-    freed = lm.free_memory()
+    freed = lm.free_memory(_ollama_basis())
     if freed:
         console.print(f"  [dim]Speicher freigegeben: {', '.join(freed)}[/dim]")
 
     console.print("  [dim]Sehtest: das Modell bekommt ein rotes Bild gezeigt.[/dim]")
     with console.status("  teste ..."):
-        works, detail = lm.verify_vision(model_id)
+        works, detail = lm.verify_vision(model_id, api_base=_ollama_basis())
     if works:
         console.print(f"  [green]OK[/green]  {detail}")
         return model_id
 
     console.print(f"  [red]FEHLER[/red]  {detail}")
 
-    # Speichermangel ist kein Urteil ueber das Modell -- ein kleineres tut es.
     if lm.resource_problem(detail) and not model_name:
         smaller = min(lm.VISION_MODELS, key=lambda candidate: candidate.size_gb)
         if smaller.name != chosen:
@@ -1938,7 +2255,6 @@ def _run_local_setup(
     if not ollama_ready and not _ensure_ollama(assume_yes=assume_yes):
         return ""
 
-    # -- 3. Modell waehlen -------------------------------------------------
     console.print("\n[bold]3. Modell[/bold]")
     memory = lm.total_memory_gb()
     vram = lm.gpu_vram_gb()
@@ -1952,31 +2268,29 @@ def _run_local_setup(
         quelle = "VRAM" if vram else "Arbeitsspeicher, ohne GPU"
         console.print(f"  [dim]Nutzbar für Modelle: {budget} GB ({quelle})[/dim]")
 
-    already = set(lm.installed_models())
+    already = set(lm.installed_models(_ollama_basis()))
     if model_name:
         chosen = model_name
         _note_size(chosen, budget)
     else:
         main, _, why = lm.plan_setup(budget)
         console.print(f"  [cyan]{why}[/cyan]")
-        # Modelle, die auch Bilder koennen, zuerst -- sie sparen ein zweites.
+
         candidates = tuple(lm.DUAL_MODELS) + tuple(lm.LOCAL_MODELS)
         chosen = _pick_local_model(candidates, main, already, "Modell", assume_yes)
         _note_size(chosen, budget)
 
-    # -- 4. Laden ----------------------------------------------------------
     if not _pull_if_needed(chosen, already):
         return ""
 
-    # -- 5. Tool-Calling pruefen ------------------------------------------
     global _MAIN_MODEL_NAME
     _MAIN_MODEL_NAME = chosen
     model_id = f"{lm.MODEL_PREFIX}/{chosen}"
-    lm.free_memory()
+    lm.free_memory(_ollama_basis())
     console.print("\n[bold]4. Tool-Calling prüfen[/bold]")
     console.print("  [dim]Ohne Werkzeugaufrufe kann der Agent weder suchen noch lesen.[/dim]")
     with console.status("  teste ..."):
-        works, detail = lm.verify_tool_calling(model_id)
+        works, detail = lm.verify_tool_calling(model_id, api_base=_ollama_basis())
     if works:
         console.print(f"  [green]OK[/green]  {detail}")
     else:
@@ -2014,7 +2328,7 @@ def install_model_command(
     env_file: Path | None = typer.Option(None, "--env-file", help="Zieldatei für die .env."),
 ) -> None:
     """Installiert lokale Modelle und trägt sie ein – ohne API-Key."""
-    from aquaticy.local_model import DEFAULT_OLLAMA_URL, env_values, vision_env_values
+    from aquaticy.local_model import env_values, vision_env_values
 
     values: dict[str, str] = {}
 
@@ -2029,13 +2343,8 @@ def install_model_command(
         model_id = _run_local_setup(model, assume_yes=yes)
         if not model_id:
             raise typer.Exit(code=1)
-        values.update(env_values(model_id, DEFAULT_OLLAMA_URL))
+        values.update(env_values(model_id, _ollama_basis()))
 
-        # Mit --yes wird nicht gefragt -- dann laden wir ein Vision-Modell nur,
-        # wenn es ausdruecklich benannt wurde. Ungefragt mehrere Gigabyte
-        # herunterzuladen waere nicht in Ordnung.
-        # Kann das Hauptmodell selbst sehen, sparen wir das zweite Modell --
-        # auf knappen Karten macht das den Unterschied.
         from aquaticy.local_model import DUAL_MODELS
 
         bare = model_id.split("/", 1)[-1]
@@ -2050,8 +2359,6 @@ def install_model_command(
         elif main_can_see:
             _run_vision_setup(assume_yes=True, main_can_see=True)
 
-        # Ein kleines Modell fuer die Teilfragen -- es laeuft neben dem
-        # Hauptmodell, deshalb lieber sparsam.
         if subagent_model or (subagents and not yes):
             helper = _run_subagent_setup(subagent_model, assume_yes=yes)
             if helper:
@@ -2082,9 +2389,6 @@ def install_model_command(
     )
 
 
-# ---------------------------------------------------------------------------
-# Chat
-# ---------------------------------------------------------------------------
 HELP_TEXT = """\
 [bold]Slash-Befehle (Terminal und Website)[/bold]
   [cyan]/location <ort>[/cyan]      Ortsfilter setzen (leer = aufheben)
@@ -2128,9 +2432,14 @@ HELP_TEXT = """\
   aquaticy install-browser      Browser einrichten
   aquaticy install-model        Lokales Modell einrichten
   aquaticy install-vm           Podman für die virtual machine einrichten
+  aquaticy account              Dein Konto: anlegen oder Passwort neu setzen
+  aquaticy install-messenger    WhatsApp und Signal direkt verbinden (ohne virtual machine)
   aquaticy export               Recherchen exportieren
   aquaticy cluster              Server-Verbund: Anfrage annehmen (yes/no)
   aquaticy website              eigene Domain: Stand, setup, remove
+  aquaticy stop                 laufende Aquaticy-Server beenden (auch im Hintergrund)
+  aquaticy voice                lokale Sprachnachrichten einrichten; --disable schaltet sie aus
+  aquaticy secure-pro           defensive Netzprüfung einrichten; --disable schaltet sie aus
 """
 
 
@@ -2151,8 +2460,6 @@ def _apply_overrides(
         settings.location = location
     if lang:
         settings.lang = lang.lower()
-        if not country:
-            settings.country = lang.lower()
     if country:
         settings.country = country.lower()
     if model:
@@ -2217,7 +2524,9 @@ def _run_turn(agent, renderer, question: str, stream: bool, show_images: bool,
     if not stream:
         renderer.print_answer(result.answer)
     if result.error:
-        console.print(f"[red]Fehler:[/red] {result.error}")
+        from rich.markup import escape
+
+        console.print(f"[red]Fehler:[/red] {escape(str(result.error))}")
         return result
     if result.products:
         from aquaticy.render import print_products
@@ -2239,7 +2548,7 @@ def _plugin_options(line: str, settings: object) -> dict[str, object] | None:
     """
     from aquaticy import plugins
 
-    turn = plugins.match(line, settings, True)  # am eigenen Rechner wie Ultra
+    turn = plugins.match(line, settings, True)
     if turn is None:
         return None
     auftrag = turn.argument or plugins.DEFAULT_QUESTIONS.get(turn.addon, "")
@@ -2319,21 +2628,14 @@ def chat_command(
                 raise typer.Exit(code=1)
             prefix = beschreibung
 
-        # -- Einmaliger Durchlauf ----------------------------------------
         if question:
             full = f"{prefix}\n\n{question}".strip() if prefix else question
             result = _run_turn(agent, renderer, full, stream, show_images)
             _record_turn(turns, question, result)
             return
 
-        # -- Chat --------------------------------------------------------
-        # Erst hier sitzt jemand, der auf eine Rueckfrage antworten kann. Beim
-        # einmaligen Durchlauf oben laeuft niemand mit -- da soll der Agent
-        # eine Annahme treffen statt ins Leere zu fragen.
         agent.set_ask_handler(_console_ask)
-        # LiteLLM zieht beim ersten Import gut vier Sekunden -- die sollen
-        # nicht an der ersten Frage haengen, sondern waehrend der Nutzer
-        # noch tippt.
+
         threading.Thread(target=_preload_llm, daemon=True).start()
         console.print(_banner(settings))
         if prefix:
@@ -2349,9 +2651,7 @@ def chat_command(
                 break
             if not line:
                 continue
-            # "/max <Frage>" ist eine Recherche, kein Befehl -- sie laeuft
-            # ueber den normalen Weg, damit man dabei zusieht. "/max" allein
-            # erklaert sich unten wie jeder andere Befehl.
+
             plugin = _plugin_options(line, settings) if line.startswith("/") else None
             if plugin is not None:
                 if plugin:
@@ -2373,8 +2673,7 @@ def chat_command(
                 result = _run_turn(agent, renderer, line, stream, show_images)
             except KeyboardInterrupt:
                 renderer.reset()
-                # Den halben Turn verwerfen (9.5.34): ein Werkzeugaufruf ohne
-                # Antwort im Verlauf liess die API jede weitere Frage ablehnen.
+
                 if vorher >= 0 and isinstance(getattr(agent, "messages", None), list):
                     del agent.messages[vorher:]
                 console.print("\n[yellow]Abgebrochen.[/yellow]")
@@ -2385,7 +2684,6 @@ def chat_command(
         agent.close()
 
 
-#: Was aquaticy als Bild akzeptiert.
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".heic", ".heif")
 
 
@@ -2409,8 +2707,6 @@ def _resolve_image(path: Path) -> Path | None:
 
     if target.is_file():
         if target.suffix.lower() not in IMAGE_SUFFIXES:
-            # Ein Vertipper wie `/image .env` schickte sonst die Datei als
-            # "Bild" ans Modell -- samt allem, was darin steht.
             console.print(f"[red]{target.name} ist kein Bild.[/red]")
             console.print(f"[dim]Bilder sind: {', '.join(IMAGE_SUFFIXES)}[/dim]")
             return None
@@ -2432,7 +2728,7 @@ def _resolve_image(path: Path) -> Path | None:
         table.add_column()
         table.add_column(style="dim", justify="right")
         for index, image in enumerate(images[:15], start=1):
-            when = datetime.fromtimestamp(image.stat().st_mtime).strftime("%d.%m.%Y %H:%M")
+            when = deutsche_zeit.aus_stempel(image.stat().st_mtime).strftime("%d.%m.%Y %H:%M")
             table.add_row(str(index), image.name, when)
         console.print(table)
         answer = typer.prompt("  Welches Bild?", default="1").strip()
@@ -2458,16 +2754,16 @@ def _describe_image(agent, image: Path) -> str | None:
         with console.status(f"  Sehe mir {image.name} an ..."):
             description = agent.describe_image(image)
     except FileNotFoundError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(Text(str(exc), style="red"))
         return None
     except RuntimeError as exc:
-        console.print(f"[red]{exc}[/red]")
+        console.print(Text(str(exc), style="red"))
         console.print(
             "[dim]Kann dein Modell überhaupt Bilder sehen? Ein eigenes Vision-Modell "
             "richtet [bold]aquaticy install-model --vision-only[/bold] ein.[/dim]"
         )
         return None
-    console.print(Panel(description, title=f"[Bild] {image.name}", border_style="cyan"))
+    console.print(Panel(Text(description), title=Text(f"[Bild] {image.name}"), border_style="cyan"))
     return f"Auf dem Bild ist Folgendes zu sehen:\n{description}"
 
 
@@ -2481,9 +2777,9 @@ def _handle_slash(
     show_images: bool = True,
 ) -> bool:
     """Führt einen Slash-Befehl aus. Gibt `True` zurueck, wenn beendet werden soll."""
-    command, _, argument = line[1:].partition(" ")
-    command = command.lower()
-    argument = argument.strip()
+    parts = line[1:].split(None, 1)
+    command = parts[0].lower() if parts else ""
+    argument = parts[1].strip() if len(parts) == 2 else ""
 
     if command in ("quit", "exit", "q"):
         console.print("[dim]Bis dann.[/dim]")
@@ -2512,8 +2808,6 @@ def _handle_slash(
         else:
             from aquaticy.web import fix_model_id
 
-            # Fehlt nur das Anbieter-Kuerzel, ergaenzen wir es, statt den
-            # Nutzer mit einer Fehlermeldung stehenzulassen.
             fixed = fix_model_id(argument)
             problem = model_problem(fixed, settings.route(fixed)[0])
             if problem:
@@ -2659,7 +2953,6 @@ def _enable_readline() -> None:
         import readline  # noqa: F401
 
 
-
 def _produkte(roh: object) -> list:
     """Produkte aus dem gespeicherten Verlauf – Kaputtes wird übersprungen."""
     from pydantic import ValidationError
@@ -2695,7 +2988,7 @@ def export_command(
             sources=entry.meta.get("sources", []),
             searches=entry.meta.get("searches", []),
             skipped=entry.meta.get("skipped", {}),
-            # Seit 9.5.34 auch die Produkte -- CSV und HTML waren sonst leer.
+
             products=_produkte(entry.meta.get("products", [])),
         )
         for entry in entries
@@ -2708,7 +3001,6 @@ def export_command(
     console.print(f"[green]Gespeichert:[/green] {path}")
 
 
-#: Alles, was kein Unterbefehl ist, gilt als Frage an den Chat.
 def _command_names() -> set[str]:
     """Die Namen aller Unterbefehle – direkt bei Typer erfragt.
 
@@ -2722,7 +3014,7 @@ def _command_names() -> set[str]:
             names.add(command.name)
         elif command.callback is not None:
             names.add(command.callback.__name__.replace("_", "-"))
-    # Gruppen wie `aquaticy website` (11.1) -- sonst landeten sie im Chat.
+
     for group in app.registered_groups:
         if group.name:
             names.add(group.name)
@@ -2732,8 +3024,6 @@ def _command_names() -> set[str]:
 COMMANDS = _command_names()
 
 
-#: Sieht wie ein Unterbefehl aus: kleingeschrieben, mit Bindestrich, ein Wort.
-#: Eine echte Rechercheanfrage sieht praktisch nie so aus.
 SUBCOMMAND_LIKE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$")
 
 
@@ -2763,9 +3053,21 @@ def main() -> None:
     if argv and argv[0] in ("--version", "-V"):
         console.print(f"aquaticy {VERSION_LABEL}")
         return
-    # Ein einzelnes Wort mit Bindestrich ist fast sicher ein vertippter oder
-    # unbekannter Unterbefehl. Den als Rechercheanfrage ans LLM zu schicken
-    # kostet Zeit und Geld und hilft niemandem.
+
+    if (not argv or argv[0] in {"web", "chat"} or argv[0] not in COMMANDS) and (
+            not any(arg in {"--help", "-h"} for arg in argv)
+            and os.environ.pop("AQUATICY_UPDATED", "") != "1"):
+        from aquaticy.startup import update_at_start
+
+        try:
+            updated = update_at_start(console)
+        except (OSError, ValueError, SyntaxError, subprocess.SubprocessError):
+            console.print("Update nicht möglich. Aquaticy startet mit der vorhandenen Version.")
+            updated = False
+        if updated:
+            os.environ["AQUATICY_UPDATED"] = "1"
+            os.execv(sys.executable, [sys.executable, "-m", "aquaticy.cli", *argv])
+
     if (
         len(argv) == 1
         and argv[0] not in COMMANDS

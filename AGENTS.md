@@ -40,19 +40,31 @@ Vor jedem Commit: `python tools/pruefung.py` muss mit 0 enden.
 
 - `aquaticy/` – das Paket. Jedes Modul sagt in seiner ersten Zeile, wofür es da ist.
   - `agent.py` Schleife mit Werkzeugaufrufen, `tools.py` die Werkzeuge,
-    `subagents.py`/`master.py` parallele Recherche.
+    `subagents.py`/`master.py` parallele Recherche, `ownservices.py` erkennt Fragen an
+    Mails, Kalender, Home Assistant und Lager (dann ohne Websuche).
   - `web.py` Server und API, `webui.html` die ganze Oberfläche (HTML, CSS, JS).
   - `cli.py` Kommandozeile, `config.py` Einstellungen.
   - Sicherheit: `netguard.py` (nur öffentliche Ziele), `injection.py`
     (Prompt-Injection), `aiguard.py` (Missbrauch), `guardrails.py` (Recht),
     `auth.py` (Konten), `privacy.py`/`keyvault.py` (Verschlüsselung),
     `sandbox.py` (virtual machine).
+  - Messenger: `bridge.py` (Chat mit Aquaticy per WhatsApp/Signal; Regeln für Absender und
+    Werkzeuge stehen dort im Code), `messenger_native.py` (direkt koppeln ohne virtual machine:
+    neonize und signal-cli), `bridge_native.py` (die Regeln dafür), `messenger_install.py`
+    (richtet libmagic und signal-cli ein; Befehl `aquaticy install-messenger`),
+    `addons.py` (Add-ons, Rechte).
   - Plugins: `plugins.py`, Vorprüfung für Code- und Security-Review in `review_scan.py`.
+  - Secure Pro: `secure_pro.py` (Überwachung, Zeitplan, Aufgaben), `secure_tasks.py`
+    (Aufgaben fest auswerten), `secure_packets.py` (nur Paket-Kopfdaten),
+    `secure_knowledge.py` (Malware-Wissen), `secure_defense.py` (feste Abwehr-Befehle, laufen
+    über `vm_ssh.py` und brauchen immer ein Ja), `secure_chat.py` (Rolle und Werkzeuge).
+- `worker/` – die Cloudflare-Fassung (JavaScript, `worker/README.md`). `worker/src/erzeugt.js`
+  kommt aus `tools/worker_bauen.py` und wird nie von Hand geändert.
+- Vercel-Modus (nur Aquaticy-Test): `aquaticy/vercel.py` reicht Anfragen an `web.Handler`
+  weiter, `aquaticy/vercel_blob.py` sichert den Datenordner verschlüsselt im Blob-Speicher.
 - `tests/` – je Fassung eine Datei (`test_v1122.py` für 11.2.2), dazu Dateien je Thema.
   `tests/ollama_nachbau.py` ist ein nachgebautes Ollama: Damit lassen sich lokale Modelle
   (ohne Denk-Modus, ohne Werkzeuge, zu wenig Speicher) ohne echtes Ollama prüfen.
-- `worker/` – die Cloudflare-Fassung (JavaScript, `worker/README.md`). `worker/src/erzeugt.js`
-  kommt aus `tools/worker_bauen.py` und wird nie von Hand geändert.
 - `tools/` – `pruefung.py` (Prüfkette), `rundgang.py` (Oberfläche im Browser),
   `bandit-baseline.json` (geprüfte, bekannte Hinweise), Benchmarks.
 

@@ -14,11 +14,10 @@ import operator
 import re
 from collections.abc import Callable
 
-#: Obergrenze fuer Exponenten, damit `9**9**9` nicht die CPU frisst.
 MAX_POWER = 1000
 MAX_EXPRESSION_LENGTH = 300
 
-#: Potenzen (ast.Pow) haben einen eigenen Zweig mit Grenze.
+
 _BINARY: dict[type[ast.operator], Callable[[float, float], float]] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
@@ -71,6 +70,10 @@ def _evaluate(node: ast.AST) -> float:
             return _BINARY[type(node.op)](left, right)
         except ZeroDivisionError as exc:
             raise CalcError("Division durch null.") from exc
+        except CalcError:
+            raise
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise CalcError("Der Ausdruck hat kein darstellbares reelles Ergebnis.") from exc
     raise CalcError(f"'{type(node).__name__}' ist in Ausdruecken nicht erlaubt.")
 
 
@@ -94,8 +97,6 @@ def calculate(expression: str) -> float:
         raise CalcError(f"Kein gueltiger Ausdruck: {exc.msg}.") from exc
     result = _evaluate(tree)
     if isinstance(result, complex):
-        # (-1) ** 0.5 ergibt in Python eine komplexe Zahl -- das ist hier
-        # keine Antwort (bis 9.5.15 kam "(6.1e-17+1j)" zurueck).
         raise CalcError(
             "Das Ergebnis ist keine reelle Zahl (z. B. Wurzel aus einer negativen Zahl).")
     if isinstance(result, float) and (math.isinf(result) or math.isnan(result)):
@@ -109,5 +110,5 @@ def calculate_pretty(expression: str) -> str:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     if isinstance(value, float):
-        return f"{round(value, 6):g}"
+        return repr(value)
     return str(value)

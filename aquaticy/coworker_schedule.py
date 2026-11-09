@@ -28,19 +28,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
+from aquaticy import zeit
+
 LOG = logging.getLogger("aquaticy.coworker.schedule")
 
-#: Recherchen laufen eher taeglich; eine Bild- oder Preisbeobachtung darf in
-#: kurzen Abstaenden pruefen, damit ein voruebergehender Zustand nicht entgeht.
-#: "always" heisst: beim naechsten Takt wieder, also durchgehend. Ein Lauf
-#: dauert ohnehin laenger als ein Takt -- die Beobachtung faengt damit von
-#: selbst wieder an, sobald sie fertig ist.
+
 RHYTHMS = (
     "always", "minutes1", "minutes5", "minutes15", "minutes30",
     "hourly", "daily", "weekly",
 )
 
-#: Deutsche Namen fuer die Anzeige -- und fuer den Chat-Titel.
+
 RHYTHM_NAMES = {
     "always": "die ganze Zeit",
     "minutes1": "jede Minute",
@@ -52,14 +50,10 @@ RHYTHM_NAMES = {
     "weekly": "wöchentlich",
 }
 
-#: Wie oft nachgesehen wird, ob etwas ansteht. Zwanzig Sekunden, damit "die
-#: ganze Zeit" auch wirklich durchgehend heisst und "jede Minute" seine Minute
-#: trifft. Der Blick in die Datenbank kostet nichts; was Zeit kostet, ist der
-#: Auftrag selbst -- und der laeuft nacheinander, nicht nebeneinander.
+
 TICK_SECONDS = 20
 
-#: Mehr Auftraege waeren keine Erleichterung mehr, sondern eine zweite
-#: To-do-Liste, die man auch noch pflegen muss.
+
 MAX_JOBS = 20
 
 SCHEMA = """
@@ -84,24 +78,17 @@ MIGRATIONS = {
     "kind": "TEXT NOT NULL DEFAULT 'research'",
     "source_url": "TEXT NOT NULL DEFAULT ''",
     "image_id": "TEXT NOT NULL DEFAULT ''",
-    # Was auf dem Bild zu sehen ist -- einmal vom Bildmodell beschrieben und
-    # dann behalten. Das Foto aendert sich nicht; es bei jedem Lauf neu
-    # anzusehen waere bei "jede Minute" eine Bildanfrage je Minute.
+
     "image_note": "TEXT NOT NULL DEFAULT ''",
 }
 
-#: Was ein Auftrag sein kann. "image" sucht nach dem Gegenstand auf einem
-#: hochgeladenen Bild und meldet sich, sobald es dafuer ein Angebot gibt.
+
 KINDS = ("research", "visual", "price", "image")
 
-#: Auftragsarten, die erst dann einen Chat anlegen, wenn ihre Bedingung
-#: eingetreten ist. Bis dahin laufen sie still.
+
 MONITORING = ("visual", "price", "image")
 
-#: Takte unter einer Stunde. Sie gibt es nur fuer Beobachtungen, die still
-#: laufen, bis ihre Bedingung eintritt. Eine Recherche legt bei JEDEM Lauf
-#: einen neuen Chat an -- "jede Minute" hiess bis 9.5.15 1.440 Chats am Tag,
-#: bis der Speicher voll war. Recherchen laufen deshalb hoechstens stuendlich.
+
 SHORT_RHYTHMS = frozenset({"always", "minutes1", "minutes5", "minutes15", "minutes30"})
 
 
@@ -113,8 +100,6 @@ def rhythm_for(kind: str, rhythm: str) -> str:
     return takt
 
 
-#: Welche Auftraege gerade laufen: (Datenbank, Nummer). Planer und "Jetzt"-
-#: Knopf fragen hier nach -- bis 9.5.15 konnte derselbe Auftrag doppelt laufen.
 def claim_run(db_path: Any, job_id: int) -> bool:
     from aquaticy.coworker import claim
 
@@ -127,15 +112,9 @@ def release_run(db_path: Any, job_id: int) -> None:
     release(db_path, job_id)
 
 
-#: Womit der Zustand eines Auftrags beginnt, den der Rechtsrahmen abgelehnt
-#: hat. Solche Auftraege schaltet der Planer ab.
 GUARD_STATE = "abgelehnt nach Rechtsrahmen"
 
-#: Der Zustand eines Auftrags, dessen Konto sein Kontingent erreicht hat
-#: (5-Stunden-Sitzung oder Woche, aquaticy/quota.py). Bis 9.5.13 galt ein
-#: Limit fuer immer, und der Planer schaltete den Auftrag ab. Seit 9.5.14
-#: setzt sich das Kontingent zurueck: der Auftrag bleibt an, dieser Termin
-#: faellt aus, der naechste laeuft wieder.
+
 TOKEN_LIMIT_STATE = "Kontingent erreicht"
 
 
@@ -154,7 +133,6 @@ def _number(value: str) -> float | None:
     if not raw:
         return None
     if "," in raw and "." in raw:
-        # Beide Zeichen da: das hintere trennt die Nachkommastellen.
         decimal = "," if raw.rfind(",") > raw.rfind(".") else "."
         thousands = "." if decimal == "," else ","
         raw = raw.replace(thousands, "").replace(decimal, ".")
@@ -173,9 +151,7 @@ def _number(value: str) -> float | None:
 
 def price_condition_met(question: str, products: list[Any]) -> bool | None:
     """Evaluate common price limits from structured, page-derived product data."""
-    # Seit 9.5.34: nur ganze Woerter ("Hunter 2" ist kein "unter 2"), und
-    # keine Zahl mit Einheit ("bis 17 Zoll", "maximal 1 ms"). Steht irgendwo
-    # ein Betrag mit Euro, gilt der; sonst der letzte.
+
     kandidaten = [
         m for m in re.finditer(
             r"\b(?:unter|weniger als|höchstens|maximal|bis)\s*(?:zu\s*)?([0-9][0-9.,]*)"
@@ -191,12 +167,15 @@ def price_condition_met(question: str, products: list[Any]) -> bool | None:
         return None
     match = auswahl[-1]
     limit = _number(match.group(1))
-    prices = [_number(str(getattr(product, "price", "") or "")) for product in products]
+    prices = [_number(str(getattr(product, "price", "") or "")) for product in products
+              if not mit_euro or str(getattr(product, "currency", "") or "EUR").upper() == "EUR"]
     known = [price for price in prices if price is not None]
     if limit is None or not known:
         return None
     strict = "unter" in match.group(0) or "weniger als" in match.group(0)
-    return any(price < limit if strict else price <= limit for price in known)
+    negated = bool(re.search(r"\bnicht\s+$", question[:match.start()], re.I))
+    return any((price >= limit if strict else price > limit) if negated
+               else (price < limit if strict else price <= limit) for price in known)
 
 
 @dataclass(slots=True)
@@ -252,35 +231,34 @@ def clean_rhythm(value: str) -> str:
 def next_time(rhythm: str, hour: int, minute: int, weekday: int, now: float = 0.0) -> float:
     """Wann der Auftrag das naechste Mal faellig ist.
 
-    Gerechnet wird in Ortszeit: wer "jeden Morgen um acht" sagt, meint acht
-    Uhr bei sich, nicht in UTC.
+    Gerechnet wird in deutscher Zeit (15.5.5, vorher die Uhr des Servers, im Container
+    meist UTC): wer "jeden Morgen um acht" sagt, meint acht Uhr in Deutschland, im Sommer
+    wie im Winter.
     """
+    from aquaticy.zeit import BERLIN
+
     stempel = now or time.time()
-    jetzt = datetime.fromtimestamp(stempel)
+    jetzt = datetime.fromtimestamp(stempel, BERLIN)
     rhythm = clean_rhythm(rhythm)
     hour = max(0, min(23, int(hour)))
     minute = max(0, min(59, int(minute)))
 
-    # Durchgehend: schon der naechste Takt ist wieder faellig. Weil ein Lauf
-    # laenger dauert als ein Takt, folgt der naechste erst, wenn der vorige
-    # fertig ist -- die Beobachtung laeuft also am Stueck, ohne sich zu stapeln.
     if rhythm == "always":
-        # Der Rohstempel, nicht der Umweg ueber datetime: der rundet auf
-        # Mikrosekunden und kann dabei aufrunden -- dann waere "sofort" um
-        # ein Haar in der Zukunft und der Auftrag bliebe einen Takt liegen.
         return stempel
 
     intervals = {"minutes1": 1, "minutes5": 5, "minutes15": 15, "minutes30": 30}
     if rhythm in intervals:
-        return (jetzt + timedelta(minutes=intervals[rhythm])).replace(
-            second=0, microsecond=0
-        ).timestamp()
+        return (stempel // 60 + intervals[rhythm]) * 60
 
     if rhythm == "hourly":
         ziel = jetzt.replace(minute=minute, second=0, microsecond=0)
-        if ziel <= jetzt:
-            ziel += timedelta(hours=1)
-        return ziel.timestamp()
+        for offset in (0, 1, 2):
+            candidate = ziel + timedelta(hours=offset)
+            future = [candidate.replace(fold=fold).timestamp() for fold in (0, 1)
+                      if candidate.replace(fold=fold).timestamp() > stempel]
+            if future:
+                return min(future)
+        raise ValueError("Der nächste stündliche Termin ließ sich nicht bestimmen.")
 
     ziel = jetzt.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if rhythm == "daily":
@@ -288,11 +266,10 @@ def next_time(rhythm: str, hour: int, minute: int, weekday: int, now: float = 0.
             ziel += timedelta(days=1)
         return ziel.timestamp()
 
-    # wöchentlich: 0 = Montag, wie datetime.weekday()
     wunsch = max(0, min(6, int(weekday)))
     vorlauf = (wunsch - ziel.weekday()) % 7
-    ziel += timedelta(days=vorlauf)
-    if ziel <= jetzt:
+    ziel = (ziel + timedelta(days=vorlauf)).replace(fold=jetzt.fold)
+    if ziel.timestamp() <= stempel:
         ziel += timedelta(days=7)
     return ziel.timestamp()
 
@@ -370,6 +347,10 @@ def clean_schedule(raw: Any) -> dict[str, Any]:
         raise ValueError("Der Zeitplan muss ein Objekt sein.")
     if not raw:
         return {}
+    for key in ("hour", "minute", "weekday"):
+        value = raw.get(key)
+        if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+            raise ValueError("Uhrzeit und Wochentag brauchen ganze Zahlen.")
     kind = str(raw.get("kind") or "research").strip().lower()
     if kind not in KINDS:
         raise ValueError("Diese Art Beobachtung gibt es nicht.")
@@ -397,14 +378,9 @@ def clean_schedule(raw: Any) -> dict[str, Any]:
             "image_id": image, "image_note": str(raw.get("image_note") or "")[:6000]}
 
 
-#: Woran ein gefundenes Angebot erkennbar ist: eine vollstaendige Adresse.
-#: Ohne sie waere die Meldung "gefunden" ohne Nutzen -- und ohne Beleg.
 OFFER_URL_RE = re.compile(r"https?://[^\s<>\]\)\"']{6,}")
 
 
-#: Parameter, die nur sagen, WOHER jemand kam -- nie, WAS die Seite zeigt.
-#: Sie stehen mal in der gelesenen Adresse und mal in der genannten; sie
-#: deshalb fuer zwei verschiedene Seiten zu halten, verwirft echte Treffer.
 TRACKING_PARAMS = frozenset({
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
     "utm_id", "gclid", "gbraid", "wbraid", "fbclid", "msclkid", "igshid",
@@ -413,14 +389,10 @@ TRACKING_PARAMS = frozenset({
 
 
 def _offer_identity(url: str) -> tuple[str, str, int, str, str] | None:
-    """Vergleicht Webadressen inklusive Port; Fragmente sind keine andere Seite.
+    """Vergleicht gelesene Adressen ohne Fragmente und bekannte Tracking-Parameter.
 
-    Drei Dinge werden bewusst weggeraeumt, weil sie dieselbe Seite bezeichnen:
-    das fuehrende ``www.`` (Shops leiten staendig zwischen beiden Formen um,
-    und gespeichert wird die Adresse NACH der Umleitung), die Gross- und
-    Kleinschreibung im Pfad, und Parameter, die nur die Herkunft zaehlen.
-    Alles andere bleibt Unterschied: ``?id=1`` und ``?id=2`` sind zwei
-    Produkte, nicht zwei Wege zu einem.
+    Hostnamen, Gross-/Kleinschreibung und abschliessende Schraegstriche des Pfads
+    bleiben erhalten: Nur ein tatsaechlich beobachtetes Redirect belegt eine Gleichheit.
     """
     try:
         parsed = urlsplit(url)
@@ -430,7 +402,7 @@ def _offer_identity(url: str) -> tuple[str, str, int, str, str] | None:
         if parsed.username is not None or parsed.password is not None:
             return None
         port = parsed.port
-        host = parsed.hostname.lower().removeprefix("www.")
+        host = parsed.hostname.lower()
         felder = [
             (name, wert)
             for name, wert in parse_qsl(parsed.query, keep_blank_values=True)
@@ -439,7 +411,7 @@ def _offer_identity(url: str) -> tuple[str, str, int, str, str] | None:
         return (
             scheme, host,
             port if port is not None else (443 if scheme == "https" else 80),
-            parsed.path.rstrip("/").lower() or "/", urlencode(sorted(felder)),
+            parsed.path or "/", urlencode(sorted(felder, key=lambda pair: pair[0])),
         )
     except ValueError:
         return None
@@ -491,7 +463,7 @@ def describe_job_image(agent: Any, job: Job, settings: Any) -> str:
 
 def run_job(job: Job, settings: Any, on_abuse: Any = None, *,
             agent_factory: Any = None, context: str = "", active: Any = None,
-            chat_id: str = "") -> tuple[str, str]:
+            chat_id: str = "", on_answer: Any = None) -> tuple[str, str]:
     """Fuehrt einen Auftrag aus. Returns: (Zustand, Chat-Kennung).
 
     Der Agent ist ein eigener: das laufende Gespraech des Nutzers bleibt
@@ -507,17 +479,14 @@ def run_job(job: Job, settings: Any, on_abuse: Any = None, *,
     from aquaticy.guardrails import UNAVAILABLE
 
     try:
-        # Das Kontingent des Kontos (settings.quota) -- vor dem ersten Aufruf.
         metering.check(settings)
     except metering.QuotaExceeded:
         return (TOKEN_LIMIT_STATE, "")
 
     cache = Cache(settings.db_path, settings.cache_ttl_hours)
     monitoring = job.kind in MONITORING
-    # Fehlversuche einer Beobachtung werden nicht als neue Chats gespeichert.
+
     def ereignis(name: str, payload: dict[str, Any]) -> None:
-        # Missbrauch in einem Auftrag zaehlt bei Ai-guard wie im Chat (9.5.26) --
-        # vorher lehnte der Rechtsrahmen ab, aber niemand vermerkte es.
         if name == "abuse" and on_abuse is not None:
             try:
                 on_abuse(job, payload)
@@ -533,8 +502,6 @@ def run_job(job: Job, settings: Any, on_abuse: Any = None, *,
     try:
         frage = job.question
         if job.kind == "image":
-            # Einmal ansehen reicht: das Foto aendert sich nicht, und bei
-            # "jede Minute" waere jede Minute eine Bildanfrage faellig.
             gesehen = job.image_note.strip()
             if not gesehen:
                 gesehen = describe_job_image(agent, job, settings)
@@ -597,14 +564,11 @@ def run_job(job: Job, settings: Any, on_abuse: Any = None, *,
         antwort = str(getattr(result, "answer", "") or "").strip()
         chat = str(getattr(agent, "session_id", ""))
         if str(getattr(result, "error", "") or "") == UNAVAILABLE:
-            # Nicht geprueft ist nicht abgelehnt: der Auftrag bleibt an und
-            # versucht es beim naechsten Takt wieder.
             return (UNAVAILABLE, "")
+        if getattr(result, "error", "") or getattr(result, "stopped", False):
+            return ("Fehler: Antwort nicht abgeschlossen", "")
         regel = str(getattr(result, "guarded", "") or "")
         if regel:
-            # Dieselbe Frage wird beim naechsten Takt wieder abgelehnt. Der
-            # Planer schaltet den Auftrag deshalb ab (siehe Scheduler) --
-            # sonst liefe er ewig ins selbe Nein.
             return (f"{GUARD_STATE}: {regel}", "")
         if not antwort:
             return ("ohne Antwort", chat)
@@ -614,15 +578,21 @@ def run_job(job: Job, settings: Any, on_abuse: Any = None, *,
             if job.kind == "visual" and not getattr(result, "visuals", []):
                 return ("kein Bild gefunden", "")
             if job.kind == "price":
+                wanted = _offer_identity(job.source_url)
+                allowed_sources = {wanted}
+                for source in getattr(result, "sources", []) or []:
+                    if (isinstance(source, dict) and source.get("requested_url")
+                            and _offer_identity(source["requested_url"]) == wanted):
+                        allowed_sources.add(_offer_identity(str(source.get("url") or "")))
+                allowed_sources.discard(None)
                 verified = price_condition_met(
-                    job.question, list(getattr(result, "products", []) or [])
-                )
+                    job.question, [p for p in getattr(result, "products", []) or []
+                                   if _offer_identity(str(getattr(p, "url", "")))
+                                   in allowed_sources])
                 if verified is None:
                     return ("kein prüfbarer Preis gefunden", "")
                 matched = verified
-            # Gefunden heisst beim Bildauftrag: eine Seite gelesen UND eine
-            # Adresse genannt. Ein Modell, das "ja, gibt es" schreibt, hat noch
-            # nichts gefunden -- der Nutzer will den Laden, nicht die Zuversicht.
+
             if job.kind == "image" and not verified_offer_url(
                 antwort, list(getattr(result, "sources", []) or [])
             ):
@@ -630,25 +600,29 @@ def run_job(job: Job, settings: Any, on_abuse: Any = None, *,
             if not matched:
                 return ("noch nicht erfüllt", "")
             meta = result.meta() if hasattr(result, "meta") else {}
-            checked = datetime.now().astimezone().isoformat(timespec="seconds")
+            checked = zeit.jetzt().isoformat(timespec="seconds")
             meta["monitor_checked_at"] = checked
             if agent_factory is not None:
                 meta["coworker"] = job.id
             cache.add_history(chat, job.question, antwort, meta)
             with contextlib.suppress(Exception):
                 cache.mark_unread(chat, reason="beobachtung")
+            if on_answer is not None:
+                with contextlib.suppress(Exception):
+                    on_answer(antwort)
             return ("erfüllt", chat)
         if agent_factory is not None:
             meta = result.meta() if hasattr(result, "meta") else {}
             meta["coworker"] = job.id
             cache.add_history(chat, job.question, antwort, meta)
-        # Der Auftrag hat sich selbst gestellt -- oft nachts, jedenfalls ohne
-        # dass jemand davorsitzt. Damit die Antwort nicht in der Liste
-        # untergeht, leuchtet der Chat, bis ihn jemand geoeffnet hat.
+
         with contextlib.suppress(Exception):
             cache.mark_unread(chat, reason="auftrag")
+        if on_answer is not None:
+            with contextlib.suppress(Exception):
+                on_answer(antwort)
         return ("fertig", chat)
-    except Exception as exc:  # pragma: no cover - haengt am Modell
+    except Exception as exc:  # pragma: no cover
         return (f"Fehler: {type(exc).__name__}", "")
     finally:
         with contextlib.suppress(Exception):

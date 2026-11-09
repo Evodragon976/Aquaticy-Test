@@ -44,47 +44,57 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 
+from aquaticy import zeit
+from aquaticy.jsonutil import loads
+
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 
-#: Nur Leserechte. Das ist der Normalfall -- mehr soll Aquaticy nicht koennen,
-#: solange es niemand ausdruecklich erlaubt.
+
 SCOPES = (
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
 )
 
-#: Mit "Aendern erlaubt" kommen zwei Rechte dazu -- und nur diese zwei:
-#:
-#: * `calendar.events` legt Termine an und aendert sie. Der Kalender selbst
-#:   (Freigaben, Loeschen des Kalenders) bleibt aussen vor.
-#: * `gmail.compose` wird fuer Entwuerfe gebraucht, erlaubt bei Google aber
-#:   auch Senden. Aquaticy verwendet ausschliesslich den Entwurfs-Endpunkt.
-WRITE_SCOPES = (
-    *SCOPES,
-    "https://www.googleapis.com/auth/calendar.events",
-    "https://www.googleapis.com/auth/gmail.compose",
-)
 
-#: Datei mit den verschluesselten Token.
+CALENDAR_WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+MAIL_WRITE_SCOPE = "https://www.googleapis.com/auth/gmail.compose"
+WRITE_SCOPES = (*SCOPES, CALENDAR_WRITE_SCOPE, MAIL_WRITE_SCOPE)
+
+
+def granted_write(scopes: list[str]) -> tuple[bool, bool] | None:
+    """Was Google fuer das Aendern wirklich erlaubt hat: (Kalender, Mail).
+
+    Google laesst den Nutzer jedes Recht einzeln abwaehlen -- die Zustimmung kann
+    also "nur lesen" sein, obwohl "Aendern erlaubt" an war (12.5.6 Sol). `None` heisst:
+    unbekannt (eine Verbindung aus der Zeit, bevor die Rechte gespeichert wurden).
+    """
+    if not scopes:
+        return None
+    menge = set(scopes)
+    kalender = bool(menge & {CALENDAR_WRITE_SCOPE, "https://www.googleapis.com/auth/calendar"})
+    mail = bool(menge & {MAIL_WRITE_SCOPE, "https://www.googleapis.com/auth/gmail.modify",
+                         "https://mail.google.com/"})
+    return kalender, mail
+
+
 TOKEN_FILE = "google.json"
 
-#: Ein paar Sekunden Sicherheitsabstand: laeuft das Token waehrend der
-#: Anfrage ab, waere die Antwort ein 401 statt eines Ergebnisses.
+
 EXPIRY_MARGIN = 60
 
-#: Hoechstzahl der Treffer, die eine Abfrage zurueckgibt.
+
 MAX_RESULTS = 20
 
-#: So viel Text einer Mail wird uebernommen. Eine lange Mail wuerde sonst das
-#: halbe Kontextfenster fuellen.
+
 MAX_BODY_CHARS = 6000
 
 REQUEST_TIMEOUT = 20
 MAX_TOKEN_BYTES = 64 * 1024
+MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 
 _STORE_LOCKS: weakref.WeakValueDictionary[str, Any] = weakref.WeakValueDictionary()
 _STORE_LOCKS_LOCK = threading.Lock()
@@ -123,9 +133,6 @@ class Tokens:
         return not self.access_token or time.time() >= self.expires_at - EXPIRY_MARGIN
 
 
-# ---------------------------------------------------------------------------
-# Ablage
-# ---------------------------------------------------------------------------
 class TokenStore:
     """Legt die Token verschluesselt im Datenordner ab."""
 
@@ -134,6 +141,7 @@ class TokenStore:
         self._key_path = Path(data_dir) / "memory.key"
         self._passphrase = passphrase
         self._lock = _store_lock(self.path)
+        self._refresh_lock = _store_lock(self.path.with_name(self.path.name + ".refresh"))
         self._cipher_value: Any = None
 
     def _cipher(self) -> Any:
@@ -172,7 +180,6 @@ class TokenStore:
                               refresh_token=data.get("refresh_token", ""), expires_at=expiry,
                               email=data.get("email", ""), scopes=scopes)
             except (OSError, ValueError, TypeError, OverflowError):
-                # Unlesbar heisst "nicht verbunden", nicht "Absturz".
                 return Tokens()
 
     def save(self, tokens: Tokens) -> None:
@@ -184,7 +191,6 @@ class TokenStore:
             fd, temporary = tempfile.mkstemp(prefix=".google-", dir=self.path.parent)
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                    # Keep explicit Windows ACL protection as well as POSIX mode 0600.
                     secure_file(Path(temporary))
                     handle.write(encrypted)
                 os.replace(temporary, self.path)
@@ -205,9 +211,6 @@ class TokenStore:
             self.path.unlink()
 
 
-# ---------------------------------------------------------------------------
-# Anmeldung
-# ---------------------------------------------------------------------------
 def consent_url(
     client_id: str, redirect_uri: str, state: str = "", *, write: bool = False
 ) -> str:
@@ -279,7 +282,7 @@ def exchange_code(client_id: str, client_secret: str, code: str, redirect_uri: s
 
 
 def refresh_tokens(client_id: str, client_secret: str, tokens: Tokens) -> Tokens:
-    """Holt ein frisches Access-Token. Das Refresh-Token bleibt bestehen."""
+    """Holt ein frisches Access-Token und uebernimmt ein rotiertes Refresh-Token."""
     if not tokens.refresh_token:
         raise NotConnected("Kein Konto verbunden.")
     data = _token_request(
@@ -291,31 +294,63 @@ def refresh_tokens(client_id: str, client_secret: str, tokens: Tokens) -> Tokens
         }
     )
     tokens.access_token = str(data.get("access_token", ""))
+    if data.get("refresh_token"):
+        tokens.refresh_token = str(data["refresh_token"])
     tokens.expires_at = time.time() + float(data.get("expires_in", 3600) or 3600)
+    if "scope" in data:
+        tokens.scopes = str(data["scope"]).split()
     return tokens
+
+
+def _bounded_request(client: httpx.Client | None, method: str, url: str, *,
+                     limit: int | None = None, **kwargs: Any) -> httpx.Response:
+    from aquaticy.netguard import read_response
+
+    stream = client.stream if client is not None else httpx.stream
+    deadline = time.monotonic() + REQUEST_TIMEOUT
+    with stream(method, url, timeout=REQUEST_TIMEOUT, follow_redirects=False, **kwargs) as response:
+        body = read_response(response, MAX_RESPONSE_BYTES if limit is None else limit,
+                             deadline)
+        headers = {key: value for key, value in response.headers.items()
+                   if key.lower() not in {
+                       "content-encoding", "content-length", "transfer-encoding"}}
+        return httpx.Response(response.status_code, headers=headers, content=body)
 
 
 def _token_request(payload: dict[str, str]) -> dict[str, Any]:
     try:
-        response = httpx.post(TOKEN_URL, data=payload, timeout=REQUEST_TIMEOUT)
+        response = _bounded_request(None, "POST", TOKEN_URL, data=payload,
+                                    limit=MAX_TOKEN_BYTES)
     except httpx.HTTPError as exc:
         raise GoogleError(f"Google nicht erreichbar: {exc}") from exc
     if response.status_code >= 400:
         raise GoogleError(_explain(response))
     try:
-        return response.json()
-    except ValueError as exc:
-        raise GoogleError("Google hat keine verwertbare Antwort geschickt.") from exc
+        data = loads(response.content)
+        if not isinstance(data, dict) or not isinstance(data.get("access_token"), str) \
+                or not re.fullmatch(r"[!-~]{1,65536}", data["access_token"]):
+            raise ValueError
+        expiry = data.get("expires_in", 3600)
+        if isinstance(expiry, bool):
+            raise ValueError
+        seconds = float(expiry)
+        if not math.isfinite(seconds) or seconds <= 0 or not math.isfinite(time.time() + seconds):
+            raise ValueError
+        if "refresh_token" in data and not isinstance(data["refresh_token"], str):
+            raise ValueError
+        if "scope" in data and not isinstance(data["scope"], str):
+            raise ValueError
+        return data
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise GoogleError("Google hat keine gültigen Zugangsdaten geschickt.") from exc
 
 
 def _explain(response: httpx.Response) -> str:
     """Aus einer Google-Fehlerantwort einen Satz machen, der weiterhilft."""
     detail = ""
     with contextlib.suppress(ValueError):
-        body = response.json()
+        body = loads(response.content)
         if isinstance(body, dict):
-            # "error" ist mal ein Objekt mit "message", mal nur ein Text
-            # ("invalid_grant") -- beides ist kein Absturz (9.5.34).
             fehler = body.get("error")
             detail = str(
                 body.get("error_description")
@@ -323,6 +358,9 @@ def _explain(response: httpx.Response) -> str:
                 or fehler
                 or ""
             )
+    if "redirect_uri_mismatch" in detail:
+        return ("Google kennt diese Rücksprung-Adresse nicht. Lege in der Google Cloud Console "
+                "eine OAuth-Client-ID vom Typ „Desktop-App“ an und trag sie hier ein.")
     if response.status_code == 401:
         return f"Google lehnt die Anmeldung ab ({detail or 'nicht autorisiert'})."
     if response.status_code == 403:
@@ -333,9 +371,6 @@ def _explain(response: httpx.Response) -> str:
     return f"Google antwortet mit {response.status_code}: {detail or 'kein Grund genannt'}"
 
 
-# ---------------------------------------------------------------------------
-# Zugriff
-# ---------------------------------------------------------------------------
 class Google:
     """Liest Mails und Termine eines verbundenen Kontos."""
 
@@ -351,10 +386,7 @@ class Google:
         self.store = store
         self._http = client or httpx.Client(timeout=REQUEST_TIMEOUT)
 
-    # -- Verbindung ------------------------------------------------------
     def tokens(self) -> Tokens:
-        # Andere Clients koennen das Konto trennen oder wechseln. Keine alte
-        # Berechtigung im langlebigen Agenten weiterbenutzen.
         return self.store.load()
 
     def connected(self) -> bool:
@@ -363,6 +395,10 @@ class Google:
     def account(self) -> str:
         """Die Adresse des verbundenen Kontos, oder "" wenn keines da ist."""
         return self.tokens().email
+
+    def write_access(self) -> tuple[bool, bool] | None:
+        """(Termine aendern erlaubt, Entwuerfe erlaubt) -- oder None, wenn unbekannt."""
+        return granted_write(self.tokens().scopes)
 
     def disconnect(self) -> None:
         self.store.clear()
@@ -387,30 +423,38 @@ class Google:
                 "'Gmail & Kalender' verbinden."
             )
         if tokens.stale:
-            previous = replace(tokens, scopes=list(tokens.scopes))
-            refresh_tokens(self.client_id, self.client_secret, tokens)
-            if not self.store.replace_if_current(previous, tokens):
-                current = self.tokens()
-                if current.refresh_token == previous.refresh_token and not current.stale:
-                    return current.access_token  # Ein anderer Client hat bereits erneuert.
-                raise NotConnected(
-                    "Die Verbindung zu Google hat sich geändert. Versuch es bitte noch einmal.")
+            with self.store._refresh_lock:
+                tokens = self.tokens()
+                if not tokens.refresh_token:
+                    raise NotConnected("Die Verbindung zu Google wurde inzwischen getrennt.")
+                if not tokens.stale:
+                    return tokens.access_token
+                previous = replace(tokens, scopes=list(tokens.scopes))
+                refresh_tokens(self.client_id, self.client_secret, tokens)
+                if not self.store.replace_if_current(previous, tokens):
+                    current = self.tokens()
+                    if current.refresh_token == previous.refresh_token and not current.stale:
+                        return current.access_token
+                    raise NotConnected(
+                        "Die Verbindung zu Google hat sich geändert. Versuch es bitte noch einmal.")
         return tokens.access_token
 
     def _get(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
         headers = {"Authorization": f"Bearer {self._access()}"}
         try:
-            response = self._http.get(url, params=params, headers=headers)
+            response = _bounded_request(self._http, "GET", url, params=params, headers=headers)
         except httpx.HTTPError as exc:
             raise GoogleError(f"Google nicht erreichbar: {exc}") from exc
         if response.status_code >= 400:
             raise GoogleError(_explain(response))
         try:
-            return response.json()
+            result = loads(response.content)
+            if not isinstance(result, dict):
+                raise ValueError
+            return result
         except ValueError as exc:
             raise GoogleError("Google hat keine verwertbare Antwort geschickt.") from exc
 
-    # -- Kalender --------------------------------------------------------
     def events(self, days: int = 7, query: str = "", count: int = 10) -> list[dict[str, Any]]:
         """Termine der naechsten *days* Tage, zeitlich sortiert.
 
@@ -432,7 +476,6 @@ class Google:
         data = self._get(f"{CALENDAR_API}/calendars/primary/events", params)
         return [_event(item) for item in data.get("items", [])]
 
-    # -- Gmail -----------------------------------------------------------
     def search_mail(self, query: str = "", count: int = 8) -> list[dict[str, Any]]:
         """Sucht Mails. *query* ist die Gmail-Suchsyntax (`from:`, `newer_than:` ...)."""
         count = max(1, min(int(count or 8), MAX_RESULTS))
@@ -457,7 +500,7 @@ class Google:
             },
         )
         headers = {
-            str(item.get("name", "")).lower(): str(item.get("value", ""))
+            str(item.get("name", "")).lower(): _header_text(str(item.get("value", "")))
             for item in (data.get("payload") or {}).get("headers", [])
         }
         return {
@@ -478,7 +521,7 @@ class Google:
         message_id = _resource_id(message_id)
         data = self._get(f"{GMAIL_API}/messages/{message_id}", {"format": "full"})
         headers = {
-            str(item.get("name", "")).lower(): str(item.get("value", ""))
+            str(item.get("name", "")).lower(): _header_text(str(item.get("value", "")))
             for item in (data.get("payload") or {}).get("headers", [])
         }
         body = _body_text(data.get("payload") or {})
@@ -492,10 +535,6 @@ class Google:
             "shortened": len(body) > MAX_BODY_CHARS,
         }
 
-    # -- Schreiben -------------------------------------------------------
-    # Alles hier setzt voraus, dass der Nutzer beim Verbinden ausdruecklich
-    # "Aendern erlaubt" gewaehlt hat: ohne die erweiterten Rechte antwortet
-    # Google mit einem 403, und das ist die richtige Antwort.
     def _write(
         self,
         method: str,
@@ -505,9 +544,8 @@ class Google:
     ) -> dict[str, Any]:
         headers = {"Authorization": f"Bearer {self._access()}"}
         try:
-            response = self._http.request(
-                method, url, json=payload, params=params or {}, headers=headers
-            )
+            response = _bounded_request(self._http, method, url, json=payload,
+                                        params=params or {}, headers=headers)
         except httpx.HTTPError as exc:
             raise GoogleError(f"Google nicht erreichbar: {exc}") from exc
         if response.status_code == 403:
@@ -519,9 +557,15 @@ class Google:
         if response.status_code >= 400:
             raise GoogleError(_explain(response))
         try:
-            return dict(response.json())
+            data = loads(response.content)
+            if not isinstance(data, dict):
+                raise ValueError("Ungültiges JSON-Objekt")
+            if data.get("error") or not isinstance(data.get("id"), str) or not data["id"]:
+                raise ValueError("Google hat die Änderung nicht bestätigt")
+            return data
         except ValueError as exc:
-            raise GoogleError("Google hat keine verwertbare Antwort geschickt.") from exc
+            raise GoogleError("Google hat die Änderung nicht bestätigt. Prüfe dein Konto, "
+                              "bevor du den Schreibauftrag wiederholst.") from exc
 
     def create_event(
         self,
@@ -565,8 +609,8 @@ class Google:
         summary: str = "",
         start: str = "",
         end: str = "",
-        description: str = "",
-        location: str = "",
+        description: str | None = None,
+        location: str | None = None,
         whole_day: bool = False,
     ) -> dict[str, Any]:
         """Aendert einen bestehenden Termin.
@@ -581,12 +625,15 @@ class Google:
         payload: dict[str, Any] = {}
         if summary:
             payload["summary"] = " ".join(str(summary).split())[:300]
-        if description:
+        if description is not None:
             payload["description"] = str(description)[:4000]
-        if location:
+        if location is not None:
             payload["location"] = str(location)[:300]
         if start:
-            payload["start"], payload["end"] = _times(start, end, whole_day)
+            if end:
+                payload["start"], payload["end"] = _times(start, end, whole_day)
+            else:
+                payload["start"] = _start_time(start, whole_day)
         elif end:
             payload["end"] = _end_time(end, whole_day)
         if not payload:
@@ -614,10 +661,7 @@ class Google:
         subject = " ".join(str(subject).split())[:300]
         if not subject and not body:
             raise GoogleError("Ein Entwurf ohne Betreff und ohne Text waere leer.")
-        # Empfaenger werden geprueft und neu geschrieben (seit 9.5.16): bis
-        # dahin landete "a@b.de\r\nBcc: fremd@x.de" woertlich im Kopf, und
-        # ein praepariertes Dokument haette so einen stillen Empfaenger
-        # untergebracht.
+
         nachricht = EmailMessage()
         if to:
             nachricht["To"] = mail_addresses(to)
@@ -642,9 +686,6 @@ class Google:
             self._http.close()
 
 
-# ---------------------------------------------------------------------------
-# Aufbereiten
-# ---------------------------------------------------------------------------
 def _resource_id(value: str) -> str:
     """Nur eine opake Mail-/Termin-Kennung, nie Pfade, Query oder Escape-Sequenzen."""
     value = value.strip(" ")
@@ -653,9 +694,8 @@ def _resource_id(value: str) -> str:
     return value
 
 
-#: Eine Mailadresse, wie sie in einen Entwurf darf -- ohne Anzeigenamen-Tricks.
 _ADRESSE = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$")
-#: So viele Empfaenger hat ein Entwurf hoechstens.
+
 MAX_RECIPIENTS = 20
 
 
@@ -676,43 +716,50 @@ def mail_addresses(text: str) -> str:
     if len(paare) > MAX_RECIPIENTS:
         raise GoogleError(f"Höchstens {MAX_RECIPIENTS} Empfänger je Entwurf.")
     for _, adresse in paare:
-        if not _ADRESSE.match(adresse):
+        if not _ADRESSE.fullmatch(adresse):
             raise GoogleError(f"'{adresse[:80]}' ist keine gültige Mailadresse.")
     return ", ".join(formataddr((" ".join(name.split())[:80], adresse)) for name, adresse in paare)
-def _times(start: str, end: str, whole_day: bool) -> tuple[dict[str, str], dict[str, str]]:
-    """Macht aus zwei Zeitangaben das, was der Kalender erwartet.
-
-    Ohne Ende wird eine Stunde angenommen -- bei einem ganzen Tag ein Tag.
-    Uhrzeiten bekommen immer einen Offset. Google verlangt ihn, wenn kein
-    separates ``timeZone``-Feld gesetzt ist; bei einer naiven Eingabe gilt die
-    Ortszeit des Rechners.
-    """
-    roh_start = str(start).strip()
-    roh_ende = str(end).strip()
-    if whole_day or (len(roh_start) == 10 and "T" not in roh_start):
-        tag = roh_start[:10]
-        if not roh_ende:
-            with contextlib.suppress(ValueError):
-                naechster = datetime.fromisoformat(tag) + timedelta(days=1)
-                roh_ende = naechster.date().isoformat()
-        return ({"date": tag}, {"date": roh_ende[:10] or tag})
+def _start_time(start: str, whole_day: bool) -> dict[str, str]:
+    raw = str(start).strip()
     try:
-        beginn = _calendar_datetime(roh_start)
-        ende = _calendar_datetime(roh_ende) if roh_ende else beginn + timedelta(hours=1)
-    except ValueError as exc:
-        raise GoogleError(f"Mit '{start}' kann der Kalender nichts anfangen.") from exc
-    return ({"dateTime": beginn.isoformat()}, {"dateTime": ende.isoformat()})
+        if whole_day or (len(raw) == 10 and "T" not in raw):
+            return {"date": datetime.fromisoformat(raw[:10]).date().isoformat()}
+        return {"dateTime": _calendar_datetime(raw).isoformat()}
+    except (ValueError, OverflowError) as exc:
+        raise GoogleError("Der Kalender braucht ein gültiges Datum oder eine ISO-Uhrzeit.") from exc
+
+
+def _times(start: str, end: str, whole_day: bool) -> tuple[dict[str, str], dict[str, str]]:
+    """Validierte Zeiten; beim Anlegen ohne Ende eine Stunde bzw. einen Tag."""
+    end = str(end or "").strip()
+    first = _start_time(start, whole_day)
+    try:
+        if "date" in first:
+            begin = datetime.fromisoformat(first["date"])
+            finish = datetime.fromisoformat(str(end).strip()[:10]) if end else \
+                begin + timedelta(days=1)
+            if finish <= begin:
+                raise ValueError("Ende vor Anfang")
+            return first, {"date": finish.date().isoformat()}
+        begin = _calendar_datetime(first["dateTime"])
+        finish = _calendar_datetime(end) if end else begin + timedelta(hours=1)
+        if finish <= begin:
+            raise ValueError("Ende vor Anfang")
+        return first, {"dateTime": finish.isoformat()}
+    except (ValueError, OverflowError) as exc:
+        raise GoogleError("Das Ende muss nach dem Anfang liegen und ein gültiges Datum sein.") \
+            from exc
 
 
 def _calendar_datetime(value: str) -> datetime:
     parsed = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
-    return parsed if parsed.tzinfo is not None else parsed.astimezone()
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=zeit.BERLIN)
 
 
 def _end_time(end: str, whole_day: bool) -> dict[str, str]:
     """Formatiert eine einzelne PATCH-Endzeit ohne den Start anzufassen."""
     value = str(end).strip()
-    if whole_day:
+    if whole_day or (len(value) == 10 and "T" not in value):
         try:
             return {"date": datetime.fromisoformat(value[:10]).date().isoformat()}
         except ValueError as exc:
@@ -728,7 +775,7 @@ def _event(item: dict[str, Any]) -> dict[str, Any]:
     end = item.get("end") or {}
     whole_day = "date" in start
     return {
-        # Die Kennung braucht, wer einen Termin spaeter aendern will.
+
         "id": str(item.get("id", "")),
         "summary": str(item.get("summary", "(ohne Titel)")),
         "start": str(start.get("dateTime") or start.get("date") or ""),
@@ -743,34 +790,76 @@ def _event(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _header_text(value: str) -> str:
+    from email.header import decode_header
+
+    result = []
+    try:
+        for part, charset in decode_header(value):
+            if isinstance(part, bytes):
+                try:
+                    part = part.decode(charset or "ascii", "replace")
+                except LookupError:
+                    part = part.decode("utf-8", "replace")
+            result.append(part)
+    except ValueError:
+        return value
+    return "".join(result)
+
+
 def _body_text(payload: dict[str, Any]) -> str:
     """Sucht den Textteil einer Mail -- lieber Klartext als HTML."""
     plain = _find_part(payload, "text/plain")
-    if plain:
+    if plain.strip():
         return plain
     html = _find_part(payload, "text/html")
-    return _strip_tags(html) if html else ""
+    return _strip_tags(html)[:MAX_BODY_CHARS + 1] if html else ""
 
 
 def _find_part(part: dict[str, Any], wanted: str) -> str:
-    if str(part.get("mimeType", "")).startswith(wanted):
-        return _decode(str((part.get("body") or {}).get("data", "")))
+    from email.message import Message
+
+    if not isinstance(part, dict) or part.get("filename"):
+        return ""
+    headers = {str(h.get("name", "")).lower(): str(h.get("value", ""))
+               for h in part.get("headers", []) if isinstance(h, dict)}
+    if headers.get("content-disposition", "").strip().lower().startswith("attachment"):
+        return ""
+    mime = str(part.get("mimeType", "")).split(";", 1)[0].strip().lower()
+    if mime == wanted:
+        message = Message()
+        message["Content-Type"] = headers.get("content-type", wanted)
+        return _decode(str((part.get("body") or {}).get("data", "")),
+                       charset=message.get_content_charset() or "utf-8",
+                       limit=1_000_000 if wanted == "text/html" else MAX_BODY_CHARS + 1)
+    found_parts: list[str] = []
+    limit = 1_000_000 if wanted == "text/html" else MAX_BODY_CHARS + 1
+    length = 0
     for child in part.get("parts") or []:
         found = _find_part(child, wanted)
         if found:
-            return found
-    return ""
+            found_parts.append(found)
+            length += len(found) + 1
+            if mime == "multipart/alternative" or length >= limit:
+                break
+    return "\n".join(found_parts)[:limit]
 
 
-def _decode(data: str) -> str:
+def _decode(data: str, charset: str = "utf-8", limit: int = MAX_BODY_CHARS + 1) -> str:
     """Gmail liefert base64url mit fehlendem Padding."""
     if not data:
         return ""
     import binascii
 
     with contextlib.suppress(ValueError, binascii.Error):
-        padded = data + "=" * (-len(data) % 4)
-        return base64.urlsafe_b64decode(padded).decode("utf-8", "replace")
+        max_encoded = (limit * 4 + 2) // 3 * 4
+        limited = data[:max_encoded]
+        padded = limited + "=" * (-len(limited) % 4)
+        raw = base64.urlsafe_b64decode(padded)
+        try:
+            return raw.decode(charset, "replace")[:limit]
+        except LookupError:
+            return raw.decode("utf-8", "replace")[:limit]
     return ""
 
 
@@ -780,7 +869,10 @@ _SPACE = re.compile(r"[ \t]*\n\s*\n\s*")
 
 def _strip_tags(html: str) -> str:
     text = re.sub(r"(?is)<(script|style).*?</\1>", " ", html)
-    text = _TAG.sub(" ", text)
+    text = re.sub(r"(?i)<br\b[^>]*>", "\n", text)
+    text = re.sub(r"(?i)</(?:p|div|h[1-6]|li|tr)\s*>", "\n\n", text)
+    text = re.sub(r"(?i)</(?:td|th)\s*>", "\t", text)
+    text = _TAG.sub("", text)
     text = _unescape(text)
     return _SPACE.sub("\n\n", text).strip()
 

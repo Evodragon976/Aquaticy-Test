@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import os
 import plistlib
 import subprocess
@@ -39,29 +40,43 @@ def test_complete_setup_reuses_ollama_and_persists_it(monkeypatch, tmp_path, loc
         return "ollama_chat/qwen3:8b"
 
     monkeypatch.setattr(cli, "_run_local_setup", model)
+    monkeypatch.setattr(cli, "_einzelkonto_einrichten", lambda settings: None)
     target = tmp_path / ".env"
     result = CliRunner().invoke(
         cli.app, ["setup", "--yes", "--no-probe", "--env-file", str(target)],
-        input=("3\n" if local else "1\n") + "1\n\ny\n\n\n\n",
+        # 14.1.3 Luna: keine Frage mehr nach den Agenten (immer an).
+        input=("3\n" if local else "1\n") + "1\n\n\n\n\n",
     )
     assert result.exit_code == 0, result.output
     assert calls == (["ollama", "model"] if local else ["ollama"])
-    assert "OLLAMA_NUM_PARALLEL=2" in target.read_text()
+    assert "OLLAMA_NUM_PARALLEL" not in target.read_text()
     if local:
         assert "AQUATICY_API_BASE=http://localhost:11434" in target.read_text()
 
 
-def test_cloud_only_setup_keeps_the_existing_installation_optional(monkeypatch, tmp_path):
+@pytest.mark.parametrize("background", [False, True])
+def test_cloud_only_setup_keeps_the_existing_installation_optional(
+        monkeypatch, tmp_path, background):
     monkeypatch.setattr(cli, "_ensure_ollama", lambda **kw: pytest.fail("Kein Ollama angefordert"))
     monkeypatch.setattr(cli, "_ask_website", lambda **kw: {})
     monkeypatch.setattr(cli, "_vm_beim_start", lambda settings: None)
+    starts = []
+    monkeypatch.setattr(cli, "web_command", lambda **kwargs: starts.append(kwargs))
+    monkeypatch.setattr(cli, "_einzelkonto_einrichten", lambda settings: None)
     target = tmp_path / ".env"
     result = CliRunner().invoke(
         cli.app, ["setup", "--no-ollama", "--no-probe", "--env-file", str(target)],
-        input="1\n1\n\ny\n\n\n\n",
+        # 13.0.0 Luna: vor dem Hintergrund die Frage nach dem Kontensystem (leer = aus).
+        # 14.1.3 Luna: keine Frage mehr nach den Agenten (immer an).
+        input="1\n1\n\n\n\n\n\n" + ("y\n" if background else "n\n"),
     )
     assert result.exit_code == 0, result.output
     assert "OLLAMA_NUM_PARALLEL" not in target.read_text()
+    assert f"AQUATICY_BACKGROUND={'true' if background else 'false'}" in target.read_text()
+    assert len(starts) == int(background)
+    if background:
+        assert starts[0]["background"] is True
+        assert starts[0]["lan"] is True
 
 
 @pytest.mark.parametrize("installed", [True, False])
@@ -77,34 +92,34 @@ def test_ensure_installs_only_if_missing_then_configures(monkeypatch, installed)
         return True
 
     monkeypatch.setattr(lm, "install_ollama", install)
-    monkeypatch.setattr(cli, "_configure_ollama_parallel", lambda **kw: calls.append("parallel")
-                        or True)
-    monkeypatch.setattr(lm, "start_server", lambda: calls.append("start") or True)
+    monkeypatch.setattr(setup, "configure_parallel",
+                        lambda **kw: pytest.fail("Keine Dienstumstellung im Setup"))
+    monkeypatch.setattr(lm, "server_running", lambda *a, **kw: False)
+    monkeypatch.setattr(lm, "start_server", lambda *a, **kw: calls.append("start") or True)
     assert cli._ensure_ollama(assume_yes=True)
-    assert calls == (["parallel", "start"] if installed else ["install", "parallel", "start"])
+    assert calls == (["start"] if installed else ["install", "start"])
 
 
-def test_restart_requires_confirmation_and_denial_does_not_mutate(monkeypatch):
+def test_existing_server_needs_no_restart_confirmation(monkeypatch):
     monkeypatch.setattr(cli.typer, "confirm", lambda *a, **kw: False)
     monkeypatch.setattr(setup, "configure_parallel", lambda **kw: pytest.fail("Nicht bestaetigt"))
-    assert cli._configure_ollama_parallel() is False
+    monkeypatch.setattr(lm, "ollama_binary", lambda: "/ollama")
+    monkeypatch.setattr(lm, "server_running", lambda *a, **kw: True)
+    monkeypatch.setattr(lm, "start_server", lambda *a, **kw: pytest.fail("Kein Neustart"))
+    assert cli._ensure_ollama() is True
 
 
-@pytest.mark.parametrize("failure", ["install", "config", "ready"])
+@pytest.mark.parametrize("failure", ["install", "start"])
 def test_failures_abort_before_model_download(monkeypatch, failure):
     monkeypatch.setattr(lm, "ollama_binary", lambda: None if failure == "install" else "/ollama")
     monkeypatch.setattr(lm, "install_command", lambda: ["installer", "ollama"])
     monkeypatch.setattr(lm, "install_ollama", lambda: False)
-    monkeypatch.setattr(lm, "server_running", lambda: False)
-    monkeypatch.setattr(lm, "wait_for_server", lambda: False)
+    monkeypatch.setattr(lm, "server_running", lambda *a, **kw: False)
+    monkeypatch.setattr(lm, "wait_for_server", lambda *a, **kw: False)
 
-    def configure(**kwargs):
-        if failure == "config":
-            raise setup.SetupError("Konfiguration fehlgeschlagen")
-        return True
-
-    monkeypatch.setattr(setup, "configure_parallel", configure)
-    monkeypatch.setattr(lm, "start_server", lambda: pytest.fail("Keinen zweiten Dienst starten"))
+    monkeypatch.setattr(setup, "configure_parallel",
+                        lambda **kwargs: pytest.fail("Keine Dienstumstellung"))
+    monkeypatch.setattr(lm, "start_server", lambda *a, **kw: False)
     monkeypatch.setattr(lm, "pull_model", lambda *a, **kw: pytest.fail("Kein Modell laden"))
     assert cli._run_local_setup("qwen3:8b", assume_yes=True) == ""
 
@@ -193,7 +208,8 @@ def test_service_permission_failure_cannot_start_a_second_server(monkeypatch, tm
 
     monkeypatch.setattr(setup.subprocess, "run", run)
     monkeypatch.setattr(lm, "start_server", lambda: pytest.fail("Kein zweiter Dienst"))
-    assert cli._configure_ollama_parallel(assume_yes=True) is False
+    with pytest.raises(setup.SetupError):
+        setup.configure_parallel(running=True)
 
 
 @pytest.mark.parametrize("running", [False, True])
@@ -320,7 +336,8 @@ def test_pull_uses_the_server_that_was_set_up(monkeypatch):
     captured = []
     monkeypatch.setattr(lm, "ollama_binary", lambda: "/ollama")
     monkeypatch.setattr(lm.subprocess, "Popen", lambda *a, **kw:
-                        captured.append(kw) or SimpleNamespace(stdout=iter([]), wait=lambda: 0))
+                        captured.append(kw) or SimpleNamespace(
+                            stdout=io.StringIO(), wait=lambda: 0, poll=lambda: 0))
     assert list(lm.pull_model("qwen3:8b")) == []
     assert captured[0]["env"]["OLLAMA_HOST"] == lm.DEFAULT_OLLAMA_URL
 
@@ -338,7 +355,7 @@ def test_linux_failed_download_is_never_executed(monkeypatch, tmp_path):
     command = lm.install_command()
     curl = tmp_path / "curl"
     marker = tmp_path / "executed"
-    # curl hinterlaesst ein teilweise geladenes Skript und meldet einen Netzfehler.
+
     curl.write_text('#!/bin/sh\nfor last do :; done\n'
                     f'echo "touch {marker}" > "$last"\nexit 22\n')
     curl.chmod(0o700)

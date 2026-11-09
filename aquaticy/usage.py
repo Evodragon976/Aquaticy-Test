@@ -25,11 +25,12 @@ import sqlite3
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-#: Ein Token sind drei Zeichen -- so vereinbart.
+from aquaticy import zeit
+
 CHARS_PER_TOKEN = 3
 
 
@@ -40,11 +41,6 @@ def tokens(text: str) -> int:
     return -(-len(text) // CHARS_PER_TOKEN)
 
 
-#: So viel zaehlt ein mitgeschicktes Bild. Die Anbieter rechnen ein Bild nach
-#: seiner Groesse in Kacheln ab -- ueblich sind rund 1.000 bis 2.000 Token.
-#: Bis 9.5.11 zaehlte hier die Laenge der Base64-Daten: ein Foto von 300 KB
-#: waren damit 133.000 "Token", fast das ganze Kontingent eines normalen
-#: Kontos fuer eine einzige Bildbeschreibung.
 IMAGE_INPUT_TOKENS = 1_500
 
 
@@ -70,6 +66,20 @@ def message_tokens(messages: list[dict[str, Any]]) -> int:
             gesamt += tokens(str(function.get("name", "")))
             gesamt += tokens(str(function.get("arguments", "")))
     return gesamt
+
+
+def reply_tokens(message: Any) -> int:
+    def value(obj: Any, name: str) -> Any:
+        return obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)
+
+    calls = []
+    for call in value(message, "tool_calls") or []:
+        function = value(call, "function")
+        calls.append({"function": {"name": value(function, "name") or "",
+                                    "arguments": value(function, "arguments") or ""}})
+    thought = value(message, "reasoning_content") or value(message, "reasoning") or ""
+    return message_tokens([{"content": value(message, "content"), "tool_calls": calls}]) \
+        + tokens(thought if isinstance(thought, str) else "")
 
 
 class UsageLog:
@@ -110,7 +120,7 @@ class UsageLog:
         """Traegt einen Aufruf ein. Fehler hier duerfen keine Antwort kosten."""
         if tokens_in <= 0 and tokens_out <= 0:
             return
-        heute = date.today().isoformat()
+        heute = zeit.heute().isoformat()
         name = (model or "unbekannt").strip() or "unbekannt"
         try:
             with self._lock, self._connect() as conn:
@@ -126,14 +136,12 @@ class UsageLog:
                     (heute, name, max(0, tokens_in), max(0, tokens_out)),
                 )
         except sqlite3.Error:
-            # Ein Zaehler, der die Antwort verhindert, waere die falsche
-            # Reihenfolge der Wichtigkeit.
             pass
 
     def summary(self, days: int = 7) -> dict[str, Any]:
         """Heute, die letzten Tage, insgesamt -- und je Modell."""
-        seit = (date.today() - timedelta(days=max(1, days) - 1)).isoformat()
-        heute = date.today().isoformat()
+        seit = (zeit.heute() - timedelta(days=max(1, days) - 1)).isoformat()
+        heute = zeit.heute().isoformat()
         leer = {"tokens_in": 0, "tokens_out": 0, "calls": 0}
         try:
             with self._connect() as conn:

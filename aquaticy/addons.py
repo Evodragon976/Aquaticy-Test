@@ -13,8 +13,8 @@ wird. Nach dem Installieren meldet man sich an, so wie es der Dienst vorsieht:
 * **GitHub** -- mit einem persoenlichen Zugangs-Token. Aquaticy liest damit nur
   (Repos, Issues, Pull Requests, Dateien); geschrieben wird nie, auch wenn das
   Token es erlauben wuerde.
-* **WhatsApp Web** und **Telegram Web** -- per QR-Code mit dem Handy, in einem
-  eigenen Firefox-Profil in der virtual machine.
+* **WhatsApp Web** -- per QR-Code mit dem Handy, in einem eigenen Firefox-Profil in der
+  virtual machine. (Telegram Web gibt es seit 12.6.6 Luna nicht mehr.)
 * **Signal** -- ein "Signal Web" gibt es nicht. Das Add-on installiert Signal
   Desktop (das offizielle Programm) in der virtual machine; gekoppelt wird wie ein
   Computer, ebenfalls per QR-Code.
@@ -50,11 +50,12 @@ Chat heraus laesst sich keins installieren, einschalten oder anmelden.
 
 from __future__ import annotations
 
-import base64
 import contextlib
 import hashlib
 import json
+import math
 import re
+import secrets
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -66,9 +67,7 @@ from urllib.parse import quote, urljoin, urlparse
 
 import httpx
 
-# ---------------------------------------------------------------------------
-# Katalog
-# ---------------------------------------------------------------------------
+from aquaticy import zeit
 
 
 @dataclass(frozen=True)
@@ -80,26 +79,26 @@ class AddOn:
     icon: str
     group: str
     summary: str
-    #: Wie man sich anmeldet: token | qr | keine | feeds | apikey (Modell-Anbieter)
+
     login: str
-    #: Braucht die virtual machine im User mode (und damit Ultra)?
+
     werkstatt: bool = False
-    #: Was installiert wird: "" (nichts) | webapp | signal | blender
+
     programm: str = ""
-    #: Adresse einer Web-App.
+
     adresse: str = ""
-    #: Einer der Vorschlaege aus der Suche nach nuetzlichen Add-ons.
+
     vorschlag: bool = False
-    #: Wie die Anmeldung geht -- steht unter dem Add-on.
+
     anmelden: str = ""
-    #: Was man wissen sollte, bevor man es nutzt.
+
     hinweis: str = ""
 
 
 CATALOG: dict[str, AddOn] = {
     addon.id: addon
     for addon in (
-        # -- KI-Modelle (12.0.0 Luna): die einzigen Anbieter mit API-Schluessel --
+
         AddOn(
             "nvidia_nim", "NVIDIA NIM", "🟩", "KI-Modelle",
             "Offene Modelle bei NVIDIA, zum Beispiel Nemotron und Qwen-Coder. Viel kostenlos: 40 "
@@ -122,13 +121,18 @@ CATALOG: dict[str, AddOn] = {
         ),
         AddOn(
             "github", "GitHub", "🐙", "Konten",
-            "Deine Repos, Issues, Pull Requests und Dateien — Aquaticy liest sie, "
-            "schreibt aber nie etwas.",
+            "Deine Repos, Commits, Issues, Pull Requests und Dateien. Aquaticy kann auch "
+            "ändern, committen, pushen und Pull Requests öffnen. Code prüfen: "
+            "„Prüfe https://github.com/besitzer/repo“.",
             login="token",
-            anmelden="Erstelle auf github.com ein Token: Settings → Developer settings → Personal "
-            "access tokens. Am besten „Fine-grained“ mit nur Leserechten. Füg es dann hier ein.",
-            hinweis="Aquaticy liest nur, auch wenn das Token mehr dürfte. Inhalte privater Repos "
-            "landen nie in einer Websuche.",
+            anmelden="Erstelle ein Fine-grained-Token auf GitHub. Wähle deine Repos unter "
+            "Repository access. Zum Lesen reicht Contents: Read-only. Zum Ändern erlaube "
+            "Contents: Read and write und Pull requests: Read and write. Füge das Token hier "
+            "ein.",
+            hinweis="Ausgewählte Dateien gehen an dein Chat-Modell. Jeder Commit, Push, Pull "
+            "Request und Kommentar braucht dein Ja. Aquaticy pusht nie mit force. Der "
+            "Schlüssel bleibt auf diesem Rechner, auch wenn die VM das Repo bearbeitet. Nach "
+            "privaten Repo-Inhalten braucht öffentliche Recherche deine Bestätigung.",
         ),
         AddOn(
             "whatsapp", "WhatsApp Web", "💬", "Messenger",
@@ -136,9 +140,9 @@ CATALOG: dict[str, AddOn] = {
             "vorbereiten. Senden nur nach deinem Ja.",
             login="qr", werkstatt=True, programm="webapp",
             adresse="https://web.whatsapp.com/",
-            anmelden="„Anmelden“ öffnet WhatsApp Web in der virtual machine. Auf dem Handy: "
+            anmelden="„Anmelden“ zeigt den QR-Code direkt in Aquaticy. Auf dem Handy: "
             "WhatsApp → Einstellungen → Verknüpfte Geräte → Gerät hinzufügen, dann den "
-            "QR-Code im Bildschirm unten scannen.",
+            "QR-Code im Anmeldefenster scannen.",
             hinweis="WhatsApp mag keine Automatisierung. Nutze es nur für dich, nie für "
             "Massennachrichten, sonst droht eine Sperre. Was Aquaticy liest, geht an dein Modell. "
             "Braucht Firefox (kommt beim Installieren mit).",
@@ -148,24 +152,12 @@ CATALOG: dict[str, AddOn] = {
             "Signal Desktop in der virtual machine (ein „Signal Web“ gibt es nicht): Aquaticy "
             "liest mit und bereitet Antworten vor. Senden nur nach deinem Ja.",
             login="qr", werkstatt=True, programm="signal",
-            anmelden="„Anmelden“ startet Signal in der virtual machine. Auf dem Handy: Signal → "
-            "Einstellungen → Gekoppelte Geräte → +, dann den QR-Code im Bildschirm unten "
+            anmelden="„Anmelden“ zeigt den QR-Code direkt in Aquaticy. Auf dem Handy: Signal → "
+            "Einstellungen → Gekoppelte Geräte → +, dann den QR-Code im Anmeldefenster "
             "scannen.",
             hinweis="Signal Desktop gibt es nur für x86_64. Nachrichten, die Aquaticy liest, "
             "gehen an dein Modell. Signal ist Ende-zu-Ende-verschlüsselt — überleg dir das also "
             "gut.",
-        ),
-        AddOn(
-            "telegram", "Telegram Web", "✈️", "Messenger",
-            "Telegram im Browser der virtual machine — Kanäle und Gruppen lesen, Antworten "
-            "vorbereiten. Senden nur nach deinem Ja.",
-            login="qr", werkstatt=True, programm="webapp",
-            adresse="https://web.telegram.org/a/", vorschlag=True,
-            anmelden="„Anmelden“ öffnet Telegram Web. Auf dem Handy: Telegram → "
-            "Einstellungen → Geräte → Desktop-Gerät verbinden, dann den QR-Code scannen. "
-            "Alternativ Telefonnummer und Code selbst in den Bildschirm tippen.",
-            hinweis="Was Aquaticy liest, geht an dein Modell. Braucht Firefox (kommt beim "
-            "Installieren mit).",
         ),
         AddOn(
             "blender", "Blender", "🧊", "Programme",
@@ -193,7 +185,7 @@ CATALOG: dict[str, AddOn] = {
             hinweis="Aquaticy ruft höflich ab: beachtet robots.txt, höchstens eine Anfrage pro "
             "Sekunde und Server, mit ehrlicher Kennung.",
         ),
-        # -- Neu in 9.5.17: vier kostenlose Dienste ohne Schlüssel -------------
+
         AddOn(
             "nachrichten", "Tagesschau", "🗞️", "Dienste",
             "Die aktuellen Meldungen der Tagesschau — nach Thema (Inland, Ausland, "
@@ -227,7 +219,7 @@ CATALOG: dict[str, AddOn] = {
             anmelden="Keine Anmeldung nötig.",
             hinweis="Daten von Nager.Date. Nur Jahr und Land gehen raus.",
         ),
-        # -- Eigene Plugins (11.0.0 Luna): Wissen statt Werkzeug ---------------
+
         AddOn(
             "code-review", "Code-Review", "🔍", "Plugins",
             "Prüft Code auf typische Fehler. Besonders auf die, die KI-Code oft hat: erfundene "
@@ -251,10 +243,10 @@ CATALOG: dict[str, AddOn] = {
     )
 }
 
-#: Die Modell-Anbieter unter den Add-ons. Sie liefern Modelle, keine Werkzeuge.
+
 MODEL_ADDONS = frozenset(a.id for a in CATALOG.values() if a.login == "apikey")
 
-#: Was die beiden Pruef-Plugins abdecken -- fuer das Add-on-Fenster.
+
 PLUGIN_CONTENT: dict[str, tuple[str, ...]] = {
     "code-review": (
         "Logik: Bedingungen, Randfälle (leer, None, 0, negativ), um eins daneben",
@@ -274,9 +266,7 @@ PLUGIN_CONTENT: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# ---------------------------------------------------------------------------
-# Rechte je Add-on (9.5.10)
-# ---------------------------------------------------------------------------
+
 @dataclass(frozen=True)
 class Recht:
     """Eine Einstellung im Add-on-Fenster: eine Frage, zwei oder drei Antworten.
@@ -290,7 +280,7 @@ class Recht:
     label: str
     options: tuple[tuple[str, str], ...]
     default: str
-    #: Nur sichtbar/wirksam, wenn ein anderes Recht diesen Wert hat.
+
     nur_wenn: tuple[str, str] | None = None
 
 
@@ -306,12 +296,16 @@ RIGHTS: dict[str, tuple[Recht, ...]] = {
     "github": (
         Recht("repos", "Welche Repos",
               (("oeffentlich", "Nur öffentliche"), ("alle", "Auch private")), "alle"),
-        Recht("inhalte", "Dateien",
-              (("nein", "Nur Übersicht"), ("ja", "Auch Inhalte lesen")), "ja"),
+        # Seit 15.0.0 auch aendern wie Codex. Jeder Schritt braucht trotzdem dein Ja.
+        # Den Standard-Branch, das Mergen und GitHub Actions macht Aquaticy nie: Das bleibt
+        # beim Menschen auf GitHub (wie bei Codex: Branch und Pull Request).
+        Recht("inhalte", "Dateien und Änderungen",
+              (("nein", "Nur Übersicht"), ("ja", "Auch Inhalte lesen"),
+               ("aendern", "Lesen und ändern: eigene Branches, Commits, Pull Requests")),
+              "aendern"),
     ),
     "whatsapp": _MESSENGER_RECHTE,
     "signal": _MESSENGER_RECHTE,
-    "telegram": _MESSENGER_RECHTE,
     "blender": (
         Recht("nutzung", "Blender nutzen",
               (("skripte", "Nur Skripte"), ("alles", "Skripte und Oberfläche")), "alles"),
@@ -349,11 +343,16 @@ RIGHTS: dict[str, tuple[Recht, ...]] = {
     ),
 }
 
-#: Die Messenger -- fuer die Pruefungen im Desktop.
-MESSENGERS = ("whatsapp", "signal", "telegram")
 
-#: Die strengsten Rechte: gelten, wenn ein Messenger-Fenster da ist, das zu
-#: keinem eingeschalteten Add-on gehoert (etwa im gewoehnlichen Browser).
+MESSENGERS = ("whatsapp", "signal")
+
+
+OTHER_MESSENGERS = ("telegram",)
+
+
+RETIRED = ("telegram",)
+
+
 STRICTEST = {"zugriff": "lesen", "wo": "einzeln"}
 
 
@@ -428,26 +427,22 @@ def messenger_rights(settings: Any, name: str) -> dict[str, str]:
     return dict(STRICTEST)
 
 
-#: Die Web-Apps teilen sich ein Firefox -- es liegt auf einem eigenen
-#: Datentraeger und wird mit der ersten Web-App geladen, mit der letzten
-#: wieder geloescht.
 FIREFOX = "_firefox"
 
-#: Wo die Add-ons in der virtual machine haengen.
+
 MOUNT_ROOT = "/addons"
 
-#: Wie lange eine Installation hoechstens dauern darf.
+
 INSTALL_TIMEOUT = 1800
 
-#: Nur fuer Tests: Adresse eines Testservers, von dem statt der offiziellen
-#: Server geladen wird (docker/desktop/aquaticy-addons, --quelle).
+
 INSTALL_SOURCE = ""
 
 MAX_FEEDS = 20
 MAX_FEED_BYTES = 2_000_000
 MAX_FEED_ITEMS = 40
 
-#: So heisst das GitHub-Token in der .env des Kontos.
+
 GITHUB_TOKEN_KEY = "AQUATICY_GITHUB_TOKEN"
 GITHUB_API = "https://api.github.com"
 OPEN_METEO_GEO = "https://geocoding-api.open-meteo.com/v1/search"
@@ -458,9 +453,9 @@ FRANKFURTER = "https://api.frankfurter.dev/v1/latest"
 NAGER = "https://date.nager.at/api/v3/PublicHolidays/{jahr}/{land}"
 
 STATE_FILE = "addons.json"
-_locks: dict[str, threading.Lock] = {}
+_locks: dict[str, Any] = {}
 _locks_lock = threading.Lock()
-#: Laufende Installationen: (Konto, Add-on) -> Thread.
+
 _jobs: dict[tuple[str, str], threading.Thread] = {}
 
 
@@ -474,17 +469,14 @@ def user_agent() -> str:
     return f"aquaticy/{__version__} (+https://github.com/jonasenriklaumen-a11y/Aquaticy-Ai)"
 
 
-# ---------------------------------------------------------------------------
-# Zustand je Konto
-# ---------------------------------------------------------------------------
 def _data_dir(settings: Any) -> Path:
     return Path(getattr(settings, "data_dir", "") or ".").expanduser()
 
 
-def _lock(settings: Any) -> threading.Lock:
+def _lock(settings: Any) -> Any:
     key = str(_data_dir(settings).resolve())
     with _locks_lock:
-        return _locks.setdefault(key, threading.Lock())
+        return _locks.setdefault(key, threading.RLock())
 
 
 def _state_path(settings: Any) -> Path:
@@ -510,12 +502,10 @@ def load_state(settings: Any) -> dict[str, dict[str, Any]]:
 def _save_state(settings: Any, state: dict[str, dict[str, Any]]) -> None:
     ziel = _state_path(settings)
     ziel.parent.mkdir(parents=True, exist_ok=True)
-    tmp = ziel.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"version": 1, "addons": state}, ensure_ascii=False, indent=1),
-                   encoding="utf-8")
-    with contextlib.suppress(OSError):
-        tmp.chmod(0o600)
-    tmp.replace(ziel)
+    from aquaticy.tlsfiles import write_private
+
+    write_private(ziel, json.dumps({"version": 1, "addons": state},
+                                   ensure_ascii=False, indent=1).encode("utf-8"))
 
 
 def _update(settings: Any, addon_id: str, **felder: Any) -> dict[str, Any]:
@@ -606,17 +596,60 @@ def mounts(settings: Any) -> dict[str, str]:
     return ergebnis
 
 
+def github_write_level(rechte: dict[str, str]) -> str:
+    """Was Aquaticy bei GitHub aendern darf: "nein", "branches" oder "alles" (15.0.0)."""
+    return "branches" if rechte.get("inhalte") == "aendern" else "nein"
+
+
+def github_reads_content(rechte: dict[str, str]) -> bool:
+    return rechte.get("inhalte") in ("ja", "aendern")
+
+
 def github_token(settings: Any) -> str:
     return str(getattr(settings, "github_token", "") or "").strip()
 
 
 def feeds_of(settings: Any) -> list[str]:
     feeds = (load_state(settings).get("feeds") or {}).get("feeds") or []
-    return [str(feed) for feed in feeds if isinstance(feed, str)][:MAX_FEEDS]
+    return [str(feed) for feed in feeds
+            if isinstance(feed, str) and feed_address_ok(feed)][:MAX_FEEDS]
+
+
+def retire_removed(settings: Any) -> list[str]:
+    """Raeumt weggefallene Add-ons auf (12.6.6 Luna: Telegram Web) -- einmal.
+
+    Der Eintrag verschwindet aus ``addons.json``; war das Add-on installiert, geht auch
+    sein Datentraeger samt Anmeldung weg (soweit Docker oder Podman gerade antwortet --
+    sonst bleibt er unbenutzt liegen und geht mit dem Konto).
+
+    Returns: die aufgeraeumten Kennungen.
+    """
+    try:
+        roh = json.loads(_state_path(settings).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    eintraege = roh.get("addons") if isinstance(roh, dict) else None
+    if not isinstance(eintraege, dict):
+        return []
+    weg = [key for key in RETIRED if key in eintraege]
+    if not weg:
+        return []
+    if any(isinstance(eintraege[key], dict) and eintraege[key].get("installed") for key in weg):
+        with contextlib.suppress(Exception):
+            from aquaticy import sandbox as werkstatt
+
+            runtime = werkstatt.find_runtime()
+            if runtime is not None:
+                for key in weg:
+                    werkstatt.remove_addon_volume(runtime, volume_name(settings, key))
+    with _lock(settings):
+        _save_state(settings, load_state(settings))
+    return weg
 
 
 def public_view(settings: Any, pro: bool) -> dict[str, Any]:
     """Was der Browser sehen darf -- ohne ein einziges Geheimnis."""
+    retire_removed(settings)
     state = load_state(settings)
     liste = []
     for addon in CATALOG.values():
@@ -629,7 +662,6 @@ def public_view(settings: Any, pro: bool) -> dict[str, Any]:
         laeuft = installing(settings, addon.id)
         status = str(eintrag.get("status") or ("bereit" if eintrag.get("installed") else ""))
         if status == "installiert gerade" and not laeuft:
-            # Der Server wurde mitten in der Installation beendet.
             status, eintrag["message"] = "fehler", "Die Installation wurde unterbrochen."
         liste.append({
             "id": addon.id,
@@ -654,7 +686,7 @@ def public_view(settings: Any, pro: bool) -> dict[str, Any]:
                 **({"token_set": anmeldung["token_set"]} if "token_set" in anmeldung else {}),
             },
             "feeds": feeds_of(settings) if addon.id == "feeds" else [],
-            # Im Chat: /<kennung> (11.0.0 Luna) -- und was ein Pruef-Plugin abdeckt.
+
             "command": "" if addon.id in MODEL_ADDONS else f"/{addon.id}",
             "inhalt": list(PLUGIN_CONTENT.get(addon.id, ())),
             "rechte": rights_of(settings, addon.id),
@@ -675,9 +707,6 @@ def public_view(settings: Any, pro: bool) -> dict[str, Any]:
     }
 
 
-# ---------------------------------------------------------------------------
-# Installieren, Schalten, Deinstallieren
-# ---------------------------------------------------------------------------
 def _konto(settings: Any) -> str:
     return str(_data_dir(settings).resolve())
 
@@ -764,6 +793,10 @@ def _install_job(settings: Any, addon: AddOn, on_done: Any = None) -> None:
                 "installiert Aquaticy nichts."
             )
         image = getattr(settings, "vm_desktop_image", "") or werkstatt.DESKTOP_IMAGE
+
+        werkstatt.ensure_image(
+            runtime, image, build=True,
+            progress=lambda text: _update(settings, addon.id, message=text))
         vols = {volume_name(settings, addon.id): f"{MOUNT_ROOT}/{addon.id}"}
         if addon.programm == "webapp":
             vols[volume_name(settings, FIREFOX)] = f"{MOUNT_ROOT}/{FIREFOX}"
@@ -878,9 +911,6 @@ def active_or_installed(settings: Any) -> list[str]:
     return [key for key in CATALOG if (state.get(key) or {}).get("installed")]
 
 
-# ---------------------------------------------------------------------------
-# Anmelden
-# ---------------------------------------------------------------------------
 def _env_target(settings: Any) -> Path:
     from aquaticy.config import DEFAULT_ENV_PATH, find_env_file
 
@@ -910,10 +940,13 @@ def _write_secret(settings: Any, key: str, value: str) -> None:
 
 
 def forget_github_token(settings: Any) -> None:
-    if (github_token(settings) or getattr(settings, "secret_vault", None) is not None
-            or _env_target(settings).is_file()):
-        with contextlib.suppress(OSError, ValueError):
-            _write_secret(settings, GITHUB_TOKEN_KEY, "")
+    with _lock(settings):
+        if "github" in load_state(settings):
+            _update(settings, "github", login_attempt="")
+        if (github_token(settings) or getattr(settings, "secret_vault", None) is not None
+                or _env_target(settings).is_file()):
+            with contextlib.suppress(OSError, ValueError):
+                _write_secret(settings, GITHUB_TOKEN_KEY, "")
 
 
 TOKEN_RE = re.compile(r"^[A-Za-z0-9_]{20,255}$")
@@ -929,10 +962,16 @@ def github_login(
     token = (token or "").strip()
     if not TOKEN_RE.fullmatch(token):
         raise AddOnError("Das sieht nicht nach einem GitHub-Token aus (ghp_…, github_pat_…).")
+    attempt = secrets.token_hex(16)
+    with _lock(settings):
+        if not (load_state(settings).get("github") or {}).get("installed"):
+            raise AddOnError("GitHub wurde inzwischen deinstalliert.")
+        _update(settings, "github", login_attempt=attempt)
     eigener = client is None
     client = client or httpx.Client(timeout=15)
     try:
-        antwort = client.get(f"{GITHUB_API}/user", headers=_github_headers(token))
+        antwort = client.get(f"{GITHUB_API}/user", headers=_github_headers(token),
+                             follow_redirects=False)
     except httpx.HTTPError as exc:
         raise AddOnError(f"GitHub ist gerade nicht erreichbar ({type(exc).__name__}).") from exc
     finally:
@@ -942,12 +981,22 @@ def github_login(
         raise AddOnError("GitHub kennt dieses Token nicht (abgelaufen oder vertippt).")
     if antwort.status_code != 200:
         raise AddOnError(f"GitHub hat mit {antwort.status_code} geantwortet.")
-    login = str((antwort.json() or {}).get("login") or "")
+    try:
+        body = antwort.json()
+        login = str(body.get("login") or "")
+        if not re.fullmatch(r"[A-Za-z0-9-]{1,100}", login):
+            raise ValueError
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise AddOnError("GitHub hat keine gültigen Kontodaten geliefert.") from exc
     rechte = [teil.strip() for teil in antwort.headers.get("x-oauth-scopes", "").split(",")
               if teil.strip()]
-    _write_secret(settings, GITHUB_TOKEN_KEY, token)
-    _update(settings, "github", login={"state": "angemeldet", "who": login,
-                                       "at": int(time.time())})
+    with _lock(settings):
+        current = load_state(settings).get("github") or {}
+        if not current.get("installed") or current.get("login_attempt") != attempt:
+            raise AddOnError("Diese Anmeldung wurde inzwischen abgebrochen.")
+        _write_secret(settings, GITHUB_TOKEN_KEY, token)
+        _update(settings, "github", login_attempt="", login={"state": "angemeldet", "who": login,
+                                                            "at": int(time.time())})
     warnung = ""
     if any(recht in {"repo", "delete_repo", "admin:org", "workflow", "write:packages"}
            for recht in rechte):
@@ -1003,8 +1052,6 @@ def _reset_profile(settings: Any, addon: AddOn) -> None:
     if fertig.returncode != 0:
         raise AddOnError("Abmelden hat nicht geklappt: " + fertig.stdout.strip()[-300:])
     if addon.programm == "webapp":
-        # Das Profil neu anlegen, damit der naechste Start wieder deutsch,
-        # ohne Willkommensseite und mit ehrlicher Kennung beginnt.
         fertig = werkstatt._runs(
             runtime.binary, "run", "--rm", "--network", "none", "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--user", werkstatt.RUN_AS,
@@ -1015,6 +1062,29 @@ def _reset_profile(settings: Any, addon: AddOn) -> None:
             "--zusatz", werkstatt.browser_agent(settings).split("Falkon/3.2", 1)[-1].strip(),
             timeout=120,
         )
+
+
+FEED_HOST_RE = re.compile(
+    r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+    r"|\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f:.]{2,45}", re.IGNORECASE)
+
+
+def feed_address_ok(adresse: str) -> bool:
+    """Eine Feed-Adresse, die sich laden laesst: http(s), Host, ohne Zugangsdaten (15.7.8).
+
+    Auch "https://@host" (leere Zugangsdaten), Leer- und Steuerzeichen und Hostnamen mit
+    fremden Zeichen gelten nicht -- solche Eintraege liessen sich spaeter nicht laden.
+    """
+    try:
+        teile = urlparse(adresse)
+        return bool(teile.scheme in ("http", "https") and teile.hostname
+                    and "@" not in teile.netloc and "\\" not in adresse
+                    and adresse.isprintable() and not any(z.isspace() for z in adresse)
+                    and FEED_HOST_RE.fullmatch(teile.hostname or "")
+                    and len(adresse) <= 500
+                    and (teile.port is None or 1 <= teile.port <= 65535))
+    except ValueError:
+        return False
 
 
 def set_feeds(settings: Any, feeds: Any) -> list[str]:
@@ -1030,10 +1100,11 @@ def set_feeds(settings: Any, feeds: Any) -> list[str]:
         adresse = str(roh or "").strip()
         if not adresse:
             continue
-        teile = urlparse(adresse)
-        if teile.scheme not in ("http", "https") or not teile.hostname or len(adresse) > 500:
-            raise AddOnError(f"Keine gültige Feed-Adresse: {adresse[:80]}")
-        if _private_host(teile.hostname):
+        valid = feed_address_ok(adresse)
+        teile = urlparse(adresse) if valid else None
+        if not valid or teile is None:
+            raise AddOnError("Keine gültige Feed-Adresse. Nutze HTTP oder HTTPS ohne Zugangsdaten.")
+        if _private_host(teile.hostname or ""):
             raise AddOnError(f"Feeds nur aus dem Internet, nicht aus dem Heimnetz: {adresse[:80]}")
         if adresse not in sauber:
             sauber.append(adresse)
@@ -1058,9 +1129,6 @@ def _private_host(host: str) -> bool:
     return False
 
 
-# ---------------------------------------------------------------------------
-# Die Werkzeuge fuer das Modell
-# ---------------------------------------------------------------------------
 _throttle_lock = threading.Lock()
 _last_call: dict[str, float] = {}
 
@@ -1089,7 +1157,7 @@ REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
 REF_RE = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
 PATH_RE = re.compile(r"^[A-Za-z0-9 _.,@+()/-]{0,400}$")
 GITHUB_ACTIONS = ("ich", "repos", "repo", "issues", "issue", "pulls", "pull", "datei",
-                  "commits", "suche")
+                  "commits", "commit", "vergleich", "suche", "baum", "branches", "review")
 MAX_GITHUB_TEXT = 20_000
 
 
@@ -1111,8 +1179,14 @@ def github_call(
     client: httpx.Client | None = None,
     nur_oeffentlich: bool = False,
     inhalte: bool = True,
+    page: Any = 1,
+    start_line: Any = 1,
+    max_lines: Any = 300,
+    recursive: bool = True,
+    paths: Any = None,
+    base: str = "",
 ) -> dict[str, Any]:
-    """Liest bei GitHub -- ausschliesslich mit GET.
+    """Liest bei GitHub -- ausschliesslich mit GET (Schreiben: aquaticy/github_write.py).
 
     Args:
         nur_oeffentlich: Recht "Nur öffentliche Repos". Private tauchen weder in
@@ -1121,15 +1195,58 @@ def github_call(
         inhalte: Recht "Auch Inhalte lesen". Ohne gibt es Ordner und Listen,
             aber keine Dateiinhalte.
     """
+    from aquaticy import github_repo
+
+    link_tail = ""
+    if isinstance(repo, str) and repo.startswith("https://github.com/") and not ref:
+        from urllib.parse import unquote
+
+        segments = urlparse(repo).path.strip("/").split("/")
+        if len(segments) > 3 and segments[2] in ("tree", "blob"):
+            link_tail = unquote("/".join(segments[3:]))
     if not token:
         return {"error": "GitHub ist nicht angemeldet. Das macht der Nutzer im Add-on-Fenster."}
     action = (action or "").strip().lower()
+    action = {"tree": "baum", "file": "datei", "search": "suche", "compare": "vergleich",
+              "code-review": "review"}.get(action, action)
     if action not in GITHUB_ACTIONS:
         return {"error": f"Unbekannte Aktion. Moeglich: {', '.join(GITHUB_ACTIONS)}."}
     repo = (repo or "").strip().strip("/")
-    braucht_repo = action in {"repo", "issues", "issue", "pulls", "pull", "datei", "commits"}
-    # "."/".." als Teil wuerde httpx wegnormalisieren ("../.." -> "/") -- damit
-    # liefe die Pruefung "nur oeffentlich" ins Leere (9.5.34).
+    braucht_repo = action in {"repo", "issues", "issue", "pulls", "pull", "datei", "commits",
+                             "commit", "vergleich", "baum", "branches", "review"}
+    # 15.0.1: "Aquaticy-Ai" ohne Besitzer -- das Repo wird in den eigenen Repos gesucht.
+    kurz = ""
+    if braucht_repo and re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", repo or "") and repo not in (
+            ".", ".."):
+        kurz, repo = repo, f"eigenes/{repo}"
+    try:
+        if repo or braucht_repo:
+            repo, ref, path, number = github_repo.target(repo, ref, path, number)
+        if any(type(n) not in (str, int) for n in (page, start_line, max_lines)):
+            raise ValueError
+        if not isinstance(recursive, bool):
+            raise ValueError
+        page, start_line, max_lines = int(page), int(start_line), int(max_lines)
+        if not (1 <= page <= 1000 and 1 <= start_line <= 400_000 and 1 <= max_lines <= 400):
+            raise ValueError
+        if paths is not None and (not isinstance(paths, list) or len(paths) > 6 or not all(
+                isinstance(p, str) and p and github_repo.valid_path(p) for p in paths)):
+            raise ValueError
+    except github_repo.GitHubError as exc:
+        return {"error": str(exc)}
+    except (TypeError, ValueError):
+        return {"error": "Ungültige Seite, Zeile oder Dateiliste. Höchstens sechs Dateien "
+                         "und 400 Zeilen je Abruf."}
+    if action == "review" and not inhalte:
+        return {"error": "Dateiinhalte sind nicht freigegeben. Wähle im GitHub-Add-on unter "
+                         "Rechte: Auch Inhalte lesen."}
+    if action == "review" and number not in (None, ""):
+        try:
+            if int(str(number).strip()) <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            return {"error": "number bitte als ganze Zahl."}
+
     if braucht_repo and (not REPO_RE.fullmatch(repo)
                          or any(t in (".", "..") for t in repo.split("/"))):
         return {"error": "repo bitte als 'besitzer/name'."}
@@ -1142,55 +1259,139 @@ def github_call(
         if nummer <= 0:
             return {"error": "number bitte als ganze Zahl."}
     path = (path or "").strip().strip("/")
-    if ".." in path.split("/") or not PATH_RE.fullmatch(path):
+    if not github_repo.valid_path(path):
         return {"error": "Ungueltiger Pfad."}
-    if ref and not REF_RE.fullmatch(ref):
-        return {"error": "Ungueltiger Branch/Commit."}
     state = state if state in ("open", "closed", "all") else "open"
+    base = (base or "").strip()
+    if action in ("commit", "vergleich"):
+        if not ref or not REF_RE.fullmatch(ref) or ".." in ref:
+            return {"error": "ref bitte als Commit-SHA, Branch oder Tag."}
+        if action == "vergleich" and (not base or not REF_RE.fullmatch(base) or ".." in base):
+            return {"error": "base bitte als Branch, Tag oder Commit (zum Beispiel main)."}
 
     eigener = client is None
     client = client or httpx.Client(timeout=20, follow_redirects=False)
 
-    def hole(pfad: str, **params: Any) -> Any:
+    cache: dict[str, Any] = {}
+    requests = 0
+
+    def hole(pfad: str, *, _fresh: bool = False, **params: Any) -> Any:
+        nonlocal requests
+        schluessel = json.dumps([pfad, params], sort_keys=True)
+        if schluessel in cache and not _fresh:
+            return cache[schluessel]
+        if requests >= 30:
+            raise github_repo.GitHubError("Zu viele Abrufe. Grenze die Prüfung ein.")
+        requests += 1
         _takt("api.github.com")
-        antwort = client.get(f"{GITHUB_API}{pfad}", headers=_github_headers(token),
-                             params={k: v for k, v in params.items() if v not in ("", None)})
-        if antwort.status_code == 404:
-            raise AddOnError("Nicht gefunden (oder das Token darf es nicht sehen).")
-        if antwort.status_code in (401, 403):
-            raise AddOnError(f"GitHub verweigert den Zugriff ({antwort.status_code}).")
-        if antwort.status_code != 200:
-            raise AddOnError(f"GitHub antwortet mit {antwort.status_code}.")
-        return antwort.json()
+        parameter = {k: v for k, v in params.items() if v not in ("", None)}
+        try:
+            cache[schluessel] = github_repo.request(client, pfad, _github_headers(token),
+                                                    parameter)
+        except github_repo.Missing:
+            # 15.0.1: Ein oeffentliches Repo geht auch ohne Token (wenn das Token es nicht
+            # sieht, etwa weil es einem anderen Konto gehoert). Sonst: die genaue Ursache.
+            if not repo or not pfad.startswith(f"/repos/{repo}"):
+                raise
+            ohne = {k: v for k, v in _github_headers(token).items() if k != "Authorization"}
+            try:
+                cache[schluessel] = github_repo.request(client, pfad, ohne, parameter)
+            except github_repo.GitHubError:
+                # Sieht das Token das Repo selbst? Dann fehlt nur Branch, Pfad oder Nummer --
+                # kein Rechteproblem (etwa ref "main", wenn der Standard-Branch anders heisst).
+                if pfad != f"/repos/{repo}":
+                    daten: Any = None
+                    with contextlib.suppress(github_repo.GitHubError, httpx.HTTPError,
+                                             ValueError):
+                        daten = github_repo.request(client, f"/repos/{repo}",
+                                                    _github_headers(token), {})
+                    if isinstance(daten, dict) and daten.get("full_name"):
+                        raise github_repo.Missing(github_repo.missing_in_repo(
+                            repo, str(daten.get("default_branch") or ""), pfad,
+                            parameter)) from None
+                info = github_repo.diagnose(client, repo, _github_headers(token))
+                raise github_repo.Missing(github_repo.missing_reason(
+                    repo, info["login"], token, scopes=info["scopes"],
+                    invited=info["invited"])) from None
+        return cache[schluessel]
 
     try:
-        if nur_oeffentlich and braucht_repo and hole(f"/repos/{repo}").get("private"):
+        if kurz:
+            eigene = hole("/user/repos", per_page=100, sort="updated")
+            passend = [str(r.get("full_name") or "") for r in eigene
+                       if str(r.get("name") or "").casefold() == kurz.casefold()]
+            if not passend or not REPO_RE.fullmatch(passend[0]):
+                raise AddOnError(f"Ein Repo „{kurz}“ finde ich in deinen Repos nicht. Nenne es "
+                                 "als besitzer/name, zum Beispiel jonas/projekt.")
+            repo = passend[0]
+        if (nur_oeffentlich and braucht_repo
+                and hole(f"/repos/{repo}").get("private") is not False):
             raise AddOnError(
                 "Das Repo ist privat -- und der Nutzer hat Aquaticy nur öffentliche Repos "
                 "erlaubt (Add-on GitHub -> Rechte)."
             )
-        ergebnis = _github_action(hole, action, repo, nummer, path, ref, state, query,
-                                  nur_oeffentlich=nur_oeffentlich, inhalte=inhalte)
-    except AddOnError as exc:
+        if link_tail and action in {"baum", "review", "datei", "commits"}:
+            ref, path = github_repo.resolve_link(hole, repo, link_tail)
+        if action == "review":
+            try:
+                review_number = int(str(number or 0).strip())
+            except (ValueError, TypeError):
+                raise github_repo.GitHubError("number bitte als ganze Zahl.") from None
+            if review_number < 0:
+                raise github_repo.GitHubError("number bitte als ganze Zahl.")
+            ergebnis = github_repo.review(hole, repo, ref, path, page, review_number, paths,
+                                           public_only=nur_oeffentlich)
+        elif action == "baum":
+            ergebnis = github_repo.tree(hole, repo, ref, path, page, bool(recursive))
+        elif action == "branches":
+            entries = hole(f"/repos/{repo}/branches", per_page=30, page=page)
+            ergebnis = {"branches": [{"name": e.get("name"),
+                                      "sha": (e.get("commit") or {}).get("sha")}
+                                     for e in entries[:30]],
+                        "next_page": page + 1 if len(entries) == 30 else None}
+        elif action == "datei":
+            ergebnis = github_repo.read_file(hole, repo, path, ref, start=start_line,
+                                              lines=max_lines, page=page, contents=inhalte)
+        else:
+            ergebnis = _github_action(hole, action, repo, nummer, path, ref, state, query,
+                                      nur_oeffentlich=nur_oeffentlich, inhalte=inhalte,
+                                      page=page, base=base)
+        if braucht_repo:
+            ergebnis.setdefault("repo", repo)
+            ergebnis.setdefault("privat", cache.get(
+                json.dumps([f"/repos/{repo}", {}], sort_keys=True), {}).get("private") is not False)
+    except (AddOnError, github_repo.GitHubError) as exc:
         return {"error": str(exc)}
     except (httpx.HTTPError, ValueError) as exc:
         return {"error": f"GitHub nicht erreichbar ({type(exc).__name__})."}
     except (AttributeError, TypeError, KeyError, IndexError):
-        # GitHub hat etwas anderes geschickt als dokumentiert -- lieber das
-        # sagen als mit einem Stacktrace abbrechen.
         return {"error": "GitHub hat unerwartet geantwortet."}
     finally:
         if eigener:
             client.close()
-    text = json.dumps(ergebnis, ensure_ascii=False)
-    if len(text) > MAX_GITHUB_TEXT:
-        ergebnis["gekuerzt"] = True
-    return ergebnis
+    try:
+        return github_repo.bound(ergebnis, MAX_GITHUB_TEXT)
+    except github_repo.GitHubError as exc:
+        return {"error": str(exc)}
+
+
+def _github_dateien(dateien: list[Any], inhalte: bool, grenze: int = 1500
+                    ) -> list[dict[str, Any]]:
+    """Geaenderte Dateien eines Commits oder Vergleichs -- Patch nur mit Inhalte-Recht."""
+    from aquaticy import github_repo
+
+    return [{"datei": d.get("filename"), "status": d.get("status"),
+             "plus": d.get("additions"), "minus": d.get("deletions"),
+             **({"patch": github_repo.redact(str(d.get("patch", "")))[:grenze],
+                 "patch_gekuerzt": len(str(d.get("patch", ""))) > grenze} if inhalte else {})}
+            for d in dateien if isinstance(d, dict)]
 
 
 def _github_action(hole: Any, action: str, repo: str, nummer: int, path: str, ref: str,
                    state: str, query: str, *, nur_oeffentlich: bool = False,
-                   inhalte: bool = True) -> dict[str, Any]:
+                   inhalte: bool = True, page: int = 1, base: str = "") -> dict[str, Any]:
+    from aquaticy import github_repo
+
     if action == "ich":
         ich = hole("/user")
         return {"login": ich.get("login"), "name": ich.get("name"),
@@ -1198,13 +1399,14 @@ def _github_action(hole: Any, action: str, repo: str, nummer: int, path: str, re
                 None if nur_oeffentlich else ich.get("total_private_repos")}
     if action == "repos":
         repos = hole("/user/repos", per_page=30, sort="updated",
-                     visibility="public" if nur_oeffentlich else "")
+                     visibility="public" if nur_oeffentlich else "", page=page)
+        more = len(repos) == 30
         if nur_oeffentlich:
-            repos = [r for r in repos if not r.get("private")]
+            repos = [r for r in repos if r.get("private") is False]
         return {"repos": [{"name": r.get("full_name"), "privat": r.get("private"),
                            "beschreibung": _kurz(r.get("description"), 200),
                            "sprache": r.get("language"), "aktualisiert": r.get("updated_at")}
-                          for r in repos[:30]]}
+                          for r in repos[:30]], "next_page": page + 1 if more else None}
     if action == "repo":
         r = hole(f"/repos/{repo}")
         return {"name": r.get("full_name"), "privat": r.get("private"),
@@ -1222,9 +1424,11 @@ def _github_action(hole: Any, action: str, repo: str, nummer: int, path: str, re
         i = hole(f"/repos/{repo}/issues/{nummer}")
         kommentare = hole(f"/repos/{repo}/issues/{nummer}/comments", per_page=20)
         return {"nummer": i.get("number"), "titel": i.get("title"), "zustand": i.get("state"),
-                "von": (i.get("user") or {}).get("login"), "text": _kurz(i.get("body"), 4000),
+                "von": (i.get("user") or {}).get("login"),
+                "text": github_repo.redact(_kurz(i.get("body"), 4000)),
                 "kommentare": [{"von": (k.get("user") or {}).get("login"),
-                                "text": _kurz(k.get("body"), 1200)} for k in kommentare[:20]]}
+                                "text": github_repo.redact(_kurz(k.get("body"), 1200))}
+                               for k in kommentare[:20]]}
     if action == "pulls":
         eintraege = hole(f"/repos/{repo}/pulls", state=state, per_page=20)
         return {"pulls": [{"nummer": p.get("number"), "titel": p.get("title"),
@@ -1233,41 +1437,70 @@ def _github_action(hole: Any, action: str, repo: str, nummer: int, path: str, re
                           for p in eintraege[:20]]}
     if action == "pull":
         p = hole(f"/repos/{repo}/pulls/{nummer}")
-        dateien = hole(f"/repos/{repo}/pulls/{nummer}/files", per_page=50)
+        dateien = hole(f"/repos/{repo}/pulls/{nummer}/files", per_page=10, page=page)
         return {"nummer": p.get("number"), "titel": p.get("title"), "zustand": p.get("state"),
-                "von": (p.get("user") or {}).get("login"), "text": _kurz(p.get("body"), 4000),
+                "von": (p.get("user") or {}).get("login"),
+                "text": github_repo.redact(_kurz(p.get("body"), 4000)),
                 "gemergt": p.get("merged"), "basis": (p.get("base") or {}).get("ref"),
                 "kopf": (p.get("head") or {}).get("ref"),
                 "dateien": [{"datei": d.get("filename"), "status": d.get("status"),
-                             "plus": d.get("additions"), "minus": d.get("deletions")}
-                            for d in dateien[:50]]}
-    if action == "datei":
-        inhalt = hole(f"/repos/{repo}/contents/{quote(path)}", ref=ref)
-        if isinstance(inhalt, list):
-            return {"ordner": path or "/", "eintraege": [
-                {"name": e.get("name"), "art": e.get("type"), "groesse": e.get("size")}
-                for e in inhalt[:200]]}
-        if not inhalte:
-            return {"datei": path, "groesse": inhalt.get("size"), "hinweis": (
-                "Dateiinhalte darf Aquaticy hier nicht lesen -- der Nutzer hat 'Nur "
-                "Übersicht' erlaubt (Add-on GitHub -> Rechte).")}
-        if inhalt.get("encoding") != "base64" or int(inhalt.get("size") or 0) > 400_000:
-            return {"datei": path, "hinweis": "Zu gross oder keine Textdatei.",
-                    "groesse": inhalt.get("size")}
-        roh = base64.b64decode(str(inhalt.get("content") or ""))
-        if b"\x00" in roh[:4000]:
-            return {"datei": path, "hinweis": "Binaerdatei -- nicht als Text lesbar."}
-        text = roh.decode("utf-8", "replace")
-        return {"datei": path, "groesse": len(roh), "text": text[:MAX_GITHUB_TEXT - 500],
-                "gekuerzt": len(text) > MAX_GITHUB_TEXT - 500}
+                             "plus": d.get("additions"), "minus": d.get("deletions"),
+                             **({"patch": github_repo.redact(str(d.get("patch", "")))[:600],
+                                 "patch_gekuerzt": len(str(d.get("patch", ""))) > 600}
+                                if inhalte else {})}
+                            for d in dateien[:10]],
+                "next_page": page + 1 if len(dateien) == 10 else None,
+                "head_sha": (p.get("head") or {}).get("sha")}
     if action == "commits":
-        eintraege = hole(f"/repos/{repo}/commits", sha=ref, per_page=20)
-        return {"commits": [{"sha": (c.get("sha") or "")[:10],
+        # Seit 14.4.4: voller SHA (fuer commit/vergleich), Seiten und Filter nach Datei.
+        hinweis = ""
+        try:
+            eintraege = hole(f"/repos/{repo}/commits", sha=ref, path=path, per_page=20,
+                             page=page)
+        except github_repo.Missing:
+            # 15.0.1: "main" oder "master" geraten, der Standard-Branch heisst aber anders.
+            if ref.casefold() not in ("main", "master"):
+                raise
+            eintraege = hole(f"/repos/{repo}/commits", path=path, per_page=20, page=page)
+            hinweis = (f"Einen Branch „{ref}“ gibt es nicht. Das sind die Commits des "
+                       "Standard-Branches.")
+        return {**({"hinweis": hinweis} if hinweis else {}), "commits": [{"sha": c.get("sha") or "",
                              "nachricht": _kurz((c.get("commit") or {}).get("message"), 300),
                              "von": ((c.get("commit") or {}).get("author") or {}).get("name"),
                              "datum": ((c.get("commit") or {}).get("author") or {}).get("date")}
-                            for c in eintraege[:20]]}
-    # suche: Issues und Pull Requests
+                            for c in eintraege[:20]],
+                "next_page": page + 1 if len(eintraege) == 20 else None}
+    if action == "commit":
+        c = hole(f"/repos/{repo}/commits/{quote(ref, safe='')}", per_page=20, page=page)
+        dateien = c.get("files") or []
+        return {"sha": c.get("sha"),
+                "nachricht": github_repo.redact(_kurz((c.get("commit") or {}).get("message"),
+                                                      4000)),
+                "von": ((c.get("commit") or {}).get("author") or {}).get("name"),
+                "datum": ((c.get("commit") or {}).get("author") or {}).get("date"),
+                "eltern": [e.get("sha") for e in c.get("parents") or []][:4],
+                "plus": (c.get("stats") or {}).get("additions"),
+                "minus": (c.get("stats") or {}).get("deletions"),
+                "dateien": _github_dateien(dateien[:20], inhalte),
+                "next_page": page + 1 if len(dateien) >= 20 else None}
+    if action == "vergleich":
+        v = hole(f"/repos/{repo}/compare/{quote(base, safe='')}...{quote(ref, safe='')}",
+                 per_page=20, page=page)
+        file_page = v if page == 1 else hole(
+            f"/repos/{repo}/compare/{quote(base, safe='')}...{quote(ref, safe='')}",
+            per_page=20, page=1)
+        dateien = file_page.get("files") or []
+        offset = (page - 1) * 20
+        return {"basis": base, "kopf": ref, "status": v.get("status"),
+                "voraus": v.get("ahead_by"), "zurueck": v.get("behind_by"),
+                "commits": [{"sha": c.get("sha"),
+                             "nachricht": _kurz((c.get("commit") or {}).get("message"), 200)}
+                            for c in (v.get("commits") or [])[-20:]],
+                "dateien": _github_dateien(dateien[offset:offset + 20], inhalte),
+                "dateien_gekuerzt": len(dateien) >= 300,
+                "next_page": page + 1 if (offset + 20 < len(dateien)
+                                         or len(v.get("commits") or []) == 20) else None}
+
     q = " ".join(str(query or "").split())[:256]
     if not q:
         raise AddOnError("Wonach suchen? (query)")
@@ -1276,14 +1509,23 @@ def _github_action(hole: Any, action: str, repo: str, nummer: int, path: str, re
     if nur_oeffentlich:
         q = f"{q} is:public"
     treffer = hole("/search/issues", q=q, per_page=20)
-    return {"treffer": [{"repo": str(t.get("repository_url") or "").split("/repos/")[-1],
+    items = (treffer.get("items") or [])[:20]
+    if nur_oeffentlich:
+        public = []
+        for item in items:
+            name = str(item.get("repository_url") or "").split("/repos/")[-1]
+            if REPO_RE.fullmatch(name) and hole(f"/repos/{name}").get("private") is False:
+                public.append(item)
+        items = public
+    return {"hinweis": "Diese Suche findet nur Issues und Pull Requests, keinen Code. "
+                       "Code liest du mit baum, datei oder review.",
+            "treffer": [{"repo": str(t.get("repository_url") or "").split("/repos/")[-1],
                          "nummer": t.get("number"), "titel": t.get("title"),
                          "zustand": t.get("state"), "pull_request": "pull_request" in t}
-                        for t in (treffer.get("items") or [])[:20]],
+                        for t in items],
             "gesamt": treffer.get("total_count")}
 
 
-# -- Wetter ------------------------------------------------------------------
 WMO = {
     0: "klar", 1: "überwiegend klar", 2: "teils bewölkt", 3: "bedeckt", 45: "Nebel",
     48: "Nebel mit Reif", 51: "leichter Nieselregen", 53: "Nieselregen",
@@ -1299,7 +1541,8 @@ WMO = {
 
 def _wetterlage(code: Any) -> str:
     """Der WMO-Wettercode als Wort ("unbekannt", wenn er fehlt oder fremd ist)."""
-    if isinstance(code, bool) or not isinstance(code, (int, float)):
+    if (isinstance(code, bool) or not isinstance(code, (int, float))
+            or not math.isfinite(code) or int(code) != code):
         return "unbekannt"
     return WMO.get(int(code), "unbekannt")
 
@@ -1321,12 +1564,17 @@ def weather(place: str, days: Any = 3, *, client: httpx.Client | None = None) ->
         geo = client.get(OPEN_METEO_GEO, params={"name": name.strip(), "count": 5,
                                                  "language": "de", "format": "json"})
         geo.raise_for_status()
-        orte = (geo.json() or {}).get("results") or []
+        raw_places = _objekt(geo.json()).get("results")
+        orte = [item for item in raw_places if isinstance(item, dict)] \
+            if isinstance(raw_places, list) else []
         if zusatz.strip():
-            passend = [o for o in orte if zusatz.strip().lower() in " ".join(
-                str(o.get(k) or "") for k in ("country", "admin1", "admin2", "country_code")
-            ).lower()]
-            orte = passend or orte
+            suffix = zusatz.strip().casefold()
+            if len(suffix) == 2 and suffix.isalpha():
+                orte = [o for o in orte if str(o.get("country_code") or "").casefold() == suffix]
+            else:
+                orte = [o for o in orte if any(
+                    suffix in str(o.get(k) or "").casefold()
+                    for k in ("country", "admin1", "admin2"))]
         if not orte:
             return {"error": f"Einen Ort '{ort}' kennt Open-Meteo nicht."}
         treffer = orte[0]
@@ -1340,19 +1588,20 @@ def weather(place: str, days: Any = 3, *, client: httpx.Client | None = None) ->
             "timezone": "auto", "forecast_days": tage,
         })
         vorhersage.raise_for_status()
-        daten = vorhersage.json() or {}
+        daten = _objekt(vorhersage.json())
     except (httpx.HTTPError, ValueError, KeyError) as exc:
         return {"error": f"Open-Meteo nicht erreichbar ({type(exc).__name__})."}
     finally:
         if eigener:
             client.close()
-    jetzt = daten.get("current") or {}
-    taeglich = daten.get("daily") or {}
+    jetzt = _objekt(daten.get("current"))
+    taeglich = _objekt(daten.get("daily"))
     tage_liste = []
-    for i, datum in enumerate(taeglich.get("time") or []):
+    dates = taeglich.get("time")
+    for i, datum in enumerate(dates if isinstance(dates, list) else []):
         def feld(name: str, i: int = i) -> Any:
             werte = taeglich.get(name) or []
-            return werte[i] if i < len(werte) else None
+            return werte[i] if isinstance(werte, list) and i < len(werte) else None
 
         tage_liste.append({
             "datum": datum, "wetter": _wetterlage(feld("weather_code")),
@@ -1375,14 +1624,11 @@ def weather(place: str, days: Any = 3, *, client: httpx.Client | None = None) ->
     }
 
 
-# -- Dienste ohne Schluessel (9.5.17) -------------------------------------------
-#: Die Tagesschau erlaubt hoechstens 60 Abrufe pro Stunde -- fuer den ganzen
-#: Server zusammen, nicht je Konto. Hier stehen die Zeitpunkte der letzten.
 TAGESSCHAU_PER_HOUR = 60
 _tagesschau_abrufe: list[float] = []
 _tagesschau_lock = threading.Lock()
 
-#: Die Themen der Tagesschau, wie der Nutzer sie nennt -> wie die API sie nennt.
+
 RESSORTS = {
     "": "", "alle": "", "inland": "inland", "ausland": "ausland",
     "wirtschaft": "wirtschaft", "sport": "sport", "video": "video",
@@ -1506,7 +1752,7 @@ def currency(amount: Any = 1, base: str = "EUR", to: str = "",
     """Rechnet mit den Tageskursen der EZB (ueber Frankfurter) um."""
     von = str(base or "EUR").strip().upper()
     ziele = [z.strip().upper() for z in str(to or "").replace(";", ",").split(",") if z.strip()]
-    if not _WAEHRUNG.match(von) or any(not _WAEHRUNG.match(z) for z in ziele):
+    if not _WAEHRUNG.fullmatch(von) or any(not _WAEHRUNG.fullmatch(z) for z in ziele):
         return {"error": "Waehrungen bitte als dreistelligen Code, z.B. EUR, USD, CHF."}
     try:
         betrag = float(str(amount if amount not in (None, "") else 1).replace(",", "."))
@@ -1530,7 +1776,13 @@ def currency(amount: Any = 1, base: str = "EUR", to: str = "",
     finally:
         if eigener:
             client.close()
-    kurse = _objekt(daten.get("rates"))
+    if str(daten.get("base", von)).upper() != von or daten.get("amount", 1) != 1:
+        return {"error": "Die Kursquelle hat eine andere Basis geliefert. Erneut versuchen."}
+    kurse = {code: rate for code, rate in _objekt(daten.get("rates")).items()
+             if isinstance(rate, (int, float)) and not isinstance(rate, bool)
+             and math.isfinite(rate) and rate > 0 and math.isfinite(betrag * rate)}
+    if von in ziele:
+        kurse[von] = 1.0
     return {
         "betrag": betrag, "von": von, "stand": daten.get("date"),
         "ergebnis": {code: round(betrag * float(kurs), 4) for code, kurs in kurse.items()
@@ -1547,7 +1799,7 @@ def holidays(country: str = "DE", year: Any = None, region: str = "",
     if not re.fullmatch(r"[A-Z]{2}", land):
         return {"error": "Land bitte als zweistelligen Code, z.B. DE, AT, CH."}
     try:
-        jahr = int(str(year)) if year not in (None, "") else time.localtime().tm_year
+        jahr = int(str(year)) if year not in (None, "") else zeit.jahr()
     except ValueError:
         return {"error": "Das Jahr ist keine Zahl."}
     if not 1990 <= jahr <= 2100:
@@ -1576,7 +1828,10 @@ def holidays(country: str = "DE", year: Any = None, region: str = "",
         gebiete = [str(g) for g in roh_gebiete] if isinstance(roh_gebiete, list) else []
         if bundesland and not tag.get("global") and bundesland not in gebiete:
             continue
+        types = tag.get("types")
+        types = [str(value) for value in types] if isinstance(types, list) else []
         tage.append({
+            "arten": types, "gesetzlich": "Public" in types if types else None,
             "datum": tag.get("date"), "name": tag.get("localName") or tag.get("name"),
             "ueberall": bool(tag.get("global")),
             "nur_in": [] if tag.get("global") else list(gebiete),
@@ -1585,7 +1840,6 @@ def holidays(country: str = "DE", year: Any = None, region: str = "",
             "quelle": "Nager.Date (date.nager.at)"}
 
 
-# -- RSS-Feeds -----------------------------------------------------------------
 def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1].lower()
 
@@ -1597,7 +1851,9 @@ def _text(element: ET.Element | None) -> str:
 
 
 def _strip_html(text: str) -> str:
-    return " ".join(re.sub(r"<[^>]+>", " ", text or "").split())
+    from html import unescape
+
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", text or "")).split())
 
 
 def _hat_dtd(data: bytes) -> bool:
@@ -1627,22 +1883,54 @@ def parse_feed(data: bytes, quelle: str) -> list[dict[str, Any]]:
         raise ValueError("Feed mit DTD/Entitaeten -- wird nicht gelesen.")
     wurzel = ET.fromstring(data)
     eintraege: list[dict[str, Any]] = []
+    bases: dict[ET.Element, str] = {}
+    pending = [(wurzel, quelle)]
+    while pending:
+        element, parent_base = pending.pop()
+        xml_base = element.get("{http://www.w3.org/XML/1998/namespace}base", "")
+        current_base = urljoin(parent_base, xml_base)
+        if len(current_base) > 8192:
+            raise ValueError("Die Basisadresse im Feed ist zu lang.")
+        bases[element] = current_base
+        pending.extend((child, current_base) for child in element)
     for element in wurzel.iter():
         art = _local(element.tag)
         if art not in ("item", "entry"):
             continue
+        namespace = element.tag.rpartition("}")[0]
+        primary = [kind for kind in element if kind.tag.rpartition("}")[0] == namespace]
         felder = {_local(kind.tag): kind for kind in element}
+        felder.update({_local(kind.tag): kind for kind in primary})
 
         def erstes(*namen: str, felder: dict[str, ET.Element] = felder) -> ET.Element | None:
-            # Nicht "or": ein Element ohne Kinder ist in Python falsch.
             for name in namen:
-                if felder.get(name) is not None:
+                if felder.get(name) is not None and _text(felder[name]):
                     return felder[name]
             return None
 
-        link = ""
-        if "link" in felder:
-            link = felder["link"].get("href") or _text(felder["link"])
+        links = [child for child in primary if _local(child.tag) == "link"]
+        link_node = next((child for child in links if child.get("rel", "alternate") == "alternate"
+                          and child.get("type", "text/html") in
+                          ("text/html", "application/xhtml+xml")),
+                         links[0] if links else None)
+        link = (link_node.get("href") or _text(link_node)) if link_node is not None else ""
+        if not link:
+            guid = erstes("guid")
+            candidate = _text(guid)
+            if (guid is not None and guid.get("isPermaLink", "true").lower() == "true"
+                    and candidate.startswith(("http://", "https://"))):
+                link = candidate
+
+        def readable(node: ET.Element | None, *, html_default: bool = False) -> str:
+            if node is None:
+                return ""
+            value = _text(node)
+            content_type = node.get("type", "html" if html_default else "text").lower()
+            if content_type in ("xhtml", "application/xhtml+xml"):
+                value = ET.tostring(node, encoding="unicode", method="html")
+            return (_strip_html(value) if content_type in
+                    ("html", "xhtml", "text/html", "application/xhtml+xml") else value)
+
         datum = _text(erstes("pubdate", "updated", "published", "date"))
         zeit = 0.0
         with contextlib.suppress(Exception):
@@ -1652,12 +1940,22 @@ def parse_feed(data: bytes, quelle: str) -> list[dict[str, Any]]:
                 from datetime import datetime
 
                 zeit = datetime.fromisoformat(datum.replace("Z", "+00:00")).timestamp()
+        resolved_link = urljoin(bases[link_node] if link_node is not None else bases[element],
+                                link) if link else ""
+        try:
+            parsed_link = urlparse(resolved_link)
+            if (parsed_link.scheme not in ("http", "https") or not parsed_link.hostname
+                    or parsed_link.username is not None or parsed_link.password is not None):
+                resolved_link = ""
+        except ValueError:
+            resolved_link = ""
         eintraege.append({
-            "titel": _kurz(_text(felder.get("title")), 300),
-            "link": urljoin(quelle, link) if link else "",
+            "titel": _kurz(readable(felder.get("title")), 300),
+            "link": resolved_link,
             "datum": datum,
-            "zusammenfassung": _kurz(_strip_html(_text(
-                erstes("description", "summary", "content"))), 400),
+            "zusammenfassung": _kurz(readable(
+                erstes("description", "summary", "content", "encoded"),
+                html_default=art == "item"), 400),
             "quelle": urlparse(quelle).hostname or quelle,
             "_zeit": zeit,
         })
@@ -1698,7 +1996,7 @@ def read_feeds(
                     if not robots.allows(adresse):
                         raise ValueError("robots.txt verbietet den Abruf")
                     _takt(urlparse(adresse).hostname or adresse)
-                    # Beim Lesen begrenzt, nicht erst danach gewogen (9.5.15).
+
                     antwort = netguard.get(client, adresse, follow_redirects=False,
                                            max_bytes=MAX_FEED_BYTES)
                     if antwort.status_code in (301, 302, 303, 307, 308):
@@ -1726,11 +2024,7 @@ def read_feeds(
     return {"eintraege": alle[:grenze], "feeds": len(feeds), "probleme": probleme}
 
 
-# ---------------------------------------------------------------------------
-# Was das Modell ueber die Add-ons erfaehrt
-# ---------------------------------------------------------------------------
-APP_OF = {"whatsapp": "whatsapp", "signal": "signal", "telegram": "telegram",
-          "blender": "blender"}
+APP_OF = {"whatsapp": "whatsapp", "signal": "signal", "blender": "blender"}
 
 
 def desktop_apps(settings: Any, pro: bool = True) -> list[str]:
@@ -1745,8 +2039,8 @@ def desktop_apps(settings: Any, pro: bool = True) -> list[str]:
 PROMPT = """\
 ## Add-ons
 Der Nutzer hat diese Add-ons eingeschaltet: %(liste)s.
-- Messenger (WhatsApp, Signal, Telegram) oeffnest du mit desktop_open (app = \
-whatsapp/signal/telegram) und bedienst sie wie ein Mensch. Lies nur, was die \
+- Messenger (WhatsApp, Signal) oeffnest du mit desktop_open (app = \
+whatsapp/signal) und bedienst sie wie ein Mensch. Lies nur, was die \
 Frage braucht. Eine Nachricht abschicken ist "senden": nur nach ausdruecklichem \
 Ja des Nutzers, und nur an die Person, die er genannt hat. Nie an mehrere \
 gleichzeitig, nie Werbung, nie etwas im Namen des Nutzers versprechen.
@@ -1754,8 +2048,11 @@ gleichzeitig, nie Werbung, nie etwas im Namen des Nutzers versprechen.
 das macht der Nutzer im Add-on-Fenster selbst.
 - Namen, Nummern und Inhalte aus Chats oder privaten GitHub-Repos gehoeren nie \
 in eine Websuche.
-- GitHub nur lesend (Werkzeug github). Schreiben, kommentieren, mergen gibt es \
-nicht -- sag das, wenn danach gefragt wird.
+- GitHub lesen mit github (auch commit und vergleich). Aendern mit github_write, wenn \
+das Recht es erlaubt: checkout holt das Repo in die VM (Code-Chat), dort aendern und \
+testen, push committet und pusht die Aenderungen auf einen eigenen Branch; ohne VM \
+commit mit files. Danach pull_request. Jeder Schritt fragt den Nutzer. Nie auf den \
+Standard-Branch, kein Mergen, keine GitHub Actions; nie Schluessel oder Passwoerter.
 - Blender: Skripte mit blender_run, die Oberflaeche mit desktop_open app=blender.
 - Code-Review und Security-Review sind Prueflisten, keine Werkzeuge: sie gelten, \
 wenn der Nutzer /code-review oder /security-review schreibt.

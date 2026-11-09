@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import html
+import os
 import re
-from collections.abc import Sequence
+import tempfile
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -13,10 +17,49 @@ from urllib.parse import quote
 
 import httpx
 
-from aquaticy import netguard
+from aquaticy import netguard, zeit
 from aquaticy.models import Product
 
 FORMATS = ("html", "md", "csv")
+
+
+@contextmanager
+def _atomic_output(path: Path) -> Iterator[Path]:
+    from aquaticy.memory import secure_file
+
+    descriptor, name = tempfile.mkstemp(prefix=".aquaticy-export-", dir=path.parent)
+    os.close(descriptor)
+    temporary = Path(name)
+    try:
+        secure_file(temporary)
+        yield temporary
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _unique_path(base: Path) -> Path:
+    target = base
+    counter = 1
+    while True:
+        try:
+            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            os.close(descriptor)
+            return target
+        except FileExistsError:
+            counter += 1
+            target = base.with_name(f"{base.stem}-{counter}{base.suffix}")
+
+
+def write_copy(content: str, path: Path) -> Path:
+    target = _unique_path(path)
+    try:
+        with _atomic_output(target) as temporary:
+            temporary.write_text(content, encoding="utf-8")
+    except BaseException:
+        target.unlink(missing_ok=True)
+        raise
+    return target
 
 
 @dataclass
@@ -37,9 +80,6 @@ def _slug(text: str, limit: int = 40) -> str:
     return (slug[:limit].rstrip("-")) or "recherche"
 
 
-#: Womit eine Zelle nie beginnen darf: Excel und LibreOffice lesen sie sonst als
-#: Formel (``=HYPERLINK(...)``, ``+cmd|...``, ``@SUMME``). Die Inhalte stammen
-#: aus fremden Seiten -- ein Produktname kann genau so gebaut sein (seit 9.5.15).
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r", "\n", "\uff1d", "\uff0b", "\uff0d", "\uff20")
 
 
@@ -65,17 +105,14 @@ class _SafeCsv:
 
 def default_path(turns: list[Turn], fmt: str, directory: Path) -> Path:
     """Baut einen Dateinamen aus Zeitstempel und erster Frage."""
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = zeit.jetzt().strftime("%Y%m%d-%H%M%S")
     topic = _slug(turns[0].question) if turns else "recherche"
     return directory / f"aquaticy-{stamp}-{topic}.{fmt}"
 
 
-#: Groesser ist kein Produktbild -- der Rest wird nicht erst geladen.
 MAX_IMAGE_BYTES = 8_000_000
 
-#: Welche Bilder als Datei landen -- und mit welcher Endung. Die Endung kommt
-#: aus dem Inhaltstyp, nicht aus der Adresse (seit 9.5.16): sonst lag aus
-#: "bild.html" oder einem SVG mit Skript eine aktive Datei neben dem Export.
+
 IMAGE_SUFFIXES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
                   "image/gif": ".gif", "image/avif": ".avif"}
 
@@ -88,23 +125,20 @@ def safe_link(url: object) -> str:
     """
     text = str(url or "").strip()
     try:
-        schema = httpx.URL(text).scheme.lower()
+        parsed = httpx.URL(text)
+        schema = parsed.scheme.lower()
     except (httpx.InvalidURL, TypeError, ValueError):
         return ""
-    return text if schema in ("http", "https") else ""
+    return text if schema in ("http", "https") and parsed.host else ""
 
 
 def download_images(turns: list[Turn], directory: Path, timeout: float = 15.0) -> dict[str, str]:
     """Laedt Produktbilder in *directory* und gibt {url: dateiname} zurueck."""
-    directory.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     mapping: dict[str, str] = {}
-    # Fortlaufender Zaehler ueber ALLE Turns: mit dem Index je Turn wuerden
-    # gleichnamige Produkte aus verschiedenen Turns dieselbe Datei
-    # ueberschreiben und auf das falsche Bild zeigen.
+
     counter = 0
-    # Bildadressen stammen aus fremden Seiten (JSON-LD, OpenGraph): nur
-    # oeffentliche Ziele, jede Weiterleitung geprueft, Groesse beim Laden
-    # begrenzt (aquaticy/netguard.py, seit 9.5.15).
+
     with netguard.image_client(timeout=timeout) as client:
         for turn in turns:
             for product in turn.products:
@@ -118,19 +152,22 @@ def download_images(turns: list[Turn], directory: Path, timeout: float = 15.0) -
                     art = response.headers.get("content-type", "").split(";", 1)[0]
                     suffix = IMAGE_SUFFIXES.get(art.strip().lower(), "")
                     if not suffix:
-                        continue  # kein Rasterbild (SVG, HTML, ...) -- nicht speichern
+                        continue
                     name = f"{_slug(product.name, 30)}-{counter}{suffix}"
                     counter += 1
-                    (directory / name).write_bytes(response.content)
-                    mapping[url] = name
+                    target = _unique_path(directory / name)
+                    try:
+                        with _atomic_output(target) as temporary:
+                            temporary.write_bytes(response.content)
+                    except BaseException:
+                        target.unlink(missing_ok=True)
+                        raise
+                    mapping[url] = target.name
                 except httpx.HTTPError:
                     continue
     return mapping
 
 
-# ---------------------------------------------------------------------------
-# Markdown
-# ---------------------------------------------------------------------------
 def _md_text(text: object) -> str:
     """Linktext aus fremden Seiten: Klammern maskiert (9.5.34).
 
@@ -149,7 +186,7 @@ def to_markdown(turns: list[Turn], image_map: dict[str, str] | None = None) -> s
     """Markdown mit Bild-Links."""
     image_map = image_map or {}
     lines: list[str] = ["# aquaticy-Recherche", ""]
-    lines.append(f"_{datetime.now().strftime('%d.%m.%Y %H:%M')}_")
+    lines.append(f"_{zeit.jetzt().strftime('%d.%m.%Y %H:%M')}_")
     lines.append("")
 
     for turn in turns:
@@ -159,20 +196,21 @@ def to_markdown(turns: list[Turn], image_map: dict[str, str] | None = None) -> s
         lines.append("")
 
         for product in turn.products:
-            lines.append(f"### {product.name}")
+            lines.append(f"### {_md_text(product.name)}")
             if product.image_url:
                 target = image_map.get(product.image_url) or safe_link(product.image_url)
                 if target:
                     lines.append(f"![{_md_text(product.name)}]({_md_url(target)})")
                     lines.append("")
-            lines.append(f"- **Preis:** {product.price_display()}")
+            lines.append(f"- **Preis:** {_md_text(product.price_display())}")
             if product.rating is not None:
                 lines.append(f"- **Bewertung:** {product.rating}")
             if product.availability:
-                lines.append(f"- **Verfuegbarkeit:** {product.availability}")
+                lines.append(f"- **Verfuegbarkeit:** {_md_text(product.availability)}")
             for key, value in product.specs.items():
-                lines.append(f"- **{key}:** {value}")
-            lines.append(f"- **Quelle:** [{_md_text(product.source_domain)}]"
+                lines.append(f"- **{_md_text(key)}:** {_md_text(value)}")
+            label = product.source_domain or safe_link(product.url) or 'Quelle'
+            lines.append(f"- **Quelle:** [{_md_text(label)}]"
                          f"({_md_url(safe_link(product.url))})")
             lines.append("")
 
@@ -195,9 +233,6 @@ def to_markdown(turns: list[Turn], image_map: dict[str, str] | None = None) -> s
     return "\n".join(lines).rstrip() + "\n"
 
 
-# ---------------------------------------------------------------------------
-# HTML
-# ---------------------------------------------------------------------------
 HTML_STYLE = """
 :root { color-scheme: light dark; }
 * { box-sizing: border-box; }
@@ -229,7 +264,11 @@ th { background: #f4f4f0; font-weight: 600; }
 ul { padding-left: 1.2rem; }
 .skip { color: #a06b00; font-size: .9rem; }
 code { background: #efefe9; padding: .1rem .3rem; border-radius: .25rem; }
-@media (prefers-color-scheme: dark) { code { background: #2a2a30; } }
+@media (prefers-color-scheme: dark) {
+  .card, .turn { background: #202024; border-color: #33333a; }
+  th { background: #26262b; }
+  code { background: #2a2a30; }
+}
 """
 
 
@@ -257,7 +296,7 @@ def to_html(turns: list[Turn], image_map: dict[str, str] | None = None) -> str:
         "<title>aquaticy-Recherche</title>",
         f"<style>{HTML_STYLE}</style></head><body>",
         "<h1>aquaticy-Recherche</h1>",
-        f'<p class="meta">{_e(datetime.now().strftime("%d.%m.%Y %H:%M"))}</p>',
+        f'<p class="meta">{_e(zeit.jetzt().strftime("%d.%m.%Y %H:%M"))}</p>',
     ]
 
     for turn in turns:
@@ -329,10 +368,13 @@ def to_html(turns: list[Turn], image_map: dict[str, str] | None = None) -> str:
     return "\n".join(parts)
 
 
-# ---------------------------------------------------------------------------
-# CSV
-# ---------------------------------------------------------------------------
 def write_csv(turns: list[Turn], path: Path) -> Path:
+    with _atomic_output(path) as temporary:
+        _write_csv(turns, temporary)
+    return path
+
+
+def _write_csv(turns: list[Turn], path: Path) -> Path:
     """Eine Zeile je Produkt; Specs werden zu Spalten."""
     products = [product for turn in turns for product in turn.products]
     spec_keys: list[str] = []
@@ -355,7 +397,6 @@ def write_csv(turns: list[Turn], path: Path) -> Path:
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = _SafeCsv(csv.writer(handle))
         if not products:
-            # Ohne Produkte exportieren wir die Antworten selbst.
             writer.writerow(["frage", "antwort", "quellen"])
             for turn in turns:
                 writer.writerow(
@@ -384,9 +425,6 @@ def write_csv(turns: list[Turn], path: Path) -> Path:
     return path
 
 
-# ---------------------------------------------------------------------------
-# Einstieg
-# ---------------------------------------------------------------------------
 def export(
     turns: list[Turn],
     fmt: str,
@@ -407,20 +445,26 @@ def export(
 
     target = path or default_path(turns, fmt, directory or Path.cwd())
     target.parent.mkdir(parents=True, exist_ok=True)
+    if path is None:
+        target = _unique_path(target)
+    try:
+        image_map: dict[str, str] = {}
+        if with_images and fmt in ("html", "md"):
+            asset_dir = target.with_suffix("") / "bilder"
+            image_map = {
 
-    image_map: dict[str, str] = {}
-    if with_images and fmt in ("html", "md"):
-        asset_dir = target.with_suffix("") / "bilder"
-        image_map = {
-            # HTML und Markdown verwenden URLs, keine Windows-Pfade. Ein
-            # Backslash funktioniert im Browser nicht verlaesslich und machte
-            # heruntergeladene Bilder auf Windows unsichtbar.
-            url: (Path(asset_dir.parent.name) / "bilder" / name).as_posix()
-            for url, name in download_images(turns, asset_dir).items()
-        }
+                url: (Path(asset_dir.parent.name) / "bilder" / name).as_posix()
+                for url, name in download_images(turns, asset_dir).items()
+            }
 
-    if fmt == "csv":
-        return write_csv(turns, target)
-    content = to_html(turns, image_map) if fmt == "html" else to_markdown(turns, image_map)
-    target.write_text(content, encoding="utf-8")
-    return target
+        if fmt == "csv":
+            return write_csv(turns, target)
+        content = to_html(turns, image_map) if fmt == "html" else to_markdown(turns, image_map)
+        with _atomic_output(target) as temporary:
+            temporary.write_text(content, encoding="utf-8")
+        return target
+    except BaseException:
+        if path is None:
+            with contextlib.suppress(OSError):
+                target.unlink()
+        raise

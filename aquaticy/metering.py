@@ -72,11 +72,10 @@ __all__ = [
 
 LOG = logging.getLogger("aquaticy.metering")
 
-#: So viel reserviert ein Aufruf fuer die Antwort, wenn er selbst keine Grenze nennt.
+
 DEFAULT_OUTPUT_RESERVE = 4_096
 
-#: Was Arbeit auf dem Server kostet -- in Token gerechnet, damit sie mit den
-#: Modellaufrufen in dasselbe Kontingent passt. (Einheit, Token je Einheit)
+
 WORK_COSTS: dict[str, tuple[str, int]] = {
     "werkstatt": ("je angefangene Sekunde Rechenzeit in der virtual machine", 150),
     "werkstatt_start": ("je Start einer virtual machine", 750),
@@ -147,7 +146,6 @@ def record(
         try:
             quota.record(rein + raus, model)
         except Exception:
-            # Nicht still: wer hier schweigt, laesst Nutzung unbezahlt durch.
             LOG.exception("Kontingent: Verbrauch liess sich nicht eintragen (%s)", model)
 
 
@@ -170,7 +168,7 @@ class Reservation:
         self._quota = quota
         self._nummer = nummer
         self._offen = True
-        #: Die Aufrufargumente, fuer die reserviert wurde (Agent, seit 9.5.16).
+
         self.kwargs: dict[str, Any] | None = None
 
     def settle(self, tokens_in: int, tokens_out: int) -> None:
@@ -185,7 +183,6 @@ class Reservation:
         try:
             self._quota.settle(self._nummer, rein + raus, self.model)
         except Exception:
-            # Die Reservierung bleibt stehen -- lieber zu viel gezaehlt als zu wenig.
             LOG.exception("Kontingent: Verrechnen fehlgeschlagen (%s)", self.model)
 
     def cancel(self) -> None:
@@ -210,7 +207,6 @@ class Reservation:
         try:
             self._quota.settle(self._nummer, max(0, int(tokens)), self.model)
         except Exception:
-            # Die Mindestreservierung bleibt bei einem Datenbankfehler stehen.
             LOG.exception("Kontingent: Serverarbeit liess sich nicht verrechnen (%s)",
                           self.model)
 
@@ -252,10 +248,9 @@ def estimate(messages: Any, max_tokens: Any = None, tools: Any = None) -> int:
     return max(1, rein + max(0, raus))
 
 
-#: Weniger Platz fuer die Antwort lohnt keinen Aufruf mehr.
 MIN_OUTPUT_TOKENS = 256
-#: Erst unterhalb davon wird die Antwortlaenge an den Rest angepasst -- darueber
-#: bliebe eine Obergrenze wirkungslos und manche Anbieter lehnen riesige ab.
+
+
 OUTPUT_CAP_FROM = 16_384
 
 
@@ -301,14 +296,13 @@ def usage_of(usage: Any) -> tuple[int, int] | None:
         return usage.get(name) if isinstance(usage, dict) else getattr(usage, name, None)
 
     rein, raus, summe = wert("prompt_tokens"), wert("completion_tokens"), wert("total_tokens")
-    if not isinstance(rein, int) or not isinstance(raus, int) or rein < 0 or raus < 0:
+    if type(rein) is not int or type(raus) is not int or rein < 0 or raus < 0:
         return None
-    if isinstance(summe, int) and summe > rein + raus:
+    if type(summe) is int and summe > rein + raus:
         raus = summe - rein
     return rein, raus
 
 
-# -- Serverarbeit ---------------------------------------------------------------
 def work_cost(kind: str, amount: float = 1.0) -> int:
     """Was *amount* Einheiten dieser Arbeit kosten -- angefangene Einheiten zaehlen voll."""
     _, je = WORK_COSTS.get(kind, ("", 0))
@@ -346,11 +340,9 @@ def reserve_work(settings: Any, kind: str, amount: float = 1.0) -> Reservation:
     return Reservation(settings, f"server:{kind}", quota, nummer)
 
 
-# -- Modellaufrufe ------------------------------------------------------------------
 def _counted(messages: Any, response: Any) -> tuple[int, int]:
     """Die Zahlen des Anbieters, sonst eine Schaetzung aus dem Text."""
-    from aquaticy.usage import message_tokens, tokens
-
+    from aquaticy.usage import message_tokens, reply_tokens
     echt = usage_of(getattr(response, "usage", None))
     if echt is not None:
         return echt
@@ -358,10 +350,10 @@ def _counted(messages: Any, response: Any) -> tuple[int, int]:
         rein = message_tokens(messages if isinstance(messages, list) else [])
     except Exception:
         rein = 0
-    text = ""
+    output = 0
     with contextlib.suppress(Exception):
-        text = str(response.choices[0].message.content or "")
-    return rein, tokens(text)
+        output = reply_tokens(response.choices[0].message)
+    return rein, output
 
 
 def prepare_messages(settings: Any, model: str, messages: Any) -> Any:
@@ -395,9 +387,7 @@ def completion(settings: Any, *, enforce: bool = True, **kwargs: Any) -> Any:
     if access is not None:
         access(modell)
     kwargs["messages"] = prepare_messages(settings, modell, kwargs.get("messages"))
-    # Lokale Sicherheitspruefer brauchen Platz fuer ALLE Regeln und das Material,
-    # einschliesslich vorbereiteter Lernhinweise. 2048 Token reichten dafuer nicht.
-    # UTF-8-Bytes sind eine konservative Obergrenze fuer die Texttokenzahl.
+
     context = kwargs.get("num_ctx")
     if not enforce and isinstance(context, int) and context > 0:
         required = 256 + int(kwargs.get("max_tokens") or 256)
@@ -407,9 +397,6 @@ def completion(settings: Any, *, enforce: bool = True, **kwargs: Any) -> Any:
                 required += len(content.encode("utf-8", "replace")) + 128
         kwargs["num_ctx"] = max(context, ((required + 1023) // 1024) * 1024)
     if kwargs.get("stream"):
-        # Gestreamte Aufrufe reservieren und verrechnen selbst (Agent._reserve,
-        # _note_usage). Bis 9.5.16 stand hier ein Zweig dafuer, der das
-        # Gegenteil seines Kommentars tat -- benutzt hat ihn niemand.
         raise ValueError("metering.completion streamt nicht -- dafuer Agent._reserve nehmen.")
     if enforce:
         check(settings, model=modell)
@@ -417,8 +404,7 @@ def completion(settings: Any, *, enforce: bool = True, **kwargs: Any) -> Any:
                             kwargs.get("max_tokens"))
         if deckel is not None:
             kwargs["max_tokens"] = deckel
-    # Reserviert wird immer -- auch beim Rechtspruefer, der vorher nicht
-    # prueft: gebucht werden muss er trotzdem, und zwar bevor er laeuft.
+
     try:
         buchung = reserve(settings, modell, estimate(kwargs.get("messages"),
                                                      kwargs.get("max_tokens"),
@@ -434,8 +420,7 @@ def completion(settings: Any, *, enforce: bool = True, **kwargs: Any) -> Any:
         response = llmcall.completion(**kwargs)
     except BaseException as exc:
         buchung.cancel()
-        # Abgeschaltet (12.2.2 Astra, 410 Gone): merken -- die Modellwahl und die
-        # Pruefer nehmen es dann nicht mehr.
+
         from aquaticy.system import is_gone_error, mark_retired
 
         if isinstance(exc, Exception) and is_gone_error(exc):

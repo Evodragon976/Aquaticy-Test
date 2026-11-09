@@ -31,19 +31,15 @@ from collections.abc import Iterable, Sequence
 
 from aquaticy.models import SearchResult, domain_of
 
-#: Die uebliche Konstante aus der RRF-Veroeffentlichung. Sie daempft den
-#: Vorsprung der ersten Plaetze -- ohne sie wuerde Platz 1 alles erschlagen.
 RRF_K = 60
 
-#: Mehr als drei Formulierungen verwaessern die Treffer, statt sie zu mehren.
+
 MAX_VARIANTS = 3
 
-#: Hoechstens so viele Treffer je Domain im gemischten Ergebnis. Sonst belegt
-#: ein einziges Portal die ganze erste Seite und die Sicht wird einseitig.
+
 PER_DOMAIN = 2
 
-#: Fuellwoerter, die eine Suchanfrage nur laenger machen. Deutsch und
-#: Englisch gemischt, weil Fragen oft gemischt gestellt werden.
+
 _STOPWORD_TEXT = """
     aber alle allem allen aller alles als also am an andere anderem anderen ander
     auch auf aus bei beim bin bis bist da damit dann das dass dem den denn der
@@ -64,7 +60,7 @@ _STOPWORD_TEXT = """
 """
 STOPWORDS = frozenset(_STOPWORD_TEXT.split())
 
-#: Frageeinleitungen, die vorne wegkoennen -- sie stehen nie in der Antwort.
+
 _STARTER_TEXT = """
     was wer wie wo wann warum wieso weshalb welche welcher welches welchem
     welchen wieviel wieviele gibt kennst suche finde zeig zeige nenne erklaer
@@ -73,8 +69,8 @@ _STARTER_TEXT = """
 QUESTION_STARTERS = frozenset(_STARTER_TEXT.split())
 
 _WORD = re.compile(r"[\w\-äöüÄÖÜß.]+", re.UNICODE)
-#: Zwei oder mehr grossgeschriebene Woerter hintereinander -- meist ein Name,
-#: eine Marke oder ein Produkt. Genau das lohnt sich in Anfuehrungszeichen.
+
+
 _PROPER = re.compile(r"\b([A-ZÄÖÜ][\wäöüß\-]+(?:\s+[A-ZÄÖÜ0-9][\wäöüß\-]*){1,3})")
 
 
@@ -128,13 +124,13 @@ def mentions_place(query: str, location: str) -> bool:
     """Steht der Ort schon in der Anfrage?"""
     ort = place_of(location).lower()
     if not ort:
-        return True  # kein Ort gesetzt: nichts zu ergaenzen
-    text = (query or "").lower()
-    if ort in text:
         return True
-    # Auch ein Teil reicht: wer "Bremen Nord" als Ort hat, hat mit "Bremen"
-    # in der Anfrage schon gesagt, worum es geht.
-    return any(len(teil) > 3 and teil in text for teil in ort.split())
+    text = (query or "").lower()
+    if re.search(r"(?<!\w)" + re.escape(ort) + r"(?!\w)", text):
+        return True
+
+    first = ort.split()[0]
+    return bool(len(first) > 3 and re.search(r"(?<!\w)" + re.escape(first) + r"(?!\w)", text))
 
 
 def with_place(query: str, location: str) -> str:
@@ -166,7 +162,6 @@ def variants(query: str, extra: int = 2) -> list[str]:
         return []
     out = [query]
     if extra <= 0 or '"' in query:
-        # Wer zitiert, meint es genau so. Daran wird nicht herumformuliert.
         return out
     candidate = keywords(query).strip()
     if candidate and candidate.lower() != query.lower():
@@ -195,17 +190,20 @@ def fuse(
     scores: dict[str, float] = {}
     best: dict[str, SearchResult] = {}
     for results in lists:
-        for rank, result in enumerate(results, start=1):
+        seen: set[str] = set()
+        for result in results:
             url = (result.url or "").strip()
             if not url:
                 continue
-            scores[url] = scores.get(url, 0.0) + 1.0 / (RRF_K + rank)
+            if url not in seen:
+                scores[url] = scores.get(url, 0.0) + 1.0 / (RRF_K + len(seen) + 1)
+                seen.add(url)
             keep = best.get(url)
-            # Bei Dubletten die aussagekraeftigere Fassung behalten.
+
             if keep is None or len(result.snippet or "") > len(keep.snippet or ""):
                 if keep is not None and not (result.title or "").strip():
                     continue
-                best[url] = result
+                best[url] = result.model_copy()
 
     order = sorted(best.values(), key=lambda item: -scores[item.url.strip()])
     picked: list[SearchResult] = []

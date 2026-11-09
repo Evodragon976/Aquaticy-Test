@@ -66,46 +66,42 @@ from collections import OrderedDict, deque
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-#: Die Gewichte (siehe oben).
 BASE = 6
 SCRIPT = 40
 PER_FAIL = 4
 FAIL_CAP = 33
 NEW_DEVICE = 20
-#: Ab hier Nachweis, ab hier abgewiesen.
+
 CHALLENGE_FROM = 34
 DROP_FROM = 67
 
 THROUGH, CHALLENGE, DROPPED = "durch", "nachweis", "abgewiesen"
 
-#: So lange zaehlen Fehlversuche, so lange gilt eine Sperre.
+
 FAIL_WINDOW = 3600.0
 BAN_SECONDS = 15 * 60
-#: Die Rechenaufgaben: beim Besuch klein, beim Nachweis groesser.
+
 VISIT_BITS = 14
 HUMAN_BITS = 17
 VISIT_TTL = 15 * 60
 HUMAN_TTL = 5 * 60
 
-#: Ein Schluessel je Serverstart -- ein Neustart macht offene Aufgaben ungueltig;
-#: dann fragt Aquaticy eben einmal nach.
+
 _SECRET = secrets.token_bytes(32)
 _NONCE = re.compile(r"[0-9]{1,12}")
 _SEED = re.compile(r"[0-9a-f]{32}")
 
-#: Werkzeuge statt Browser. "headless" faengt HeadlessChrome; "bot" und Co. die,
-#: die sich ehrlich nennen.
+
 _SKRIPT = re.compile(
     r"curl|wget|python|httpx|aiohttp|requests|urllib|go-http|okhttp|java/|apache-http|"
     r"libwww|perl|ruby|php/|node-fetch|axios|undici|postman|insomnia|scrapy|headless|"
     r"phantomjs|selenium|puppeteer|playwright|\bbot\b|bot/|spider|crawler",
     re.IGNORECASE,
 )
-#: Browser, die bei jedem fetch() Sec-Fetch-Site/-Mode mitschicken.
+
 _SENDET_FETCH = re.compile(r"\b(?:Chrome|Chromium|Edg|Firefox)/")
 
 
-# -- Risikozahl -------------------------------------------------------------------------
 def score(script_like: bool, failures: int, new_device: bool) -> int:
     """Die Risikozahl 0 bis 100 aus den drei Hinweisen."""
     zahl = (BASE + (SCRIPT if script_like else 0)
@@ -141,8 +137,7 @@ def fingerprint(headers: Mapping[str, str] | Any, proof_ok: bool, webdriver: boo
     agent = kopf("User-Agent")
     if not agent.lower().startswith("mozilla/5.0") or _SKRIPT.search(agent):
         gruende.append("user-agent")
-    # Chrome, Edge und Firefox schicken die Fetch-Metadaten seit Jahren -- aeltere
-    # WebKit-Fenster (Desktop-App unter Linux) nicht immer, die fragen wir nicht.
+
     if fetch_metadata and _SENDET_FETCH.search(agent) and (
             kopf("Sec-Fetch-Site").lower() != "same-origin"
             or kopf("Sec-Fetch-Mode").lower() not in {"cors", "same-origin"}):
@@ -156,7 +151,6 @@ def fingerprint(headers: Mapping[str, str] | Any, proof_ok: bool, webdriver: boo
     return gruende
 
 
-# -- Rechenaufgaben ---------------------------------------------------------------------
 def _b64(daten: bytes) -> str:
     return base64.urlsafe_b64encode(daten).decode("ascii").rstrip("=")
 
@@ -209,9 +203,12 @@ class _Used:
                 self._seen.popitem(last=False)
             if seed in self._seen:
                 return False
+            if len(self._seen) >= self._max:
+                for expired in [key for key, expiry in self._seen.items() if expiry < jetzt]:
+                    self._seen.pop(expired, None)
+                if len(self._seen) >= self._max:
+                    return False
             self._seen[seed] = until
-            while len(self._seen) > self._max:
-                self._seen.popitem(last=False)
             return True
 
 
@@ -223,7 +220,8 @@ def check(proof: Any, kinds: Iterable[str]) -> bool:
     if not isinstance(proof, Mapping):
         return False
     token, nonce = proof.get("token"), proof.get("nonce")
-    if (not isinstance(token, str) or len(token) > 400 or not isinstance(nonce, str)
+    if (not isinstance(token, str) or len(token) > 400 or not token.isascii()
+            or not isinstance(nonce, str)
             or not _NONCE.fullmatch(nonce)):
         return False
     roh, _, signatur = token.partition(".")
@@ -248,7 +246,6 @@ def check(proof: Any, kinds: Iterable[str]) -> bool:
     return _USED.take(samen, ausgestellt + dauer)
 
 
-# -- Der Regler ---------------------------------------------------------------------------
 def human_track(track: Any) -> bool:
     """Sieht die Bewegung am Regler nach einem Menschen aus?
 
@@ -284,7 +281,6 @@ def human_track(track: Any) -> bool:
     return mittel > 0 and streuung / mittel >= 0.05
 
 
-# -- Fehlversuche und Sperren -------------------------------------------------------------
 def address_key(adresse: str) -> str:
     """Unter welcher Adresse gezaehlt wird: IPv4 einzeln, IPv6 je /64-Netz.
 
@@ -300,7 +296,6 @@ def address_key(adresse: str) -> str:
             return str(ip.ipv4_mapped)
         return str(ipaddress.IPv6Network(f"{ip}/64", strict=False))
     return str(ip)
-
 
 
 class Failures:
