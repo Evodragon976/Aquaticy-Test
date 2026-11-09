@@ -57,14 +57,9 @@ def test_secure_ssh_rechecks_grant_after_vm_start(ssh_box, monkeypatch):  # noqa
     assert "error" in result and box.calls == []
 
 
-def test_custom_ssh_port_cannot_be_blocked(ssh_box, monkeypatch):  # noqa: F811
-    toolbox, box = ssh_box
-    toolbox.secure_mode = True
-    toolbox.secure_provider = lambda *a: {"ok": True, "subnet": NETZ, "router": ""}
-    monkeypatch.setattr(secure_pro, "own_addresses", lambda *a: frozenset())
-    result = toolbox.call("secure_defend", {"action": "block_port", "host": "192.168.1.2",
-                                            "port": 2222, "ssh_port": 2222})
-    assert "SSH-Port" in result["error"] and not box.calls
+# 16.0.0 (Aquaticy-Test): test_custom_ssh_port_cannot_be_blocked entfaellt.
+# Grund: Secure Pro beantwortet nur noch Fragen: kein Netz, keine Pruefung, kein nmap, keine
+# Abwehr per SSH
 
 
 def test_firewalld_block_and_unblock_do_not_change_existing_port_allowances(tmp_path):
@@ -299,14 +294,9 @@ def test_observed_dns_names_do_not_leave_in_public_research(settings, monkeypatc
         box.close()
 
 
-def test_dns_names_from_status_are_registered_before_public_research(settings, monkeypatch):
-    box = Toolbox(settings)
-    box.secure_mode = True
-    box.secure_provider = lambda *a: {"events": [{"dns_names": ["personal-domain.example"]}]}
-    monkeypatch.setattr(box, "web_search", lambda *a, **kw: pytest.fail("private DNS search"))
-    try:
-        box.call("secure_status", {})
-        assert box.call("secure_advisories", {"query": "personal-domain.example"})[
-            "skipped_reason"] == "private_data"
-    finally:
-        box.close()
+# 16.0.0 (Aquaticy-Test): entfaellt:
+# test_dns_names_from_status_are_registered_before_public_research
+# Grund: Secure Pro beantwortet nur noch Fragen: kein Netz, keine Pruefung, kein nmap, keine
+# Abwehr per SSH
+
+

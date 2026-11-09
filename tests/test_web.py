@@ -133,7 +133,6 @@ def client(session: web.ChatSession):
         return response.status, data
 
 
-
     request.port = server.server_address[1]
 
     try:
@@ -194,7 +193,6 @@ def test_saved_chat_setting_reloads_after_releasing_the_turn_lock(
     assert not turn.is_alive(), "reload() darf nicht die noch gehaltene Sperre nehmen"
     assert done and agent.closed == 1
     assert session._agent is None
-
 
 
 def test_current_values_covers_every_setting_key(session: web.ChatSession) -> None:
@@ -282,7 +280,6 @@ def test_unknown_keys_are_ignored(
     assert "PATH=/boese" not in target.read_text()
 
 
-
 def test_index_serves_the_ui(client) -> None:
     status, body = client("GET", "/")
     assert status == 200
@@ -322,7 +319,6 @@ def test_clear_resets_the_agent(client, session: web.ChatSession) -> None:
     session._agent = agent
     assert client("POST", "/api/clear")[0] == 200
     assert agent.cleared == 1
-
 
 
 def test_chat_streams_steps_and_answer(client, session: web.ChatSession) -> None:
@@ -433,14 +429,18 @@ def test_config_post_reports_failures(
     assert json.loads(body)["error"] == web.GENERIC_ERROR
 
 
-
 def test_ui_file_offers_every_setting() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
+    # 16.0.0 (Aquaticy-Test): Heimnetz, Home Assistant, Lager und virtual machine sind geloescht.
+    geloescht = ("AQUATICY_HA_", "AQUATICY_LAN_", "AQUATICY_STORAGE_", "AQUATICY_VM_",
+                 web.HA_TOKEN_FIELD)
     for key in web.SETTING_KEYS:
         if key == "AQUATICY_MAX_SUBAGENTS":
             continue
+        if key.startswith(geloescht):
+            assert f'name="{key}"' not in html, f"{key} sollte geloescht sein"
+            continue
         assert f'name="{key}"' in html, f"{key} fehlt im Formular"
-
 
 
     assert 'id="sec-schluessel"' in html and 'id="keys-summary"' not in html
@@ -488,7 +488,6 @@ def test_every_palette_keeps_small_text_at_wcag_aa_contrast() -> None:
             checked += 1
 
     assert checked == 4 * 2
-
 
 
 def test_help_lists_the_commands(client) -> None:
@@ -682,7 +681,6 @@ def test_saved_settings_take_effect_without_a_restart(
     )
     assert fresh.settings().location == "Hamburg"
     reset_settings_cache()
-
 
 
 @pytest.fixture
@@ -997,7 +995,6 @@ def test_chat_route_caps_agent_slider_by_mode(client, agent: FakeAgent) -> None:
     assert agent.seen_agent_limit == 12
 
 
-
 def test_style_and_script_blocks_stay_separate() -> None:
     """Ein Skriptblock im <style> faellt sonst nur im Browser auf."""
     html = web.UI_FILE.read_text(encoding="utf-8")
@@ -1017,7 +1014,6 @@ def test_every_request_carries_the_token() -> None:
     assert 'fetch("/api' not in html
     assert "aquaticy-token" not in html
     assert "localStorage.setItem" not in html
-
 
 
 def test_comparison_survives_non_ascii(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1055,7 +1051,6 @@ def test_generated_tokens_are_always_acceptable() -> None:
         assert web.token_problem(web.new_token()) == ""
 
 
-
 def test_a_broken_route_answers_500_instead_of_dying(
     port: int, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
 ) -> None:
@@ -1075,7 +1070,6 @@ def test_a_broken_route_answers_500_instead_of_dying(
     assert "Traceback" not in output.out + output.err
 
     assert raw_request(port, "GET", "/")[0] == 200
-
 
 
 class AskingAgent(FakeAgent):
@@ -1177,7 +1171,6 @@ def test_the_ui_can_show_a_question() -> None:
     assert 'case "ask"' in html
     assert "/api/answer" in html
     assert "askcard" in html
-
 
 
 def encode(data: bytes) -> str:
@@ -1363,7 +1356,6 @@ def test_old_uploads_are_cleaned_up(session: web.ChatSession, seeing: FakeAgent,
     assert any("bild5" in item.name for item in folder.iterdir())
 
 
-
 def test_the_token_never_goes_to_the_browser(client, session: web.ChatSession) -> None:
     """Nur ob eines da ist -- nie das Token selbst."""
     session._settings.ha_url = "http://192.168.1.5:8123"
@@ -1458,7 +1450,6 @@ def test_a_new_ha_token_is_written(
     assert "HA_TOKEN=neues-token" in target.read_text()
 
 
-
 def test_the_ui_looks_like_the_new_design() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
     assert "<aside>" in html
@@ -1499,8 +1490,6 @@ def test_every_palette_sets_the_same_variables() -> None:
             r"--([a-z0-9-]+):",
             re.search(r":root\{(.*?)\}", html, re.S).group(1),
         )
-
-
 
 
     ) - {"radius", "radius-lg", "serif", "sans", "mono", "shadow", "knob", "fs"}
@@ -1634,11 +1623,9 @@ def test_the_ui_shows_the_home_steps() -> None:
         assert f'case "{event}"' in html, f"{event} wird nicht angezeigt"
 
 
-def test_the_ui_can_set_up_home_assistant() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert 'id="ha-find"' in html and 'id="ha-test"' in html
-    assert "/api/ha" in html
-    assert f'name="{web.HA_TOKEN_FIELD}"' in html
+# 16.0.0 (Aquaticy-Test): test_the_ui_can_set_up_home_assistant entfaellt.
+# Grund: Home Assistant, Lager, Auslastung, Mitlesen und virtual machine sind aus der Oberflaeche
+# geloescht
 
 
 def test_the_sidebar_list_can_shrink_and_scroll() -> None:
@@ -1658,7 +1645,6 @@ def test_the_sidebar_lists_chats_not_single_questions() -> None:
     assert "chat.turns" in html
 
 
-
 def test_the_model_list_offers_what_actually_works(
     client, session: web.ChatSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1671,7 +1657,6 @@ def test_the_model_list_offers_what_actually_works(
     models = json.loads(body)["models"]
     ids = [item["id"] for item in models]
     assert "ollama_chat/gemma4:12b" in ids
-
 
 
     assert "mistral/mistral-large-latest" not in ids
@@ -1705,7 +1690,7 @@ def test_the_load_includes_the_storage_when_it_is_on(
     session._settings.memory_enabled = True
     _, body = client("GET", "/api/system")
     storage = json.loads(body)["storage"]
-    assert storage["limit_mb"] == 400
+    assert storage["limit_mb"] == 20  # 16.0.0 (Aquaticy-Test): 20 MB je Konto
 
     assert "memory" in json.loads(body)
 
@@ -1731,13 +1716,9 @@ def test_an_ultra_account_reads_server_load(client, session: web.ChatSession) ->
     assert status == 200 and json.loads(body)["cpu"]["cores"] >= 1
 
 
-def test_the_load_section_is_hidden_until_ultra() -> None:
-    """Die Oberflaeche zeigt den Abschnitt gar nicht erst -- nicht nur gesperrt."""
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert '<fieldset id="pro-system" hidden>' in html
-    assert "system.hidden = !ultra;" in html
-    assert "START.load === true && kontoUltra" in html
-
+# 16.0.0 (Aquaticy-Test): test_the_load_section_is_hidden_until_ultra entfaellt.
+# Grund: Home Assistant, Lager, Auslastung, Mitlesen und virtual machine sind aus der Oberflaeche
+# geloescht
 
 
 def test_memory_command_shows_what_is_stored(client, session: web.ChatSession) -> None:
@@ -1745,7 +1726,7 @@ def test_memory_command_shows_what_is_stored(client, session: web.ChatSession) -
     _, body = client("POST", "/api/command", {"line": "/memory"})
     text = json.loads(body)["text"]
     assert "Bremen" in text
-    assert "von 400 MB" in text
+    assert "von 20 MB" in text  # 16.0.0 (Aquaticy-Test): 20 MB je Konto
 
 
 def test_forget_empties_the_store(client, session: web.ChatSession) -> None:
@@ -1781,7 +1762,6 @@ def test_memory_command_says_when_it_is_off(client, session: web.ChatSession) ->
     assert "Einstellungen" in text
 
 
-
 def test_the_ui_has_a_phone_layout() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
     assert "@media (max-width:900px)" in html
@@ -1811,17 +1791,15 @@ def test_the_ui_offers_the_model_picker_and_load_button() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
     assert 'id="btn-model"' in html and 'id="model-list"' in html
     assert "/api/models" in html
-    assert 'id="showload"' in html and "/api/system" in html
+    # 16.0.0 (Aquaticy-Test): keine Auslastung mehr.
+    assert 'id="showload"' not in html and "/api/system" not in html
     assert 'id="provider"' in html, "Anbieter zum Auswaehlen"
     assert 'name="AQUATICY_MEMORY"' in html
 
 
-def test_the_ui_offers_reading_along() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert 'id="showtrace"' in html, "der Schalter in den Einstellungen"
-    assert "body.tracing .trace" in html, "eingeblendet wird per Klasse"
-    for kind in ('case "thought"', 'case "action"', 'case "action_done"'):
-        assert kind in html, kind
+# 16.0.0 (Aquaticy-Test): test_the_ui_offers_reading_along entfaellt.
+# Grund: Home Assistant, Lager, Auslastung, Mitlesen und virtual machine sind aus der Oberflaeche
+# geloescht
 
 
 def test_the_trace_state_is_declared_before_the_read_loop() -> None:
@@ -1844,7 +1822,6 @@ def test_escape_closes_the_settings_window() -> None:
     handler = handler[: handler.index("});")]
     assert "closePicker(true)" in handler, "erst die Modellliste (Fokus zurueck, 9.6.0)"
     assert "closeSettings()" in handler, "dann die Einstellungen"
-
 
 
 def test_a_missing_provider_prefix_is_added() -> None:
@@ -1926,7 +1903,6 @@ def test_the_ui_shows_what_a_key_looks_like() -> None:
     assert "Add-ons → NVIDIA NIM" in nvidia["note"] and "nvapi-" in nvidia["note"]
     lokal = next(p for p in provider_view() if p["id"] == "ollama_chat")
     assert lokal["key_label"] == "(nicht nötig)" and "Kein Schlüssel" in lokal["note"]
-
 
 
 def test_a_chat_is_named_after_its_first_question(client, session: web.ChatSession) -> None:
@@ -2056,7 +2032,6 @@ def test_a_new_chat_starts_a_new_entry(client, session: web.ChatSession) -> None
     assert after and after != before
 
 
-
 def test_an_ollama_address_never_reaches_the_cloud() -> None:
     """Ollama antwortet mit "404 page not found" -- das sieht aus wie ein
     Fehler des Anbieters, ist aber nur die falsche Adresse."""
@@ -2081,9 +2056,6 @@ def test_a_proxy_is_not_mistaken_for_ollama() -> None:
     assert base_fits("http://192.168.1.9:4000", "nvidia_nim/meta/llama")
     assert base_fits("http://localhost:4000", "mistral/mistral-large-latest")
     assert not base_fits("http://192.168.1.9:11434", "mistral/mistral-large-latest")
-
-
-
 
 
 def test_everything_setup_asks_for_is_in_the_web_form() -> None:
@@ -2228,9 +2200,6 @@ def test_a_leftover_ollama_base_is_ignored_in_the_probe(
     assert seen["base"] == ""
 
 
-
-
-
 def test_the_settings_have_their_own_google_section() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
     assert "Gmail &amp; Kalender" in html, "eigene Sparte"
@@ -2362,9 +2331,6 @@ def test_a_return_without_a_code_says_so(client) -> None:
     assert b"keinen Code" in body
 
 
-
-
-
 def test_the_stream_starts_with_a_sign_of_life(client, session: web.ChatSession) -> None:
     """Erst mit dem ersten Byte steht die Verbindung fuer den Browser wirklich."""
     _, raw = client("POST", "/api/chat", {"message": "hallo"})
@@ -2423,9 +2389,6 @@ def test_a_broken_stream_is_explained_in_plain_words() -> None:
     assert "Die Verbindung ist mittendrin abgerissen" in html
     assert "Keine Verbindung zu Aquaticy" in html
     assert "err instanceof TypeError" in html
-
-
-
 
 
 def test_the_upload_button_turns_into_a_stop_button() -> None:
@@ -2499,26 +2462,14 @@ def test_stopping_cancels_the_running_agent(
     assert not worker.is_alive(), "der Durchlauf endet danach von selbst"
 
 
+# 16.0.0 (Aquaticy-Test): test_the_storage_is_set_up_in_the_network_section entfaellt.
+# Grund: Home Assistant, Lager, Auslastung, Mitlesen und virtual machine sind aus der Oberflaeche
+# geloescht
 
 
-
-def test_the_storage_is_set_up_in_the_network_section() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert 'name="AQUATICY_STORAGE_URL"' in html
-    assert 'name="AQUATICY_STORAGE_ACCESS"' in html
-    for level in ('value="off"', 'value="read"', 'value="write"'):
-        assert level in html, level
-    assert 'id="storage-find"' in html and 'id="storage-test"' in html
-
-    section = html[html.index("Zuhause &amp; Netz") :]
-    assert "Lagerverwaltung" in section[: section.index("</fieldset>")]
-
-
-def test_the_settings_say_that_read_only_is_no_lock() -> None:
-    """Der Server selbst kennt keine Anmeldung -- das darf nicht verschwiegen werden."""
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert "„Nur lesen“ gilt nur für Aquaticy" in html
-    assert "nicht für andere in deinem Netz" in html
+# 16.0.0 (Aquaticy-Test): test_the_settings_say_that_read_only_is_no_lock entfaellt.
+# Grund: Home Assistant, Lager, Auslastung, Mitlesen und virtual machine sind aus der Oberflaeche
+# geloescht
 
 
 def test_the_storage_probe_reports_what_it_found(
@@ -2687,9 +2638,6 @@ def test_the_waiting_notice_does_not_invent_another_device(
     assert "früher gestellte Anfrage" in waiting[0]["reason"]
 
 
-
-
-
 def test_a_chat_can_be_renamed(client, session: web.ChatSession) -> None:
     cache = Cache(session.settings().db_path, 24)
     cache.add_history(session_id="s1", question="Wo liegt das Kabel?", answer="…", meta={})
@@ -2812,9 +2760,6 @@ def test_no_element_name_is_used_twice() -> None:
     names = re.findall(r'\bid="([^"]+)"', html)
     doubled = sorted({name for name in names if names.count(name) > 1})
     assert doubled == [], f"mehrfach vergeben: {doubled}"
-
-
-
 
 
 def test_the_mode_reaches_the_agent(client, session: web.ChatSession, agent: FakeAgent) -> None:
@@ -2941,9 +2886,6 @@ def test_the_switch_is_not_shadowed_by_a_local_name() -> None:
         assert schalter not in declared, f"verdeckt den Schalter: {declared}"
 
 
-
-
-
 def test_the_question_opens_its_own_window() -> None:
     """Eine Karte mitten im Verlauf wird uebersehen, waehrend man auf die
     Antwort schaut -- die Anfrage steht dann still und niemand merkt warum."""
@@ -3029,23 +2971,9 @@ def test_the_web_switch_reaches_the_agent(
     assert agent.online is False
 
 
-def test_the_workshop_switch_belongs_to_the_code_mode() -> None:
-    """Web und Gegenpruefen gehoeren zur Recherche, die virtual machine zum Code."""
-    html = web.UI_FILE.read_text(encoding="utf-8")
-
-
-    picker = html[html.index('id="picker-models"') :]
-    picker = picker[: picker.index('<main id="main">')]
-    assert 'id="werkstatt"' in picker
-    assert "Code echt ausprobieren" in picker
-
-    werkstatt = picker[picker.index('id="werkstatt"') - 200 : picker.index('id="werkstatt"')]
-    assert "only-code" in werkstatt
-    for schalter in ('id="online"', 'id="recheck"'):
-        davor = picker[picker.index(schalter) - 200 : picker.index(schalter)]
-        assert "only-normal" in davor, f"{schalter} muss im Code-Modus verschwinden"
-    assert "body:not(.code-mode) .only-code{display:none}" in html
-    assert "body.code-mode .only-normal{display:none}" in html
+# 16.0.0 (Aquaticy-Test): test_the_workshop_switch_belongs_to_the_code_mode entfaellt.
+# Grund: Home Assistant, Lager, Auslastung, Mitlesen und virtual machine sind aus der Oberflaeche
+# geloescht
 
 
 def test_the_workshop_reaches_the_agent(
@@ -3140,9 +3068,6 @@ def test_a_running_recheck_is_visible() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
     assert "[Gegenprobe]" in html
     assert "gegenprüfen" in _kopf({"recheck": True})["status"], "und steht in der Kopfzeile"
-
-
-
 
 
 def test_the_counter_can_be_read_but_not_reset(client, web_settings: Settings) -> None:
@@ -3285,17 +3210,12 @@ def test_the_workshop_answers_even_when_it_is_not_running(client) -> None:
 
 def test_a_workshop_file_is_never_served_as_html(client) -> None:
     """Sonst liefe eine Datei aus der virtual machine unter der Adresse von Aquaticy."""
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert "/api/werkstatt/datei" in html
     quelle = Path("aquaticy/web.py").read_text(encoding="utf-8")
     stelle = quelle[quelle.index("def _workshop_file") :]
     stelle = stelle[: stelle.index("\n    def ", 10)]
     assert 'attachment; filename=' in stelle
     assert "application/octet-stream" in stelle
     assert "nosniff" in stelle
-
-
-
 
 
 def test_the_settings_show_the_usage_limits() -> None:
@@ -3332,17 +3252,16 @@ def test_every_answer_can_be_copied_and_saved() -> None:
     assert 'data-do="export"' in html, "und der ganze Chat aus dem Menü"
 
 
-def test_the_workshop_button_only_shows_in_code_mode() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert 'id="btn-vmfiles"' in html
-    assert 'mode === "code" && sandbox' in html
+# 16.0.0 (Aquaticy-Test): test_the_workshop_button_only_shows_in_code_mode entfaellt.
+# Grund: Home Assistant, Lager, Auslastung, Mitlesen und virtual machine sind aus der Oberflaeche
+# geloescht
 
 
 def test_the_settings_offer_scheduled_jobs() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
     assert "<legend>Aufträge</legend>" not in html
     assert html.index('id="coworkerbox"') < html.index('id="cw-task-rhythm"')
-    assert html.index('id="cw-task-rhythm"') < html.index('id="screenbox"')
+    assert html.index('id="cw-task-rhythm"') < html.index('id="membox"')
     assert 'id="cw-task-rhythm"' in html
     assert "stündlich" in html and "wöchentlich" in html
 
@@ -3394,9 +3313,6 @@ def test_without_the_workshop_an_attachment_is_not_copied_anywhere(
     assert versuche == [], "ohne virtual machine wird nichts hineingelegt"
 
 
-
-
-
 def test_thinking_has_its_own_switch_next_to_structuring() -> None:
     """Ein eigener Schalter -- er ersetzt Strukturieren nicht, er steht daneben."""
     html = web.UI_FILE.read_text(encoding="utf-8")
@@ -3438,7 +3354,7 @@ def test_thinking_shows_only_the_thoughts_not_the_whole_trace() -> None:
 def test_the_switches_are_still_real_checkboxes() -> None:
     """Nur angezogen, nicht ersetzt: Label, Tastatur und Vorlesehilfen bleiben."""
     html = web.UI_FILE.read_text(encoding="utf-8")
-    for wer in ("denken", "structure", "recheck", "online", "werkstatt", "memon"):
+    for wer in ("denken", "structure", "recheck", "online", "memon"):
         assert f'<input type="checkbox" role="switch" class="schalter" id="{wer}"' in html
 
 
@@ -3466,9 +3382,6 @@ def test_no_plain_checkbox_is_left_over() -> None:
     assert '<input type="checkbox" id="auth-terms" required>' in html
     assert '<input type="checkbox" id="cw-task-struktur" checked>' in html
     assert '<input type="checkbox" id="consent-learning">' in html
-
-
-
 
 
 def test_changing_a_setting_does_not_start_a_new_chat(
@@ -3524,9 +3437,6 @@ def test_saving_settings_keeps_the_chat(client, session: web.ChatSession) -> Non
     assert nachher == vorher, "das Speichern hat den Chat gewechselt"
 
 
-
-
-
 def test_reading_along_does_not_show_the_thoughts() -> None:
     """Sonst stünde der Block da, obwohl „Denken" aus ist."""
     html = web.UI_FILE.read_text(encoding="utf-8")
@@ -3538,12 +3448,9 @@ def test_reading_along_does_not_show_the_thoughts() -> None:
     )
 
 
-def test_the_reading_along_text_says_where_the_thoughts_are() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert "Gedanken selbst siehst du mit" in html
-
-
-
+# 16.0.0 (Aquaticy-Test): test_the_reading_along_text_says_where_the_thoughts_are entfaellt.
+# Grund: Home Assistant, Lager, Auslastung, Mitlesen und virtual machine sind aus der Oberflaeche
+# geloescht
 
 
 def test_switching_the_mode_opens_a_new_chat() -> None:
@@ -3560,9 +3467,6 @@ def test_switching_to_the_same_mode_changes_nothing() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
     assert "const artVorher = chatArt();" in html
     assert "const chatArt = (m = mode) => m === \"code\" ? \"code\" : \"chat\";" in html
-
-
-
 
 
 def test_a_number_field_with_letters_is_refused(client) -> None:
@@ -3667,9 +3571,6 @@ def test_good_values_still_get_through(client) -> None:
     assert json.loads(data)["ok"] is True
 
 
-
-
-
 def test_the_state_can_be_read_and_written(client) -> None:
     status, data = client("GET", "/api/prefs")
     assert status == 200
@@ -3738,9 +3639,6 @@ def test_more_attachments_than_allowed_are_cut(client, agent: FakeAgent) -> None
     viele = [{"name": f"{i}.txt", "data": encode(b"hallo")} for i in range(50)]
     status, _ = client("POST", "/api/chat", {"message": "Was ist das?", "attachments": viele})
     assert status == 200
-
-
-
 
 
 def test_the_pro_button_looks_like_the_others() -> None:
@@ -3885,9 +3783,6 @@ def test_the_roles_are_named_the_same_on_both_sides() -> None:
 def test_the_header_says_when_four_are_checking() -> None:
     assert "4 Prüfer" in _kopf({"mode": "pro", "recheck": True})["status"]
     assert "gegenprüfen" in _kopf({"mode": "normal", "recheck": True})["status"]
-
-
-
 
 
 def test_a_run_survives_a_lost_connection(client, session: web.ChatSession) -> None:
@@ -4085,9 +3980,6 @@ def test_the_whole_picker_scrolls_not_just_the_list() -> None:
     assert "display:flex;flex-direction:column" in picker
 
     assert "min(38vh,320px)" in picker
-
-
-
 
 
 def test_an_image_job_stores_the_picture_privately(client, session: web.ChatSession) -> None:
@@ -4306,9 +4198,6 @@ def test_a_fresh_form_can_be_saved_as_it_is(client, web_settings: Settings) -> N
     assert status == 200, data
 
 
-
-
-
 def test_the_header_comes_from_the_server_and_follows_the_switches(
     client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -4407,7 +4296,6 @@ def test_the_probe_counts_for_a_normal_account(
     antwort = json.loads(client("POST", "/api/probe", {})[1])
     assert antwort["llm"]["ok"] is False and "Kontingent" in antwort["llm"]["message"]
     assert len(gefragt) == 1, "am Limit fragt der Test das Modell nicht mehr"
-
 
 
 def test_the_page_runs_scripts_only_with_its_nonce(port: int) -> None:

@@ -18,9 +18,13 @@ def test_pyproject_names_the_vercel_entrypoint() -> None:
 
 
 def test_every_extra_can_be_installed_with_pillow_13() -> None:
-    """uv lock auf Vercel loest alle Extras auf: term-image (Pillow < 11) brach den Build ab."""
+    """uv lock auf Vercel loest alle Extras auf: term-image (Pillow < 11) brach den Build ab.
+
+    Aquaticy-Test 16.0.0 braucht Pillow gar nicht mehr (nur fuer den QR-Code der Messenger).
+    """
     daten = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert any(d.lower().startswith("pillow>=13") for d in daten["project"]["dependencies"])
+    assert not any(d.lower().startswith(("pillow", "neonize", "zxing"))
+                   for d in daten["project"]["dependencies"])
     extras = daten["project"]["optional-dependencies"]
     assert not any(d.lower().startswith("term-image") for paket in extras.values() for d in paket)
 

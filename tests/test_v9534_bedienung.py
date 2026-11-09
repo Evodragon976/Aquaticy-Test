@@ -40,7 +40,6 @@ def _agent(settings: Settings) -> tuple[Agent, list[tuple[str, dict[str, Any]]]]
     return agent, ereignisse
 
 
-
 def _laufzeit() -> Any:
     return SimpleNamespace(binary="docker", extra=[], label="test")
 
@@ -145,7 +144,6 @@ def test_the_model_is_told_about_lan() -> None:
     assert VM_NET_LAN in text
 
 
-
 def test_an_insulting_answer_is_withdrawn(monkeypatch: pytest.MonkeyPatch,
                                           settings: Settings) -> None:
     monkeypatch.setattr("litellm.completion", ScriptedLLM(
@@ -216,13 +214,11 @@ def test_the_judge_prompt_for_answers_allows_education() -> None:
     assert "Bildung" in text and "Im Zweifel: kein Problem" in text
 
 
-
 def test_the_removed_mode_is_not_in_the_agent_or_server_signature() -> None:
     import inspect
 
     assert "image_mode" not in inspect.signature(Agent.ask).parameters
     assert "image_mode" not in inspect.signature(web.ChatSession.ask).parameters
-
 
 
 def test_the_model_button_sits_next_to_the_send_button() -> None:
@@ -241,7 +237,9 @@ def test_the_menu_has_effort_and_more_settings_without_image_creation() -> None:
     aufwand = html[html.index('id="win-aufwand"'): html.index('id="win-weitere"')]
     assert 'id="efforts"' in aufwand and 'id="agents"' in aufwand
     weitere = html[html.index('id="win-weitere"'): html.index('<main id="main">')]
-    for schalter in ("werkstatt", "online", "structure", "recheck", "denken"):
+    # 16.0.0 (Aquaticy-Test): ohne virtual machine kein Schalter "werkstatt".
+    assert 'id="werkstatt"' not in weitere
+    for schalter in ("online", "structure", "recheck", "denken"):
         assert f'id="{schalter}"' in weitere, schalter
 
 
@@ -251,6 +249,8 @@ def test_the_browser_cannot_send_the_removed_image_mode() -> None:
     assert "setImageMode" not in html
 
 
-def test_the_lan_switch_exists_for_ultra() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert 'id="vmlan"' in html and 'name="AQUATICY_VM_LAN"' in html
+# 16.0.0 (Aquaticy-Test): test_the_lan_switch_exists_for_ultra entfaellt.
+# Grund: virtual machine, Heimnetz, Messenger, Upgrading und Verbund sind aus der Oberflaeche
+# geloescht
+
+

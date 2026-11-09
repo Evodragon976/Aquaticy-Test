@@ -148,12 +148,12 @@ def test_plain_text_from_older_versions_still_reads(store: Memory, tmp_path: Pat
 
 
 def test_the_limit_is_four_hundred_megabytes() -> None:
-    assert mem.MAX_BYTES == 400_000_000
+    assert mem.MAX_BYTES == 20_000_000  # Aquaticy-Test 16.0.0: 20 MB je Konto
 
 
 def test_usage_reports_the_same_number_as_the_limit(store: Memory) -> None:
     """Anzeige und Grenze duerfen nicht auseinanderlaufen."""
-    assert store.usage()["limit_mb"] == 400
+    assert store.usage()["limit_mb"] == 20
 
 
 def test_uploads_count_towards_the_limit(store: Memory, tmp_path: Path) -> None:

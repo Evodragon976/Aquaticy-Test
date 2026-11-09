@@ -57,12 +57,9 @@ PROVIDERS: dict[str, dict[str, str]] = {
 KEY_NAMES = frozenset(p["key"] for p in PROVIDERS.values())
 
 
-SIGN_IN: dict[str, tuple[str, ...]] = {
-    "mistral": ("google", "apple", "microsoft", "email"),
-    "nvidia_nim": ("google", "email"),
-}
-SIGN_IN_LABELS = {"google": "Mit Google", "apple": "Mit Apple", "microsoft": "Mit Microsoft",
-                  "email": "Mit E-Mail"}
+# 16.0.0 (Aquaticy-Test): keine Knoepfe "Mit Google/Apple/Microsoft" mehr beim Schluessel --
+# nur noch ein Link direkt zur Schluessel-Seite des Anbieters (``get_key``). Google bleibt nur
+# fuer die Verbindung mit Gmail und Google Kalender.
 
 
 _MISTRAL_FORM = re.compile(r"[A-Za-z0-9]{32}")

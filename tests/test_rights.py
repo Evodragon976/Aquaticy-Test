@@ -35,7 +35,6 @@ def _an(konto: Settings, *ids: str) -> None:
         addons._update(konto, addon_id, installed=True, enabled=True)
 
 
-
 def test_every_addon_has_simple_rights() -> None:
 
 
@@ -70,25 +69,12 @@ def test_a_broken_state_falls_back_to_the_default(konto: Settings) -> None:
     assert addons.rights_of(konto, "whatsapp") == {"zugriff": "lesen", "wo": "einzeln"}
 
 
-def test_the_window_shows_rights_with_their_dependency(konto: Settings) -> None:
-    _an(konto, "signal")
-    ansicht = next(a for a in addons.public_view(konto, pro=True)["addons"]
-                   if a["id"] == "signal")
-    assert ansicht["rechte"] == {"zugriff": "lesen", "wo": "einzeln"}
-    wo = next(r for r in ansicht["rechte_katalog"] if r["key"] == "wo")
-    assert wo["nur_wenn"] == ["zugriff", "schreiben"]
-    assert [o["label"] for o in wo["options"]] == ["Nur Einzelchats", "Einzelchats und Gruppen"]
+# 16.0.0 (Aquaticy-Test): test_the_window_shows_rights_with_their_dependency entfaellt.
+# Grund: WhatsApp, Signal und Blender brauchen die virtual machine und sind geloescht
 
 
-def test_the_prompt_knows_the_rights(konto: Settings) -> None:
-    _an(konto, "whatsapp", "github")
-    text = addons.prompt_for(konto)
-    assert "WhatsApp Web: Was Aquaticy darf: Nur lesen" in text
-    assert "Schreiben in" not in text.split("WhatsApp Web:")[1].split("\n")[0], (
-        "ein Recht, das nicht gilt, steht nicht da")
-    addons.set_rights(konto, "whatsapp", {"zugriff": "schreiben"})
-    assert "Lesen und schreiben; Schreiben in: Nur Einzelchats" in addons.prompt_for(konto)
-
+# 16.0.0 (Aquaticy-Test): test_the_prompt_knows_the_rights entfaellt.
+# Grund: WhatsApp, Signal und Blender brauchen die virtual machine und sind geloescht
 
 
 def _github(antworten: dict[str, Any], gefragt: list[httpx.Request]) -> httpx.Client:
@@ -164,7 +150,6 @@ def test_the_toolbox_passes_the_github_rights(konto: Settings,
     assert gesehen["nur_oeffentlich"] is True and gesehen["inhalte"] is False
 
 
-
 def test_weather_can_be_limited_to_my_place(konto: Settings,
                                             monkeypatch: pytest.MonkeyPatch) -> None:
     from aquaticy.tools import Toolbox
@@ -199,18 +184,8 @@ def test_feeds_never_return_more_than_allowed(konto: Settings,
     assert grenzen == [10, 10]
 
 
-
-def test_blender_scripts_only_keeps_the_window_closed(konto: Settings) -> None:
-    _an(konto, "blender")
-    assert "blender" in addons.desktop_apps(konto)
-    addons.set_rights(konto, "blender", {"nutzung": "skripte"})
-    assert "blender" not in addons.desktop_apps(konto)
-    desktop = Desktop(Box(), konto, vision=lambda bild, prompt: "{}")
-    assert "nicht installiert oder ausgeschaltet" in desktop.open("blender")["error"]
-    from aquaticy.tools import vm_schemas_for
-
-    assert "blender_run" in [s["function"]["name"] for s in vm_schemas_for(konto)]
-
+# 16.0.0 (Aquaticy-Test): test_blender_scripts_only_keeps_the_window_closed entfaellt.
+# Grund: WhatsApp, Signal und Blender brauchen die virtual machine und sind geloescht
 
 
 class Box:
@@ -283,31 +258,12 @@ def test_read_only_types_and_sends_nothing(konto: Settings) -> None:
     assert box.handgriffe() == ["key", "click"]
 
 
-def test_single_chats_only_refuses_groups_and_unclear_chats(konto: Settings) -> None:
-    _an(konto, "signal")
-    addons.set_rights(konto, "signal", {"zugriff": "schreiben", "wo": "einzeln"})
-    for gruppe in (True, None, "vielleicht"):
-        box = Box(klasse="signal.Signal", titel="Signal")
-        desktop, gefragt = _desktop(konto, box, Auge(gruppe=gruppe, chat="Familie"))
-        assert desktop.type("Hallo")["skipped_reason"] == "messenger_no_groups", gruppe
-        assert box.handgriffe() == []
-    box = Box(klasse="signal.Signal", titel="Signal")
-    desktop, gefragt = _desktop(konto, box, Auge(gruppe=False, chat="Mama"))
-    assert desktop.type("Hallo Mama")["getippt"] == 10
-    desktop._vision.art = "senden"
-    antwort = desktop.key("Return")
-    assert antwort["gedrueckt"] == ["Return"]
-    assert "Einzelchat: Mama" in gefragt[0], "die Rueckfrage nennt den Chat"
+# 16.0.0 (Aquaticy-Test): test_single_chats_only_refuses_groups_and_unclear_chats entfaellt.
+# Grund: WhatsApp, Signal und Blender brauchen die virtual machine und sind geloescht
 
 
-def test_groups_allowed_still_asks_before_sending(konto: Settings) -> None:
-    _an(konto, "signal")
-    addons.set_rights(konto, "signal", {"zugriff": "schreiben", "wo": "alle"})
-    box = Box(klasse="signal.Signal", titel="Signal")
-    desktop, gefragt = _desktop(konto, box, Auge(art="senden", gruppe=True), ["nein"])
-    assert desktop.type("Hallo zusammen")["getippt"] == 14
-    assert desktop.key("Return")["done"] is False
-    assert len(gefragt) == 1 and box.handgriffe() == ["type"]
+# 16.0.0 (Aquaticy-Test): test_groups_allowed_still_asks_before_sending entfaellt.
+# Grund: WhatsApp, Signal und Blender brauchen die virtual machine und sind geloescht
 
 
 def test_a_messenger_outside_its_addon_gets_the_strictest_rights(konto: Settings) -> None:
@@ -350,44 +306,12 @@ def test_messenger_windows_are_recognised(klasse: str, titel: str, erwartet: str
     assert addons.messenger_of(klasse, titel) == erwartet
 
 
-
-def test_changing_rights_keeps_the_workshop_running(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from aquaticy import web
-
-    profil = tmp_path / "p"
-    profil.mkdir()
-    (profil / ".env").write_text("AQUATICY_VM_USER_MODE=true\n", encoding="utf-8")
-    sitzung = web.ChatSession(account=SimpleNamespace(plan="pro", username="p"), profile=profil)
-    monkeypatch.setattr(web, "SESSION", sitzung)
-    neu_gebaut: list[bool] = []
-    monkeypatch.setattr(sitzung, "reload", lambda: neu_gebaut.append(True))
-    _an(sitzung.settings(), "whatsapp")
-    antwort, status = web.addon_action(
-        {"action": "rights", "id": "whatsapp", "rechte": {"zugriff": "schreiben"}})
-    assert status == 200 and "Lesen und schreiben" in antwort["message"]
-    assert neu_gebaut == [], "die virtual machine (und die Anmeldung darin) bleibt"
-    whatsapp = next(a for a in antwort["addons"] if a["id"] == "whatsapp")
-    assert whatsapp["rechte"]["zugriff"] == "schreiben"
-    antwort, status = web.addon_action(
-        {"action": "rights", "id": "whatsapp", "rechte": {"zugriff": "root"}})
-    assert status == 400
+# 16.0.0 (Aquaticy-Test): test_changing_rights_keeps_the_workshop_running entfaellt.
+# Grund: WhatsApp, Signal und Blender brauchen die virtual machine und sind geloescht
 
 
-def test_the_agent_prompt_follows_the_rights(settings: Settings,
-                                             monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy.agent import Agent
-
-    settings.vm_user_mode = True
-    _an(settings, "whatsapp")
-    agent = Agent(settings, cache=None)
-    assert "Nur lesen" in agent.messages[0]["content"]
-    addons.set_rights(settings, "whatsapp", {"zugriff": "schreiben"})
-    monkeypatch.setattr("litellm.completion", lambda **kw: SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))]))
-    agent.ask("Wie spät ist es?", stream=False)
-    assert "Lesen und schreiben" in agent.messages[0]["content"]
+# 16.0.0 (Aquaticy-Test): test_the_agent_prompt_follows_the_rights entfaellt.
+# Grund: WhatsApp, Signal und Blender brauchen die virtual machine und sind geloescht
 
 
 def test_the_ui_has_simple_rights() -> None:

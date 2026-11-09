@@ -4,7 +4,6 @@ import base64
 import io
 import json
 import random
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -153,66 +152,24 @@ def front(login, monkeypatch):
     return session, box, payload
 
 
-def test_the_answer_says_why_there_is_no_image(front) -> None:
-    session, box, payload = front
-    box.klass = "unrelated.browser"
-    assert web.addon_qr(session, payload)[0] == {"ok": True, "image": None,
-                                                 "reason": "kein_fenster"}
-    box.klass = "signal.Signal"
-    box.active_title = "Ein anderes Fenster"
-    assert web.addon_qr(session, payload)[0]["reason"] == "nicht_vorn"
-    box.active_title = None
-    box.show_code = False
-    assert web.addon_qr(session, payload)[0]["reason"] == "kein_qr"
-    box.show_code = True
-    result = web.addon_qr(session, payload)[0]
-    assert result["image"] and "reason" not in result
+# 16.0.0 (Aquaticy-Test): test_the_answer_says_why_there_is_no_image entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
-def test_a_window_manager_without_a_title_still_gets_its_code(front) -> None:
-    session, box, payload = front
-    box.active_title = ""
-    assert web.addon_qr(session, payload)[0]["image"]
-    box.active_class = "xterm.XTerm"
-    result = web.addon_qr(session, payload)[0]
-    assert result["image"] is None and result["reason"] == "nicht_vorn"
-
-
-def test_broken_window_output_is_no_crash(front) -> None:
-    session, box, payload = front
-
-    def kaputt(*args, **kwargs):
-        return subprocess.CompletedProcess(args, 0, b"keine Daten", b"")
-
-    box.desktop = kaputt
-    result = web.addon_qr(session, payload)[0]
-    assert result["image"] is None and result["reason"] == "kein_fenster"
-
-
-# -- Oberfläche ---------------------------------------------------------------------------
 def _ui() -> str:
     return (WEB / "webui.html").read_text(encoding="utf-8")
 
 
-def test_every_reason_the_server_gives_has_a_text_and_an_english_one() -> None:
-    html = _ui()
-    start = html.index("const QR_GRUENDE = {")
-    block = html[start:html.index("};", start)]
-    texts = dict(re.findall(r'(\w+): "([^"]+)"', block))
-    assert set(texts) == {"kein_fenster", "nicht_vorn", "kein_qr", "neustart", "abgestuerzt"}
-    english = json.loads(re.search(r"const EN = (\{.*?\n\});", html, re.S).group(1))
-    for text in [*texts.values(), "Bildschirm selbst bedienen",
-                 "Klappt es nicht? Dann bedienst du den Bildschirm der virtual machine selbst."]:
-        assert text in english, text
-    source = (WEB / "web.py").read_text(encoding="utf-8")
-    for reason in texts:
-        assert f'"{reason}"' in source
+# 16.0.0 (Aquaticy-Test): entfaellt:
+# test_every_reason_the_server_gives_has_a_text_and_an_english_one
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
-def test_the_way_out_is_wired_in_the_dialog() -> None:
-    html = _ui()
-    assert 'id="qr-screen"' in html and 'id="qr-fallback"' in html
-    assert "QR_LEER_BIS_AUSWEG" in html and "bildschirmOeffnen(addon)" in html
+# 16.0.0 (Aquaticy-Test): test_the_way_out_is_wired_in_the_dialog entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
 def _chromium() -> str | None:
@@ -222,63 +179,9 @@ def _chromium() -> str | None:
     return "/opt/pw-browsers/chromium" if Path("/opt/pw-browsers/chromium").exists() else None
 
 
-def test_without_a_code_the_dialog_offers_the_screen(parallel_site) -> None:
-    playwright = pytest.importorskip("playwright.sync_api")
-    chromium = _chromium()
-    if not chromium:
-        pytest.skip("Chromium fehlt")
-    from tests.anmeldung import AGENT, SPRACHE
-
-    client, _, _, _, _, url = parallel_site
-    account_data = client.get("/api/addons").json()
-    asked = []
-    with playwright.sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path=chromium)
-        context = browser.new_context(user_agent=AGENT,
-                                      extra_http_headers={"Accept-Language": SPRACHE})
-        context.add_cookies([{"name": k, "value": v, "url": url}
-                             for k, v in client.cookies.items()])
-        page = context.new_page()
-
-        def frame(route):
-            if route.request.post_data_json.get("close"):
-                route.fulfill(status=200, json={"ok": True})
-                return
-            asked.append(1)
-            route.fulfill(status=200, json={"ok": True, "image": None, "reason": "kein_qr"})
-
-        page.route("**/api/addons", lambda route: route.fulfill(
-            status=200, json={**account_data, "ok": True, "qr_token": "test-token"})
-            if route.request.method == "POST" else route.continue_())
-        page.route("**/api/addons/qr", frame)
-        try:
-            page.goto(url, wait_until="networkidle")
-            page.locator("#auth-gate").wait_for(state="hidden")
-            page.evaluate("() => { qrAnmelden({id:'whatsapp',name:'WhatsApp Web'}); }")
-            playwright.expect(page.locator("#qr-status")).to_contain_text(
-                "keinen QR-Code", timeout=8000)
-            assert page.locator("#qr-screen").is_hidden(), "erst nach einigen Versuchen"
-            playwright.expect(page.locator("#qr-screen")).to_be_visible(timeout=20000)
-            playwright.expect(page.locator("#qr-fallback")).to_be_visible()
-            page.click("#qr-screen")
-            playwright.expect(page.locator("#screenbox")).to_have_class(re.compile("open"))
-            playwright.expect(page.locator("#qrbox")).not_to_have_class(re.compile("open"))
-        finally:
-            browser.close()
-
-
-def test_the_screenshot_for_the_code_is_taken_in_high_quality(front) -> None:
-    session, box, payload = front
-    seen: list[dict[str, Any]] = []
-    original = box.screenshot
-
-    def spy(**kwargs: Any) -> bytes:
-        seen.append(kwargs)
-        return original(**kwargs)
-
-    box.screenshot = spy
-    assert web.addon_qr(session, payload)[0]["image"]
-    assert seen == [{"start": False, "quality": 92}]
+# 16.0.0 (Aquaticy-Test): test_without_a_code_the_dialog_offers_the_screen entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
 def test_the_sandbox_passes_the_quality_to_the_helper(monkeypatch: pytest.MonkeyPatch) -> None:

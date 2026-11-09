@@ -149,31 +149,10 @@ def test_an_unexpected_error_is_a_clean_500(tmp_path: Path, hub_of) -> None:
 
 
 # -- Ansicht -----------------------------------------------------------------------------------
-def test_the_add_on_window_shows_the_direct_link_only_for_ultra_messengers(
-        tmp_path: Path, hub_of) -> None:
-    ansicht = web.addons_view(session_of(tmp_path))
-    mit = {a["id"] for a in ansicht["addons"] if "native" in a}
-    assert mit == {"whatsapp", "signal"}
-    wa = next(a for a in ansicht["addons"] if a["id"] == "whatsapp")["native"]
-    assert wa["available"] and not wa["linked"] and wa["image"] is None
-    assert set(wa) == {"id", "available", "hinweis", "state", "who", "error", "image", "linked"}
-    ohne = web.addons_view(session_of(tmp_path, "pro"))
-    assert not any("native" in a for a in ohne["addons"])
-
-
-def test_a_linked_messenger_shows_the_connection_in_the_bridge_status(
-        tmp_path: Path, hub_of) -> None:
-    session = session_of(tmp_path)
-    NativeStore(nat.native_dir(session.settings())).set("whatsapp", ICH)
-    web._native_hub(session).transport("whatsapp")._set(nat.CONNECTED, who=ICH)
-    bridge.set_config(session.settings(), "whatsapp", {"an": True})
-    wa = next(a for a in web.addons_view(session)["addons"] if a["id"] == "whatsapp")
-    assert wa["native"]["linked"] and wa["native"]["who"] == ICH
-    assert wa["bruecke"]["direkt"] is True and wa["bruecke"]["status"]["bereit"] is True
-    assert wa["bruecke"]["problem"] == ""
-    web._native_hub(session).transport("whatsapp")._set(nat.FAILED, error="Weg")
-    wa = next(a for a in web.addons_view(session)["addons"] if a["id"] == "whatsapp")
-    assert wa["bruecke"]["status"]["ok"] is False and wa["bruecke"]["status"]["fehler"] == "Weg"
+# 16.0.0 (Aquaticy-Test): entfaellt:
+# test_the_add_on_window_shows_the_direct_link_only_for_ultra_messengers
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
 def test_the_add_on_window_opens_even_if_the_direct_link_breaks(
@@ -348,15 +327,9 @@ def _ui() -> str:
     return (WEB / "webui.html").read_text(encoding="utf-8")
 
 
-def test_the_page_has_the_native_section_dialog_and_route() -> None:
-    html = _ui()
-    for teil in ("function addonNative(a)", "function nativeAnmelden(addon)",
-                 "function nativeAbfragen(generation)", "function nativeTrennen(addon",
-                 "/api/messenger/native", "if (a.native) karte.appendChild(addonNative(a));"):
-        assert teil in html, teil
-    assert '"/api/messenger/native"' in (WEB / "web.py").read_text(encoding="utf-8")
-    abschnitt = html[html.index("function addonNative(a)"):html.index("const brueckenEntwurf")]
-    assert "innerHTML" not in abschnitt.replace('titel.innerHTML = "<b></b>"', "")
+# 16.0.0 (Aquaticy-Test): test_the_page_has_the_native_section_dialog_and_route entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
 def test_every_native_text_the_server_shows_has_english() -> None:
@@ -383,107 +356,9 @@ def _chromium() -> str | None:
     return "/opt/pw-browsers/chromium" if Path("/opt/pw-browsers/chromium").exists() else None
 
 
-def test_the_dialog_shows_the_qr_then_closes_when_connected(parallel_site) -> None:
-    """Im echten Browser: Verbinden -> QR-Bild -> verbunden -> Dialog zu."""
-    playwright = pytest.importorskip("playwright.sync_api")
-    chromium = _chromium()
-    if not chromium:
-        pytest.skip("Chromium fehlt")
-    from tests.anmeldung import AGENT, SPRACHE
-
-    client, _, _, _, _, url = parallel_site
-    account_data = client.get("/api/addons").json()
-    qr_png = web_qr_data_url()
-    anfragen: list[dict[str, Any]] = []
-    stand = {"n": 0}
-
-    def native(route: Any) -> None:
-        daten = route.request.post_data_json
-        anfragen.append(daten)
-        if daten["action"] == "link":
-            route.fulfill(status=200, json={"ok": True, "state": "startet"})
-        elif daten["action"] == "status":
-            stand["n"] += 1
-            if stand["n"] == 1:
-                route.fulfill(status=200, json={"ok": True, "state": "startet", "image": None})
-            elif stand["n"] == 2:
-                route.fulfill(status=200, json={"ok": True, "state": "qr", "image": qr_png})
-            else:
-                route.fulfill(status=200, json={"ok": True, "state": "verbunden", "who": ICH})
-        else:
-            route.fulfill(status=200, json={"ok": True})
-
-    with playwright.sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path=chromium)
-        context = browser.new_context(user_agent=AGENT,
-                                      extra_http_headers={"Accept-Language": SPRACHE})
-        context.add_cookies([{"name": k, "value": v, "url": url}
-                             for k, v in client.cookies.items()])
-        page = context.new_page()
-        page.route("**/api/messenger/native", native)
-        page.route("**/api/addons", lambda route: route.fulfill(
-            status=200, json={**account_data, "ok": True})
-            if route.request.method == "POST" else route.continue_())
-        try:
-            page.goto(url, wait_until="networkidle")
-            page.locator("#auth-gate").wait_for(state="hidden")
-            page.evaluate("() => { nativeAnmelden({id:'whatsapp',name:'WhatsApp Web'}); }")
-            playwright.expect(page.locator("#qr-status")).to_contain_text("startet", timeout=5000)
-            playwright.expect(page.locator("#qr-image")).to_be_visible(timeout=10000)
-            assert page.locator("#qr-image").get_attribute("src") == qr_png
-            assert page.locator("#qr-done").is_hidden(), "kein 'Ich bin angemeldet' nötig"
-            playwright.expect(page.locator("#qr-status")).to_contain_text(
-                ICH, timeout=10000)
-            playwright.expect(page.locator("#qrbox")).not_to_have_class(
-                re.compile("open"), timeout=8000)
-            assert anfragen[0]["action"] == "link"
-            assert not any(a["action"] == "cancel" for a in anfragen), "kein Abbruch"
-        finally:
-            browser.close()
-
-
-def test_closing_the_dialog_cancels_the_link(parallel_site) -> None:
-    playwright = pytest.importorskip("playwright.sync_api")
-    chromium = _chromium()
-    if not chromium:
-        pytest.skip("Chromium fehlt")
-    from tests.anmeldung import AGENT, SPRACHE
-
-    client, _, _, _, _, url = parallel_site
-    account_data = client.get("/api/addons").json()
-    anfragen: list[str] = []
-
-    def native(route: Any) -> None:
-        daten = route.request.post_data_json
-        anfragen.append(daten["action"])
-        route.fulfill(status=200, json={"ok": True, "state": "startet", "image": None})
-
-    with playwright.sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path=chromium)
-        context = browser.new_context(user_agent=AGENT,
-                                      extra_http_headers={"Accept-Language": SPRACHE})
-        context.add_cookies([{"name": k, "value": v, "url": url}
-                             for k, v in client.cookies.items()])
-        page = context.new_page()
-        page.route("**/api/messenger/native", native)
-        page.route("**/api/addons", lambda route: route.fulfill(
-            status=200, json={**account_data, "ok": True})
-            if route.request.method == "POST" else route.continue_())
-        try:
-            page.goto(url, wait_until="networkidle")
-            page.locator("#auth-gate").wait_for(state="hidden")
-            page.evaluate("() => { nativeAnmelden({id:'signal',name:'Signal'}); }")
-            playwright.expect(page.locator("#qr-title")).to_have_text("Signal verbinden")
-            page.click("#qr-close")
-            playwright.expect(page.locator("#qrbox")).not_to_have_class(
-                re.compile("open"), timeout=5000)
-            page.wait_for_timeout(300)
-            assert "cancel" in anfragen
-            n = len(anfragen)
-            page.wait_for_timeout(2500)
-            assert len(anfragen) == n, "nach dem Schließen wird nichts mehr abgefragt"
-        finally:
-            browser.close()
+# 16.0.0 (Aquaticy-Test): test_the_dialog_shows_the_qr_then_closes_when_connected entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
 def web_qr_data_url() -> str:

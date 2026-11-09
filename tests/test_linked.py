@@ -305,11 +305,11 @@ def test_key_tells_its_provider() -> None:
     assert linked.detect_provider("zu kurz") == ""
 
 
-def test_sign_in_offers_only_what_the_provider_has() -> None:
-    assert {"google", "apple", "email"} <= set(linked.SIGN_IN["mistral"])
-    assert linked.SIGN_IN["nvidia_nim"] == ("google", "email")
-    assert all(art in linked.SIGN_IN_LABELS for arten in linked.SIGN_IN.values()
-               for art in arten)
+def test_each_provider_links_straight_to_its_key_page() -> None:
+    """16.0.0 (Aquaticy-Test): keine Knoepfe "Mit Google/Apple" -- nur der Link zum Anbieter."""
+    assert not hasattr(linked, "SIGN_IN")
+    assert linked.PROVIDERS["mistral"]["get_key"] == "https://console.mistral.ai/api-keys"
+    assert linked.PROVIDERS["nvidia_nim"]["get_key"] == "https://build.nvidia.com/settings/api-keys"
 
 
 def test_web_link_without_provider_detects_it(tmp_path: Path,
@@ -324,7 +324,7 @@ def test_web_link_without_provider_detects_it(tmp_path: Path,
     assert status == 200 and antwort["provider"] == "mistral"
     assert gespeichert == {"MISTRAL_API_KEY": MISTRAL_KEY}
     karte = next(k for k in antwort["accounts"] if k["provider"] == "nvidia_nim")
-    assert [w["id"] for w in karte["sign_in"]] == ["google", "email"]
+    assert "sign_in" not in karte and karte["get_key"].startswith("https://")
     antwort, status = web.linked_action({"action": "link", "key": "irgendwas-12345"})
     assert status == 400 and "kenne ich nicht" in antwort["error"]
 

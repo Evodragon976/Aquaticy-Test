@@ -48,7 +48,6 @@ def _mock(antworten: dict[str, Any], gefragt: list[httpx.Request]) -> httpx.Clie
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
-
 def test_the_catalogue_has_what_was_asked_for_plus_suggestions() -> None:
     for gewuenscht in ("github", "whatsapp", "signal", "blender"):
         assert gewuenscht in addons.CATALOG
@@ -69,7 +68,6 @@ def test_signal_says_honestly_that_there_is_no_signal_web() -> None:
     assert addons.CATALOG["signal"].programm == "signal"
 
 
-
 def test_every_addon_has_install_even_without_download(konto: Settings) -> None:
     addons.install(konto, "github", pro=False)
     eintrag = addons.load_state(konto)["github"]
@@ -77,11 +75,8 @@ def test_every_addon_has_install_even_without_download(konto: Settings) -> None:
     assert "github" in addons.active_ids(konto, pro=False)
 
 
-def test_normal_accounts_get_no_workshop_addons(konto: Settings) -> None:
-    for addon_id in ("whatsapp", "signal", "blender"):
-        with pytest.raises(addons.AddOnError, match="Ultra"):
-            addons.install(konto, addon_id, pro=False)
-    assert addons.load_state(konto) == {}
+# 16.0.0 (Aquaticy-Test): test_normal_accounts_get_no_workshop_addons entfaellt.
+# Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
 def test_telegram_web_is_no_longer_an_addon(konto: Settings) -> None:
@@ -92,26 +87,12 @@ def test_telegram_web_is_no_longer_an_addon(konto: Settings) -> None:
     assert "telegram" not in addons.RIGHTS and "telegram" not in addons.APP_OF
 
 
-def test_workshop_addons_only_count_with_the_user_mode(konto: Settings) -> None:
-    addons._update(konto, "whatsapp", installed=True, enabled=True)
-    assert "whatsapp" not in addons.active_ids(_pro(konto, user_mode=False))
-    assert "whatsapp" in addons.active_ids(_pro(konto))
-    assert "whatsapp" not in addons.active_ids(_pro(konto), pro=False)
+# 16.0.0 (Aquaticy-Test): test_workshop_addons_only_count_with_the_user_mode entfaellt.
+# Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
-def test_switching_off_takes_the_volume_out_of_the_workshop(konto: Settings) -> None:
-    _pro(konto)
-    addons._update(konto, "whatsapp", installed=True, enabled=True)
-    addons._update(konto, "blender", installed=True, enabled=True)
-    addons._update(konto, addons.FIREFOX, installed=True)
-    vorher = addons.mounts(konto)
-    assert set(vorher.values()) == {"/addons/whatsapp", "/addons/blender", "/addons/_firefox"}
-    assert all(name.startswith(addons.volume_prefix(konto)) for name in vorher)
-    addons.set_enabled(konto, "whatsapp", False, pro=True)
-    nachher = addons.mounts(konto)
-    assert set(nachher.values()) == {"/addons/blender"}, "ohne Web-App auch kein Firefox"
-    konto.vm_user_mode = False
-    assert addons.mounts(konto) == {}
+# 16.0.0 (Aquaticy-Test): test_switching_off_takes_the_volume_out_of_the_workshop entfaellt.
+# Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
 def test_accounts_never_share_volumes(tmp_path: Path) -> None:
@@ -191,7 +172,6 @@ def test_the_state_file_ignores_what_it_does_not_know(konto: Settings) -> None:
     assert addons.load_state(konto) == {}
 
 
-
 class FakeBox:
     """Nimmt die Aufrufe des Installers entgegen und antwortet wie aquaticy-addons."""
 
@@ -233,54 +213,16 @@ def fake_werkstatt(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return angelegt
 
 
-def test_a_web_app_loads_firefox_first_then_its_profile(
-    konto: Settings, fake_werkstatt: list[str]
-) -> None:
-    FakeBox.antworten = {
-        "status": {"ok": True, "installiert": False},
-        "install:firefox": {"ok": True, "version": "140.3.0esr"},
-        "webapp": {"ok": True},
-    }
-    fertig: list[bool] = []
-    addons.install(_pro(konto), "whatsapp", pro=True, wait=True,
-                   on_done=lambda: fertig.append(True))
-    box = FakeBox.letzte
-    assert box is not None and box.gestoppt, "die Wegwerf-virtual machine ist wieder weg"
-    assert box.kwargs["user_mode"] and box.kwargs["headless"]
-    assert set(box.kwargs["addon_mounts"].values()) == {"/addons/whatsapp", "/addons/_firefox"}
-    befehle = [a[:2] for a in box.aufrufe]
-    assert befehle == [("status", "/addons/_firefox"), ("install", "firefox"),
-                       ("webapp", "/addons/whatsapp")]
-    webapp = box.aufrufe[-1]
-    assert "https://web.whatsapp.com/" in webapp
-    assert "KI-gesteuert" in webapp[webapp.index("--zusatz") + 1]
-    zustand = addons.load_state(konto)
-    assert zustand["whatsapp"]["installed"] and zustand["whatsapp"]["status"] == "bereit"
-    assert zustand[addons.FIREFOX]["version"] == "140.3.0esr"
-    assert fertig == [True], "danach wird der Agent neu gebaut"
-    assert len(fake_werkstatt) == 2
+# 16.0.0 (Aquaticy-Test): test_a_web_app_loads_firefox_first_then_its_profile entfaellt.
+# Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
-def test_a_failed_install_says_why_and_counts_as_not_installed(
-    konto: Settings, fake_werkstatt: list[str]
-) -> None:
-    FakeBox.antworten = {"install": {"ok": False, "fehler": "Pruefsumme stimmt nicht"}}
-    addons.install(_pro(konto), "blender", pro=True, wait=True)
-    eintrag = addons.load_state(konto)["blender"]
-    assert eintrag["status"] == "fehler" and "Pruefsumme" in eintrag["message"]
-    assert not eintrag["installed"]
-    assert "blender" not in addons.active_ids(konto)
-    assert FakeBox.letzte is not None and FakeBox.letzte.gestoppt
+# 16.0.0 (Aquaticy-Test): test_a_failed_install_says_why_and_counts_as_not_installed entfaellt.
+# Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
-def test_no_runtime_means_no_install(konto: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy import sandbox as werkstatt
-
-    monkeypatch.setattr(werkstatt, "find_runtime", lambda: None)
-    addons.install(_pro(konto), "signal", pro=True, wait=True)
-    eintrag = addons.load_state(konto)["signal"]
-    assert eintrag["status"] == "fehler" and "Docker" in eintrag["message"]
-
+# 16.0.0 (Aquaticy-Test): test_no_runtime_means_no_install entfaellt.
+# Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
 def test_github_login_checks_the_token_and_stores_it(konto: Settings) -> None:
@@ -362,7 +304,6 @@ def test_github_without_token_asks_nothing() -> None:
     assert "nicht angemeldet" in addons.github_call("", "repos")["error"]
 
 
-
 def test_weather_finds_the_place_and_translates_the_codes() -> None:
     gefragt: list[httpx.Request] = []
     client = _mock({
@@ -398,7 +339,6 @@ def test_weather_clamps_the_days() -> None:
         {"name": "Bremen", "latitude": 53, "longitude": 8.8}]}, addons.OPEN_METEO: {}}, gefragt)
     addons.weather("Bremen", days=99, client=client)
     assert gefragt[-1].url.params["forecast_days"] == "7"
-
 
 
 RSS = b"""<?xml version="1.0"?><rss version="2.0"><channel><title>T</title>
@@ -486,7 +426,6 @@ def test_the_feed_list_is_checked(konto: Settings) -> None:
         addons.set_feeds(konto, [f"https://f{i}.example/rss" for i in range(21)])
 
 
-
 def test_tools_exist_only_for_switched_on_addons(konto: Settings) -> None:
     from aquaticy.tools import addon_schemas_for
 
@@ -510,20 +449,8 @@ def test_tools_exist_only_for_switched_on_addons(konto: Settings) -> None:
     assert "github" not in namen() and "github_write" not in namen()
 
 
-def test_blender_in_the_user_mode_comes_from_the_addon(konto: Settings) -> None:
-    from aquaticy.tools import vm_schemas_for
-
-    def namen() -> list[str]:
-        return [s["function"]["name"] for s in vm_schemas_for(konto)]
-
-    assert "blender_run" in namen(), "ohne User mode bleibt es wie bisher"
-    _pro(konto)
-    assert "blender_run" not in namen()
-    addons._update(konto, "blender", installed=True, enabled=True)
-    assert "blender_run" in namen()
-    oeffnen = next(s for s in vm_schemas_for(konto) if s["function"]["name"] == "desktop_open")
-    assert "blender" in oeffnen["function"]["description"]
-    assert "%(addons)s" not in oeffnen["function"]["description"]
+# 16.0.0 (Aquaticy-Test): test_blender_in_the_user_mode_comes_from_the_addon entfaellt.
+# Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
 def test_the_prompt_names_only_active_addons(konto: Settings) -> None:
@@ -544,26 +471,8 @@ def test_the_toolbox_refuses_switched_off_addons(konto: Settings) -> None:
     assert "nicht installiert" in box.call("github", {"action": "repos"})["error"]
 
 
-def test_the_desktop_opens_only_active_addon_apps(konto: Settings) -> None:
-    from aquaticy.desktop import Desktop
-
-    aufrufe: list[tuple] = []
-
-    class Box:
-        user_mode = True
-
-        def desktop(self, *args: str, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
-            aufrufe.append(args)
-            return subprocess.CompletedProcess(args, 0, b'{"neu": []}', b"")
-
-    _pro(konto)
-    desktop = Desktop(Box(), konto, vision=lambda bild, prompt: "{}")
-    assert "nicht installiert" in desktop.open("whatsapp")["error"]
-    addons._update(konto, "whatsapp", installed=True, enabled=True)
-    assert "ohne target" in desktop.open("whatsapp", "https://evil.example/")["error"]
-    assert aufrufe == []
-    desktop.open("whatsapp")
-    assert aufrufe == [("open", "whatsapp")]
+# 16.0.0 (Aquaticy-Test): test_the_desktop_opens_only_active_addon_apps entfaellt.
+# Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
 @pytest.mark.parametrize("name", ["whatsapp", "addons", "github", "blender", "login_apps",
@@ -592,7 +501,6 @@ def test_the_helper_and_the_host_agree_on_the_addon_apps() -> None:
     assert set(addons.APP_OF.values()) == set(desktop.ADDON_APPS)
 
 
-
 def _sitzung(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plan: str,
              user_mode: bool = True) -> Any:
     from aquaticy import web
@@ -616,7 +524,7 @@ def test_normal_accounts_can_use_the_addons_without_workshop(
     antwort, status = web.addon_action({"action": "install", "id": "wetter"})
     assert status == 200 and "wetter" in antwort["active"]
     antwort, status = web.addon_action({"action": "install", "id": "whatsapp"})
-    assert status == 400 and "Ultra" in antwort["error"]
+    assert status == 400 and "nicht mehr" in antwort["error"]  # 16.0.0: ohne VM
     antwort, status = web.addon_action({"action": "disable", "id": "wetter"})
     assert status == 200 and antwort["active"] == []
     antwort, status = web.addon_action({"action": "uninstall", "id": "wetter"})
@@ -654,37 +562,12 @@ def test_the_token_goes_in_but_never_comes_back(
     assert geheim not in json.dumps(web.current_values())
 
 
-def test_login_opens_the_app_for_the_human(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from aquaticy import sandbox as werkstatt
-    from aquaticy import web
-
-    sitzung = _sitzung(tmp_path, monkeypatch, "ultra")
-    addons._update(sitzung.settings(), "signal", installed=True, enabled=True)
-    geoeffnet: list[tuple] = []
-
-    class Box:
-        def desktop(self, *args: str, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
-            geoeffnet.append(args)
-            return subprocess.CompletedProcess(args, 0, b"{}", b"")
-
-    monkeypatch.setattr(werkstatt, "shared", lambda settings: Box())
-    antwort, status = web.addon_action({"action": "login", "id": "signal"})
-    assert status == 200 and "QR-Code" in antwort["message"]
-    assert geoeffnet == [("open", "signal")]
-    antwort, status = web.addon_action({"action": "login_done", "id": "signal"})
-    signal = next(a for a in antwort["addons"] if a["id"] == "signal")
-    assert signal["login"]["state"] == "angemeldet" and signal["login"]["who"] == "laut dir"
+# 16.0.0 (Aquaticy-Test): test_login_opens_the_app_for_the_human entfaellt.
+# Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
-def test_login_needs_the_user_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy import web
-
-    sitzung = _sitzung(tmp_path, monkeypatch, "pro", user_mode=False)
-    addons._update(sitzung.settings(), "whatsapp", installed=True, enabled=True)
-    antwort, status = web.addon_action({"action": "login", "id": "whatsapp"})
-    assert status == 400 and "User mode" in antwort["error"]
+# 16.0.0 (Aquaticy-Test): test_login_needs_the_user_mode entfaellt.
+# Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
 def test_a_busy_session_keeps_its_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -794,14 +677,13 @@ def test_the_ui_has_the_addon_window_and_login_apps() -> None:
     from aquaticy import web
 
     html = web.UI_FILE.read_text(encoding="utf-8")
-    for teil in ('id="btn-addons"', 'id="addonbox"', 'id="btn-loginapps"', 'id="screenbox"',
-                 "Installieren", "Deinstallieren", "/api/addons", "/api/werkstatt/eingabe",
-                 "Das gibt es nur mit einem Ultra-Konto"):
+    for teil in ('id="btn-addons"', 'id="addonbox"', "Installieren", "Deinstallieren",
+                 "/api/addons"):
         assert teil in html, teil
-
-    zeile = html.index('id="usermode"')
-    assert zeile < html.index('id="btn-addons"') < html.index('id="btn-loginapps"')
-    assert html.index('id="btn-loginapps"') < html.index('id="usermode-note"')
+    # 16.0.0 (Aquaticy-Test): ohne virtual machine kein "Selbst anmelden" mehr.
+    for weg in ('id="btn-loginapps"', 'id="screenbox"', "/api/werkstatt/eingabe",
+                'id="usermode"'):
+        assert weg not in html, weg
 
 
 def test_the_login_screen_asks_quietly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

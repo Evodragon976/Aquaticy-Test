@@ -486,6 +486,6 @@ def test_a_member_shows_the_download_as_a_note_not_an_error() -> None:
 
 def test_the_ui_says_that_llama_cpp_installs_itself() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
-    assert "Aquaticy installiert dafür llama.cpp selbst" in html
-    assert "if (s.note) return ` · ${s.note}`;" in html
+    # 16.0.0 (Aquaticy-Test): kein Server-Verbund und damit kein Aufteilen mehr in der Oberflaeche.
+    assert 'id="split-box"' not in html
     assert "Braucht llama.cpp auf jedem Server." not in html

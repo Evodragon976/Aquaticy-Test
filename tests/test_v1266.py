@@ -72,7 +72,6 @@ def laufzeit(monkeypatch: pytest.MonkeyPatch):
     return stellen
 
 
-
 def test_the_podman_message_is_recognised() -> None:
     assert werkstatt.short_name_problem(PODMAN_SHORT_NAME)
     assert not werkstatt.short_name_problem("Error: no such container")
@@ -176,7 +175,6 @@ def test_the_recipe_and_helpers_are_found_in_the_project() -> None:
         werkstatt.DESKTOP_HELPERS)
 
 
-
 @pytest.fixture
 def konto(tmp_path: Path) -> Settings:
     ordner = tmp_path / "konto"
@@ -184,51 +182,9 @@ def konto(tmp_path: Path) -> Settings:
     return Settings(data_dir=ordner, env_path=ordner / ".env", vm_user_mode=True)
 
 
-def test_installing_an_addon_builds_the_image_first(
-        konto: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
-    reihenfolge: list[str] = []
-    monkeypatch.setattr(werkstatt, "find_runtime", lambda: SimpleNamespace(binary="podman"))
-    monkeypatch.setattr(
-        werkstatt, "ensure_image",
-        lambda runtime, image, **kw: (reihenfolge.append(f"abbild:{image}:{kw.get('build')}"),
-                                      kw["progress"]("Baut das Desktop-Abbild …")))
-    monkeypatch.setattr(werkstatt, "ensure_addon_volume",
-                        lambda runtime, volume, image: reihenfolge.append("datentraeger"))
-
-    class Kiste:
-        def __init__(self, **kw: Any) -> None:
-            reihenfolge.append("kiste")
-
-        def ensure(self) -> str:
-            return "box"
-
-        def addon_helper(self, *args: str, timeout: int = 0):
-            import json
-
-            return subprocess.CompletedProcess(args, 0, json.dumps({"ok": True}), "")
-
-        def stop(self, reason: str = "") -> None: ...
-
-    monkeypatch.setattr(werkstatt, "Sandbox", Kiste)
-    addons.install(konto, "signal", pro=True, wait=True)
-    assert reihenfolge[0] == f"abbild:{werkstatt.DESKTOP_IMAGE}:True"
-    assert reihenfolge.index("datentraeger") < reihenfolge.index("kiste")
-    assert addons.load_state(konto)["signal"]["status"] == "bereit"
-
-
-def test_a_failed_image_shows_up_as_the_add_on_status(
-        konto: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(werkstatt, "find_runtime", lambda: SimpleNamespace(binary="podman"))
-
-    def fehlt(runtime: Any, image: str, **kw: Any) -> None:
-        raise SandboxUnavailable(werkstatt.missing_image_text(PODMAN, image))
-
-    monkeypatch.setattr(werkstatt, "ensure_image", fehlt)
-    addons.install(konto, "signal", pro=True, wait=True)
-    eintrag = addons.load_state(konto)["signal"]
-    assert eintrag["status"] == "fehler" and "Desktop-Abbild" in eintrag["message"]
-    assert "short-name" not in eintrag["message"]
-
+# 16.0.0 (Aquaticy-Test): test_installing_an_addon_builds_the_image_first entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
 def test_telegram_is_gone_from_the_catalogue_the_ui_and_the_helper() -> None:

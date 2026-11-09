@@ -105,13 +105,8 @@ def test_the_tool_text_names_the_real_limits() -> None:
         "function"]["description"]
 
 
-def test_the_settings_page_and_the_readme_say_three_gigabytes() -> None:
-    html = (Path(web.__file__).parent / "webui.html").read_text(encoding="utf-8")
-    assert "Normal — 2 Kerne, 3 GB Arbeitsspeicher, 4 GB Speicher" in html
-    assert "Normal — 2 cores, 3 GB RAM, 4 GB storage" in html
-    assert "Normal — 1 Kern" not in html
-    readme = (Path(web.__file__).parent.parent / "README.md").read_text(encoding="utf-8")
-    assert "| Normal | 2 | 3 GB | 4 GB |" in readme
+# 16.0.0 (Aquaticy-Test): test_the_settings_page_and_the_readme_say_three_gigabytes entfaellt.
+# Grund: Die Einstellungen der virtual machine gibt es in Aquaticy-Test nicht mehr.
 
 
 def test_the_default_in_config_is_the_default_of_the_sandbox() -> None:

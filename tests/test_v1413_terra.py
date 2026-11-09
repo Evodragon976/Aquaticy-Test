@@ -3,7 +3,6 @@ Schwachstellen und eigene Tipps fuer das Heimnetz."""
 
 from __future__ import annotations
 
-import re
 import threading
 import time
 from pathlib import Path
@@ -22,7 +21,6 @@ from aquaticy import (
     web,
 )
 from aquaticy.cache import Cache
-from aquaticy.tools import Toolbox
 from tests.test_v1401 import owner  # noqa: F401
 
 NETZ = "192.168.1.0/24"
@@ -234,19 +232,11 @@ def test_chat_nmap_needs_the_switch_and_stays_in_the_net(owner, monkeypatch) -> 
                                                   {"host": "10.0.0.1"})["error"]
 
 
-def test_chat_nmap_runs_at_most_twice_per_message(settings) -> None:
-    box = Toolbox(settings)
-    try:
-        box.secure_mode = True
-        box.secure_provider = lambda name, args: {"ok": True}
-        for _ in range(2):
-            assert "error" not in box.call("secure_nmap", {"host": "192.168.1.5"})
-        assert "zwei" in box.call("secure_nmap", {"host": "192.168.1.5"})["error"]
-    finally:
-        box.close()
+# 16.0.0 (Aquaticy-Test): test_chat_nmap_runs_at_most_twice_per_message entfaellt.
+# Grund: Secure Pro beantwortet nur noch Fragen: kein Netz, keine Pruefung, kein nmap, keine
+# Abwehr per SSH; Secure Pro hat einen eigenen Abschnitt
 
 
-# -- Tipps ----------------------------------------------------------------------------------------
 def test_tips_fit_this_network() -> None:
     geraete = [
         {"address": "192.168.1.1", "ports": [80, 443], "active": True},
@@ -290,19 +280,9 @@ def _ui() -> str:
     return (Path(web.__file__).parent / "webui.html").read_text(encoding="utf-8")
 
 
-def test_secure_pro_is_part_of_home_and_network() -> None:
-    html = _ui()
-    formular = html[html.index('<form id="settings">'):html.index('id="savenote"')]
-    assert "<legend>Secure Pro</legend>" not in formular
-    start = formular.index("<legend>Zuhause &amp; Netz</legend>")
-    netz = formular[start:formular.index("</fieldset>", start)]
-    assert '<div class="sub-title">Secure Pro</div>' in netz
-    auswahl = netz[netz.index('id="secure-interval"'):netz.index("</select>",
-                                                                   netz.index("secure-interval"))]
-    werte = [int(w) for w in re.findall(r'value="(\d+)"', auswahl)]
-    assert werte == list(secure_pro.INTERVALS)
-    assert ">die ganze Zeit<" in auswahl and ">alle 30 Sekunden<" in auswahl
-    assert 'if (!field.closest("#secure-section")) field.disabled = !ultra;' in html
+# 16.0.0 (Aquaticy-Test): test_secure_pro_is_part_of_home_and_network entfaellt.
+# Grund: Secure Pro beantwortet nur noch Fragen: kein Netz, keine Pruefung, kein nmap, keine
+# Abwehr per SSH; Secure Pro hat einen eigenen Abschnitt
 
 
 def test_setup_offers_nmap(monkeypatch) -> None:

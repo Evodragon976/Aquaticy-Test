@@ -207,7 +207,9 @@ def test_every_page_and_endpoint(tour: Tour, tmp_path: Path) -> None:
 
 
     katalog = {a["id"] for a in tour("GET", "/api/addons")[1]["addons"]}
-    assert {"github", "signal", "whatsapp", "wetter", "feeds", "blender"} <= katalog
+    assert {"github", "wetter", "feeds"} <= katalog
+    # 16.0.0 (Aquaticy-Test): ohne virtual machine kein WhatsApp, Signal oder Blender.
+    assert not {"signal", "whatsapp", "blender"} & katalog
     assert "telegram" not in katalog, "Telegram Web ist seit 12.6.6 Luna kein Add-on mehr"
     for kennung in ("wetter", "feeds", "github"):
         status, stand = tour("POST", "/api/addons", {"action": "install", "id": kennung})
@@ -221,9 +223,9 @@ def test_every_page_and_endpoint(tour: Tour, tmp_path: Path) -> None:
     for aktion in ("disable", "enable"):
         assert tour("POST", "/api/addons", {"action": aktion, "id": "wetter"})[0] == 200
     assert tour("POST", "/api/addons", {"action": "login_done", "id": "signal"})[0] == 400
-    if not ultra:
-        status, antwort = tour("POST", "/api/addons", {"action": "install", "id": "signal"})
-        assert status == 400 and "Ultra" in antwort["error"]
+    # 16.0.0 (Aquaticy-Test): Signal braucht die virtual machine -- fuer niemanden mehr.
+    status, antwort = tour("POST", "/api/addons", {"action": "install", "id": "signal"})
+    assert status == 400 and "nicht mehr" in antwort["error"]
     assert tour("POST", "/api/addons", {"action": "quatsch", "id": "wetter"})[0] == 400
     assert tour("POST", "/api/addons", {"action": "install", "id": "gibtsnicht"})[0] == 400
     for kennung in ("wetter", "feeds", "github"):

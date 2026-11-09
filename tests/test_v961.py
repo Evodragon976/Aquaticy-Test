@@ -83,7 +83,8 @@ def test_normal_mode_is_bounded_pro_is_not() -> None:
 
 def test_hidden_tab_does_not_poll() -> None:
     html = _ui()
-    assert "if (!document.hidden) showLoad();" in html
+    # 16.0.0 (Aquaticy-Test): die Auslastung, die alle 4 Sekunden abfragte, ist entfernt.
+    assert "showLoad" not in html and "loadTimer" not in html
 
 
 def test_jobs_only_run_on_the_home_server(monkeypatch) -> None:

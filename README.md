@@ -1,4 +1,4 @@
-# Aquaticy AI 15.8.8
+# Aquaticy AI 16.0.0
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser
@@ -33,13 +33,25 @@ $ aquaticy
 
 ---
 
-## Neu in 15.8.8
+## Neu in 16.0.0
 
-- **Vercel baut wieder.** Der Build brach mit `PYTHON_ENTRYPOINT_NOT_FOUND` ab. Jetzt steht in
-  `pyproject.toml` ein Einstieg für Vercel.
-- **Nur in Aquaticy-Test: die ganze App auf Vercel.** Anmeldung, Chats und Modellwahl laufen
-  dort. Deine Daten sichert Aquaticy verschlüsselt im privaten Blob-Speicher. Ohne eigene Wahl
-  nimmt es mit NVIDIA-Schlüssel Gemma 4. Einrichtung und Grenzen: [Vercel](#vercel).
+Diese Fassung gibt es nur in Aquaticy-Test. Sie ist für Vercel gebaut.
+
+- **Aquaticy Standard:** Das neue voreingestellte Modell antwortet ohne Sprachmodell und ohne
+  Schlüssel. Es rechnet, rechnet um (Prozente, Mehrwertsteuer, Einheiten) und kennt Datum und
+  Uhrzeit. Es holt Wetter, Wechselkurse, Nachrichten und Wissen aus Wikipedia, jeweils mit Quelle.
+  Was du ihm sagst („ich wohne in Bremen“), merkt es sich und nutzt es, zum Beispiel beim Wetter.
+- **Hinweis auf API-Schlüssel:** Wer nur Aquaticy Standard hat, sieht beim ersten Anmelden und
+  danach ab und zu einen Hinweis mit dem Weg zu den Add-ons. Dort führt ein Link direkt zur
+  Schlüssel-Seite von Mistral oder NVIDIA. Die Knöpfe „Mit Google/Apple/Microsoft“ sind weg.
+- **Konten:** Kontensystem ohne Code. Das erste Konto bekommt Ultra, jedes weitere Pro ohne
+  Token-Grenze. API-Schlüssel liegen nur im eigenen Konto.
+- **Secure Pro** beantwortet nur noch Fragen zu Sicherheit. Es sucht in keinem Netz.
+- **Speicher:** höchstens 20 MB je Konto.
+- **Gelöscht:** virtual machine, WhatsApp und Signal, Server-Verbund, Auto-Upgrading,
+  Zuhause & Netz (Home Assistant, Lager, Heimnetz), Auslastung und Mitlesen. Das Paket für
+  Vercel ist ohne neonize, Pillow und zxing-cpp kleiner.
+- **Google** bleibt nur für Gmail und Google Kalender.
 
 Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 
@@ -138,7 +150,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/jonasenriklaumen-a11y/Aquaticy-Ai.git
 cd Aquaticy-Ai
 uv tool install --force --reinstall .
-aquaticy --version            # 15.8.8
+aquaticy --version            # 16.0.0
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell, Suche und Domain
 aquaticy setup
@@ -285,38 +297,46 @@ Pro und Code, Gedächtnis, Notizen und die Modellwahl (`aquaticy/vercel.py`, ein
 |---|---|
 | `AQUATICY_VERCEL_SECRET` | Schlüssel für die Sicherung, mindestens 32 Zeichen. Gut aufheben: Ohne ihn lässt sich die Sicherung nicht mehr öffnen. |
 | `BLOB_STORE_ID` | Kommt von selbst, wenn du deinen **privaten** Blob-Speicher mit dem Projekt verbindest (*Storage → Connect*). Aquaticy meldet sich dann wie das Blob-SDK über OIDC an. Ältere Speicher liefern stattdessen `BLOB_READ_WRITE_TOKEN`; ein eigenes Token geht als `AQUATICY_BLOB_TOKEN`. |
-| `NVIDIA_NIM_API_KEY` oder `MISTRAL_API_KEY` | Freiwillig. Das Sprachmodell für **alle** Konten. Ohne sie trägt jedes Konto seinen eigenen Schlüssel in der App ein. |
 
 **Konten.** Hier läuft das Kontensystem, ohne Code. Das **erste Konto bekommt Ultra**, das
 bist du. **Jedes weitere bekommt Pro**, ohne Token-Grenze. Was in der App aus Sicherheitsgründen
 an Ultra hängt, bleibt bei dir: die Rechts-Leitplanken abschalten, eigene Adressen für Modell
 oder Suche, und nie vom Missbrauchsschutz gesperrt werden. Leg dein Konto also als Erstes an.
 
-**Achtung, Schlüssel.** Stehen Modell-Schlüssel bei Vercel, nutzt jedes Konto sie mit. Du zahlst
-dann für alle. Willst du das nicht, lass die Schlüssel bei Vercel weg: Dann trägt jedes Konto
-seinen eigenen ein. Solange der Vercel-Login als Schutz an ist (*Settings → Deployment
-Protection*), kommen nur Mitglieder deines Vercel-Teams auf die Seite.
+**Schlüssel nur im eigenen Konto.** Jedes Konto trägt seinen API-Schlüssel selbst ein: unter
+*Add-ons → NVIDIA NIM* oder *Mistral*. Dort führt ein Link direkt zur Seite des Anbieters, auf
+der du den Schlüssel bekommst. Der Schlüssel liegt verschlüsselt nur in deinem Konto. Andere
+Konten sehen und nutzen ihn nicht. Schlüssel, die bei Vercel stehen, nimmt Aquaticy beim Start
+heraus. Solange der Vercel-Login als Schutz an ist (*Settings → Deployment Protection*), kommen
+nur Mitglieder deines Vercel-Teams auf die Seite.
 
-**Modelle.** Unter *Modelle und Verbindungen → Modell* wählst du jedes Modell von Mistral oder
-NVIDIA NIM.
-Hast du noch keins gewählt und nur einen NVIDIA-Schlüssel, nimmt Aquaticy **Gemma 4**
-(`nvidia_nim/google/gemma-4-31b-it`). NVIDIA bietet Gemma 4 mit 2 Milliarden Parametern
-(E2B) nicht als Online-Dienst an. Das kleinste Gemma dort ist `nvidia_nim/google/gemma-3n-e2b-it`.
-Steht `AQUATICY_MODEL` bei Vercel, gilt immer dieses Modell.
+**Modelle.** Voreingestellt ist **Aquaticy Standard**: Es antwortet ohne Sprachmodell und ohne
+Schlüssel. Mit eigenem Schlüssel wählst du unter *Modelle und Verbindungen → Modell* jedes Modell
+von Mistral oder NVIDIA NIM, zum Beispiel Gemma 4 (`nvidia_nim/google/gemma-4-31b-it`). NVIDIA
+bietet Gemma 4 mit 2 Milliarden Parametern (E2B) nicht als Online-Dienst an. Das kleinste Gemma
+dort ist `nvidia_nim/google/gemma-3n-e2b-it`.
 
-**Deine Daten.** Eine Vercel-Funktion vergisst alles beim nächsten Kaltstart. Deshalb sichert
-Aquaticy seinen Datenordner nach jeder Änderung verschlüsselt im privaten Blob-Speicher. Beim
-Start holt es ihn zurück. Ohne `AQUATICY_VERCEL_SECRET` und verbundenen Speicher gibt es keine
-Sicherung.
-Passt der Schlüssel nicht zur Sicherung, startet Aquaticy nicht. So überschreibt es deine
-Daten nie mit einem leeren Stand.
+**Deine Daten und Redeploys.** Eine Vercel-Funktion hat keine bleibende Festplatte. Deshalb packt
+Aquaticy nach jeder Änderung den ganzen Datenordner zusammen: Konten, Chats, Gedächtnis,
+Einstellungen und Schlüssel. Es verschlüsselt das Paket mit `AQUATICY_VERCEL_SECRET` und legt
+es in deinem **privaten Blob-Speicher** ab. Startet eine Funktion neu, holt Aquaticy das Paket
+zurück. Ein Redeploy, ein neuer Push oder ein Kaltstart ändert daran nichts, denn der
+Blob-Speicher gehört zum Projekt, nicht zum Deployment.
 
-**Was auf Vercel fehlt.** Virtual machine, WhatsApp und Signal, Secure Pro, Coworker nach
-Zeitplan, Werkstatt, Plugins, Home Assistant, Lager, Server-Verbund und lokale Modelle. Das
-braucht einen Rechner, der dauerhaft läuft. Puffert Vercel die Antwort, kommt sie erst am
-Stück. Eine Antwort darf höchstens so lange dauern, wie Vercel eine Funktion laufen lässt. Laufen mehrere
-Instanzen gleichzeitig, gewinnt die zuletzt gespeicherte Sicherung. Die Datenbanken von Vercel
-(Postgres, Supabase) und die Edge Config braucht Aquaticy dafür nicht.
+Zwei Dinge musst du dafür beachten:
+
+- Lass `AQUATICY_VERCEL_SECRET` gleich. Mit einem anderen Schlüssel lässt sich die Sicherung
+  nicht mehr öffnen. Aquaticy startet dann nicht, statt deine Daten zu überschreiben.
+- Lass den Blob-Speicher mit dem Projekt verbunden. Ohne ihn speichert Aquaticy nichts, und
+  beim nächsten Kaltstart ist alles weg.
+
+**Was auf Vercel fehlt.** Coworker nach Zeitplan, Plugins und lokale Modelle. Das braucht einen
+Rechner, der dauerhaft läuft. Virtual machine, WhatsApp und Signal, Server-Verbund,
+Auto-Upgrading und Zuhause & Netz gibt es in Aquaticy-Test seit 16.0.0 gar nicht mehr. Puffert
+Vercel die Antwort, kommt sie erst am Stück. Eine Antwort darf höchstens so lange dauern, wie
+Vercel eine Funktion laufen lässt. Laufen mehrere Instanzen gleichzeitig, gewinnt die zuletzt
+gespeicherte Sicherung. Die Datenbanken von Vercel (Postgres, Supabase) und die Edge Config
+braucht Aquaticy dafür nicht.
 
 Den Cloudflare-Worker (`worker/`, `wrangler.toml`) gibt es weiterhin, siehe
 [worker/README.md](worker/README.md).
@@ -921,7 +941,7 @@ docker build -f docker/workshop-desktop.Dockerfile -t aquaticy-werkstatt-desktop
 ## Speicher
 
 **Speicher.** Aquaticy merkt sich, was länger gilt: Wohnort, Vorlieben, laufende Vorhaben. Nur
-Text, verschlüsselt, höchstens 400 MB je Konto. Unter **„Was weißt du über mich?“** siehst du
+Text, verschlüsselt, höchstens 20 MB je Konto. Unter **„Was weißt du über mich?“** siehst du
 jeden Eintrag und löschst ihn einzeln oder alle.
 
 **Gedächtnis wie bei großen Chat-Apps.**

@@ -207,7 +207,7 @@ def vercel_app(monkeypatch, tmp_path):
     monkeypatch.delenv("VERCEL", raising=False)
     monkeypatch.setattr(vercel, "_STATE", {"error": "", "web": None, "handler": None,
                                            "stand": None})
-    for name in ("AUTH", "AIGUARD", "TOKEN", "account_quota"):
+    for name in ("AUTH", "AIGUARD", "TOKEN", "account_quota", "_profile_settings"):
         monkeypatch.setattr(web, name, getattr(web, name))
     config.reset_settings_cache()
     yield vercel
@@ -302,13 +302,12 @@ def test_loopback_and_unknown_addresses_are_refused(vercel_app, monkeypatch):
     assert vercel_app.visitor_ip({"HTTP_X_REAL_IP": "2001:db8::1"}) == "2001:db8::1"
 
 
-def test_preset_model_is_gemma_only_without_choice(vercel_app, monkeypatch):
-    monkeypatch.setenv("NVIDIA_NIM_API_KEY", "nv")
-    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
-    assert vercel_app.preset_model() == "nvidia_nim/google/gemma-4-31b-it"
-    monkeypatch.setenv("MISTRAL_API_KEY", "m")
+def test_preset_model_is_aquaticy_standard_without_choice(vercel_app, monkeypatch):
+    """16.0.0: ohne eigene Wahl antwortet Aquaticy Standard -- ohne Schluessel."""
+    assert vercel_app.preset_model() == "aquaticy/standard"
+    monkeypatch.setenv("AQUATICY_MODEL", "mistral/mistral-small-latest")
     assert vercel_app.preset_model() == ""
-    monkeypatch.delenv("MISTRAL_API_KEY")
+    monkeypatch.delenv("AQUATICY_MODEL")
     datei = vercel_app._env_file()
     datei.parent.mkdir(parents=True)
     datei.write_text("AQUATICY_MODEL=mistral/mistral-small-latest\n", encoding="utf-8")
@@ -355,3 +354,38 @@ def test_backup_only_after_changes(vercel_app, monkeypatch):
     vercel_app.save_if_changed()
     vercel_app.save_if_changed()
     assert gesichert == [vercel_app.HOME]
+
+
+def test_shared_keys_are_taken_out_at_start(vercel_app, monkeypatch):
+    import os
+
+    monkeypatch.setenv("MISTRAL_API_KEY", "m" * 32)
+    monkeypatch.setenv("NVIDIA_NIM_API_KEY", "nvapi-geheim")
+    assert call(vercel_app.app, "/")[0].startswith("200")
+    assert "MISTRAL_API_KEY" not in os.environ and "NVIDIA_NIM_API_KEY" not in os.environ
+    assert {"MISTRAL_API_KEY", "NVIDIA_NIM_API_KEY"} <= vercel_app.shared_key_names()
+
+
+def test_each_account_sees_only_its_own_keys(vercel_app):
+    from types import SimpleNamespace
+
+    fremd = SimpleNamespace(api_keys={"MISTRAL_API_KEY": "server", "NVIDIA_NIM_API_KEY": "eigen"},
+                            search_keys={"BRAVE_API_KEY": "server"},
+                            own_key_names=frozenset({"NVIDIA_NIM_API_KEY"}))
+    gefiltert = vercel_app._only_own_keys(lambda *a, **k: fremd)("profil", "pro")
+    assert gefiltert.api_keys == {"NVIDIA_NIM_API_KEY": "eigen"}
+    assert gefiltert.search_keys == {}
+
+
+def test_secure_pro_only_opens_its_chat(vercel_app):
+    def post(body: dict) -> str:
+        daten = json.dumps(body).encode()
+        return call(vercel_app.app, "/api/features", "POST", body=daten,
+                    headers={"Content-Type": "application/json"})[0]
+
+    assert post({"action": "configure", "enabled": True}).startswith("404")
+    assert post({"action": "detect"}).startswith("404")
+    assert call(vercel_app.app, "/api/features")[0].startswith("404")
+    assert call(vercel_app.app, "/api/system")[0].startswith("404")
+    # "open" geht durch bis zur Anmeldung (ohne Konto: 401), nicht an der Sperre vorbei
+    assert not post({"action": "open"}).startswith("404")

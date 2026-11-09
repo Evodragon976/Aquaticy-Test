@@ -27,7 +27,8 @@ def test_sign_in_buttons_and_quick_link() -> None:
 
 
     assert 'id="linked-quick-key"' not in html and 'id="linked-paste"' not in html
-    assert "for (const weg of k.sign_in || [])" in html
+    # 16.0.0 (Aquaticy-Test): statt "Mit Google/Apple" ein Link zur Schluessel-Seite.
+    assert "link.href = k.get_key" in html and "k.sign_in" not in html
 
     assert "window.isSecureContext && navigator.clipboard?.readText" in html
 
@@ -57,7 +58,8 @@ def test_file_input_is_labelled() -> None:
 def test_new_texts_have_english() -> None:
     html = _ui()
     en = html[html.index("const EN = {"):]
-    for text in ("KI-Konten", "Server-Verbund", "Mit Apple", "Server im lokalen Netz",
+    # 16.0.0 (Aquaticy-Test): "Server im lokalen Netz" entfaellt mit dem Server-Verbund.
+    for text in ("KI-Konten", "Server-Verbund",
                  "Dafür brauchst du NVIDIA NIM und Mistral, beide mit Schlüssel. Das geht unter "
                  "Add-ons."):
         assert f'"{text}":' in en, text
@@ -71,7 +73,8 @@ def test_dev_settings_load_only_when_seen() -> None:
     oeffnen = oeffnen[:oeffnen.index("openOverlay(overlay);")]
     assert "verbundLaden()" not in oeffnen and "kontenLaden(" not in oeffnen
     assert '.observe($("#dev-settings"))' in html
-    assert "if (kontoUltra) verbundLaden(); else verbundZeigen({});" in html
+    # 16.0.0 (Aquaticy-Test): kein Server-Verbund mehr.
+    assert "verbundLaden" not in html
 
 
 def test_addon_error_is_shown_not_an_empty_list() -> None:

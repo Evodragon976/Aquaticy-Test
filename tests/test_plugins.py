@@ -64,8 +64,8 @@ def test_only_switched_on_plugins_are_commands(konto) -> None:
 def test_desktop_plugins_need_ultra_and_run_in_the_vm(konto) -> None:
     konto.vm_user_mode = True
     addons._update(konto, "whatsapp", installed=True, enabled=True, status="bereit")
-    turn = plugins.match("/whatsapp Was ist neu?", konto, True)
-    assert turn is not None and turn.sandbox is True and turn.mode == "code"
+    # 16.0.0 (Aquaticy-Test): keine virtual machine -- WhatsApp ist kein Befehl mehr.
+    assert plugins.match("/whatsapp Was ist neu?", konto, True) is None
     assert plugins.match("/whatsapp Was ist neu?", konto, False) is None, "ohne Ultra"
 
 

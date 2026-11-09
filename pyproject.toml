@@ -1,6 +1,6 @@
 [project]
 name = "aquaticy"
-version = "15.8.8"
+version = "16.0.0"
 description = "Ein KI-Agent fuer Kommandozeile und Browser, der eigenstaendig das Web durchsucht, Seiten liest und die Ergebnisse ausgewertet zurueckgibt."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -36,11 +36,8 @@ dependencies = [
     "pypdf>=6.21.4,<7",
     "cryptography>=50.0.1,<52",
 
-    "Pillow>=13.0.0,<14",
-    "zxing-cpp>=3.1.1,<4",
-    # WhatsApp direkt koppeln, ohne virtual machine (12.7.8 Terra v2): von Anfang an dabei.
-    # Fertige Pakete gibt es fuer Linux (x86-64, ARM64), macOS und Windows.
-    'neonize>=0.5.2,<0.6; sys_platform == "win32" or sys_platform == "darwin" or (sys_platform == "linux" and (platform_machine == "x86_64" or platform_machine == "aarch64"))',
+    # 16.0.0 (Aquaticy-Test): ohne virtual machine kein WhatsApp/Signal -- neonize, Pillow und
+    # zxing-cpp (nur fuer den QR-Code der Kopplung) sind raus. Das Paket fuer Vercel wird kleiner.
 ]
 
 [project.optional-dependencies]

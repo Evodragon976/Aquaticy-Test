@@ -510,7 +510,8 @@ def test_the_form_carries_the_switch(tmp_path: Path, monkeypatch: pytest.MonkeyP
     web.save_values({"AQUATICY_VM_USER_MODE": "true"})
     assert "AQUATICY_VM_USER_MODE=true" in (tmp_path / ".env").read_text()
     html = web.UI_FILE.read_text(encoding="utf-8")
-    assert 'name="AQUATICY_VM_USER_MODE"' in html
+    # 16.0.0 (Aquaticy-Test): keine virtual machine in der Oberflaeche.
+    assert 'name="AQUATICY_VM_USER_MODE"' not in html
 
 
 def test_an_account_reads_its_switch(tmp_path: Path) -> None:

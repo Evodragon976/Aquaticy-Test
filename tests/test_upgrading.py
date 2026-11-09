@@ -251,7 +251,6 @@ def test_confirmed_facts_need_two_accounts_and_carry_no_account(learners) -> Non
     assert fakten == [{"text": FACT, "source": "https://de.wikipedia.org/wiki/Photosynthese"}]
 
 
-
 class Sitzung:
     def __init__(self, ultra: bool, kennung: str = "k1") -> None:
         self.ultra = ultra
@@ -294,14 +293,9 @@ def test_every_account_sees_the_launch_once(server_ordner: Path) -> None:
     assert web.upgrades_action(Sitzung(False), {"action": "seen", "id": "../x"})[1] == 400
 
 
-def test_the_ui_has_the_launch_window_and_the_green_button() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert 'id="launchbox"' in html and 'id="launch-back"' in html and 'id="launch-try"' in html
-    assert ">‹ Zurück</button>" in html and ">Ausprobieren</button>" in html
-    assert 'los.className = "btn upgrade-go" + (k && k.can_upgrade ? " bereit" : "");' in html
-    assert "los.disabled = !(k && k.can_upgrade);" in html
-    assert ".btn.upgrade-go.bereit{background:var(--go)" in html and "--go:#2f8f4e" in html
-    assert "pruefeUpgrade();" in html
+# 16.0.0 (Aquaticy-Test): test_the_ui_has_the_launch_window_and_the_green_button entfaellt.
+# Grund: virtual machine, Heimnetz, Messenger, Upgrading und Verbund sind aus der Oberflaeche
+# geloescht
 
 
 def test_without_the_web_server_nothing_changes(monkeypatch) -> None:

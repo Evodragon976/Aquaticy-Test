@@ -629,10 +629,9 @@ def test_upnp_answers_count_only_from_the_own_net(monkeypatch) -> None:
     assert secure_devices.upnp_gateways(NETZ, "192.168.1.1", 0.5) == ["192.168.1.1"]
 
 
-def test_settings_show_messenger_switches() -> None:
-    html = (Path(web.__file__).parent / "webui.html").read_text(encoding="utf-8")
-    assert 'id="secure-messenger"' in html and 'id="secure-history"' in html
-    assert 'action: "messenger", id: cw.id' in html
+# 16.0.0 (Aquaticy-Test): test_settings_show_messenger_switches entfaellt.
+# Grund: virtual machine, Heimnetz, Messenger, Upgrading und Verbund sind aus der Oberflaeche
+# geloescht
 
 
 def test_coworkers_never_get_github_write_or_new_coworkers() -> None:

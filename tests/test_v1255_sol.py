@@ -82,7 +82,6 @@ def test_everything_else_is_not_allowed_without_asking(arguments: dict[str, Any]
     assert not direct_allowed(arguments)
 
 
-
 def _kasten(settings: Settings, monkeypatch: pytest.MonkeyPatch, *, direct: bool,
             antwort: str = "ja") -> tuple[Toolbox, list[str], list[tuple]]:
     configured(settings)
@@ -180,7 +179,6 @@ def test_protected_areas_ask_even_with_the_switch(
         "ha_call", {"domain": domain, "service": service, "entity_id": entity})["error"]
 
 
-
 def _coworker(settings: Settings, regel: str = "fragen", *, plan: str = "ultra"):
     configured(settings)
     store = cw.CoworkerStore(settings.db_path)
@@ -246,7 +244,6 @@ def test_a_coworker_needs_ultra_and_the_same_connection(settings: Settings) -> N
     box.close()
 
 
-
 def test_the_model_cannot_turn_the_switch_on() -> None:
     assert "AQUATICY_HA_DIRECT" in preferences.PROTECTED
     assert preferences.find("AQUATICY_HA_DIRECT") is None
@@ -278,11 +275,9 @@ def test_a_normal_account_never_gets_the_switch(settings: Settings, tmp_path: Pa
     assert web._profile_settings(profil, "normal").ha_direct is False
 
 
-def test_the_switch_is_in_the_form_and_the_state() -> None:
-    assert "AQUATICY_HA_DIRECT" in web.SETTING_KEYS
-    html = (Path(web.__file__).parent / "webui.html").read_text(encoding="utf-8")
-    assert 'name="AQUATICY_HA_DIRECT"' in html
-    assert '"Auf Befehl ohne Rückfrage schalten": "Switch on command without asking"' in html
+# 16.0.0 (Aquaticy-Test): test_the_switch_is_in_the_form_and_the_state entfaellt.
+# Grund: virtual machine, Heimnetz, Messenger, Upgrading und Verbund sind aus der Oberflaeche
+# geloescht
 
 
 def test_the_model_hears_about_the_switch_only_when_it_is_on(

@@ -573,21 +573,6 @@ def test_vm_internet_needs_ultra_at_the_server(client, session, monkeypatch) -> 
     assert "nur mit einem Ultra-Konto" in json.loads(body).get("error", "")
 
 
-def test_vm_switch_text_no_longer_promises_internet() -> None:
-    html = _ui()
-    start = html.index('id="werkstatt"')
-    abschnitt = html[start:html.index("</label>", start)]
-    assert "Internet" not in abschnitt
-    assert 'id="werkstatt-netz"' in html and 'id="werkstatt-status"' in html
-
-    for satz in ("Internet für die virtual machine",
-                 "Auf diesem Rechner fehlt Podman oder Docker. Darum startet die virtual "
-                 "machine nicht. So richtest du es ein: im Terminal aquaticy install-vm."):
-        assert f'"{satz}":' in html, satz
-
-
-
-
 def _gruss_en() -> dict[str, list[str]]:
     html = _ui()
     start = html.index("const GRUSS_EN = {")
@@ -1109,7 +1094,8 @@ def test_the_browser_can_never_install_anything() -> None:
     import inspect
 
     assert "vm_install" not in inspect.getsource(web)
-    assert "install_steps" not in _ui() and "install-vm" in _ui()
+    # 16.0.0 (Aquaticy-Test): der Hinweis auf "aquaticy install-vm" ging mit der VM.
+    assert "install_steps" not in _ui()
 
 
 

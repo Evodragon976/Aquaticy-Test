@@ -768,6 +768,7 @@ body.dragging::after{animation:fade-in var(--t-fast) var(--ease-out)}
   border:1px solid var(--line-2);border-radius:12px;background:var(--surface);
   font-size:calc(12.5px * var(--fs));color:var(--text-2)}
 .limit-banner[hidden]{display:none}
+.key-banner #key-banner-x{margin-left:0;color:var(--text-3)}
 .limit-banner .limit-bar{flex:0 0 90px}
 .limit-banner button{margin-left:auto;background:none;border:0;color:var(--accent-text);
   cursor:pointer;font-size:calc(12.5px * var(--fs));white-space:nowrap}
@@ -1639,8 +1640,6 @@ html.vv,html.vv body{height:var(--app-h)}
     <span class="spacer"></span>
     <button class="iconbtn" id="chat-details" type="button" aria-controls="status"
             aria-expanded="false" aria-label="Chat-Infos anzeigen">Infos</button>
-    <button class="iconbtn" id="btn-vmfiles" title="Dateien in der virtual machine"
-            aria-label="Dateien in der virtual machine" hidden>Dateien</button>
     <button class="iconbtn topnew" id="btn-new-top" title="Neuer Chat"
             aria-label="Neuer Chat">＋</button>
   </div>
@@ -1692,22 +1691,6 @@ html.vv,html.vv body{height:var(--app-h)}
        aria-label="Weitere Einstellungen" hidden>
     <div class="minwin-head"><b>Weitere Einstellungen</b>
       <button type="button" class="minwin-x" data-minwin-close aria-label="Schließen">✕</button></div>
-    <label class="picker-think only-code" for="werkstatt">
-      <input type="checkbox" role="switch" class="schalter" id="werkstatt">
-      <span><b>Code echt ausprobieren</b>
-        <span class="why">Aquaticy bekommt einen eigenen, abgetrennten Rechner. Dort probiert es den
-          Code aus, statt zu raten. Dein Heimnetz sieht dieser Rechner nicht. 20 Minuten nach deiner
-          letzten Nachricht wird er gelöscht.</span></span>
-    </label>
-
-    <label class="picker-think only-code vm-netz" for="werkstatt-netz" id="werkstatt-netz-zeile"
-           hidden>
-      <input type="checkbox" role="switch" class="schalter" id="werkstatt-netz">
-      <span><b>Internet für die virtual machine</b> <span class="ultra-tag">Ultra</span>
-        <span class="why">Zum Beispiel für Downloads. Dein Heimnetz bleibt gesperrt. Läuft die
-          virtual machine schon, startet sie dafür neu.</span></span>
-    </label>
-    <div class="note vm-status" id="werkstatt-status" role="status" hidden></div>
     <label class="picker-think only-normal" for="online">
       <input type="checkbox" role="switch" class="schalter" id="online" checked>
       <span><b>Im Web suchen</b>
@@ -1758,14 +1741,20 @@ html.vv,html.vv body{height:var(--app-h)}
     </div>
     <section id="secure-panel" hidden aria-label="Secure Pro">
       <b>Secure Pro</b>
-      <button type="button" class="btn" id="secure-settings-open">Secure-Pro-Einstellungen</button>
-      <p id="secure-chat-note" role="status"></p>
+      <p class="note">Frag mich zu Sicherheit: Malware, Passwörter, sichere Einstellungen und
+        Sicherheitslücken. Ich suche nicht in deinem Netz.</p>
     </section>
     <div class="thread" id="thread" role="log" aria-live="polite"
          aria-relevant="additions text"></div>
   </main>
 
   <footer>
+    <div class="limit-banner key-banner" id="key-banner" role="status" hidden>
+      <span class="txt">Du nutzt Aquaticy Standard: Es antwortet ohne Sprachmodell. Mit einem
+        eigenen API-Schlüssel beantwortet Aquaticy alles.</span>
+      <button type="button" id="key-banner-open">API-Schlüssel hinzufügen</button>
+      <button type="button" id="key-banner-x" aria-label="Hinweis schließen">✕</button>
+    </div>
     <div class="limit-banner" id="limit-banner" role="status" hidden>
       <div class="limit-bar"><span></span></div>
       <span class="txt"></span>
@@ -1858,22 +1847,6 @@ html.vv,html.vv body{height:var(--app-h)}
   Aquaticy macht von selbst weiter, sobald das Netz wieder da ist.</div>
 
 
-<div class="overlay ask" id="launchbox">
-  <div class="sheet ask-sheet launch-sheet" role="dialog" aria-modal="true"
-       aria-labelledby="launch-title" aria-describedby="launch-text">
-    <div class="launch-top">
-      <button type="button" class="sheet-back" id="launch-back" aria-label="Zurück">‹ Zurück</button>
-      <span class="launch-badge">Neues Modell</span>
-    </div>
-    <div class="ask-q" id="launch-title"></div>
-    <div class="launch-gain" id="launch-gain"></div>
-    <div class="note" id="launch-text"></div>
-    <div class="actions">
-      <button type="button" class="btn primary" id="launch-try">Ausprobieren</button>
-    </div>
-  </div>
-</div>
-
 <div class="overlay ask" id="errorbox">
   <div class="sheet ask-sheet" role="alertdialog" aria-modal="true"
        aria-labelledby="error-title" aria-describedby="error-text">
@@ -1900,25 +1873,6 @@ html.vv,html.vv body{height:var(--app-h)}
     </dl>
     <div class="actions">
       <button type="button" class="btn primary" id="ban-ok">Verstanden</button>
-    </div>
-  </div>
-</div>
-
-<div class="overlay" id="vmbox">
-  <div class="sheet merk-sheet" role="dialog" aria-modal="true" aria-labelledby="vm-title">
-    <h2 id="vm-title">virtual machine</h2>
-    <p class="lead">Die Dateien, an denen Aquaticy arbeitet. Deine Dateien liegen in „eingang“. Was
-      Aquaticy macht, kannst du herunterladen. 20 Minuten nach deiner letzten Nachricht wird alles
-      gelöscht.</p>
-    <div class="vm-screen" id="vm-screen" hidden>
-      <img id="vm-screen-img" alt="Bildschirm der virtual machine im User mode">
-      <div class="note">So sieht der Bildschirm der virtual machine gerade aus.</div>
-    </div>
-    <div class="merkliste" id="vmliste"></div>
-    <div class="actions">
-      <span class="note" id="vm-note"></span>
-      <button type="button" class="btn" id="vm-refresh">Neu ansehen</button>
-      <button type="button" class="btn primary" id="vm-close">Fertig</button>
     </div>
   </div>
 </div>
@@ -2044,62 +1998,6 @@ html.vv,html.vv body{height:var(--app-h)}
     </details>
     <div class="actions">
       <button type="button" class="btn primary" id="coworker-close">Fertig</button>
-    </div>
-  </div>
-</div>
-
-<div class="overlay" id="qrbox">
-  <div class="sheet qr-sheet" role="dialog" aria-modal="true" aria-labelledby="qr-title">
-    <h2 id="qr-title">Messenger verbinden</h2>
-    <p class="lead" id="qr-help"></p>
-    <img id="qr-image" alt="QR-Code zum Verbinden deines Kontos" hidden>
-    <p class="note" id="qr-status" role="status" aria-live="polite"></p>
-    <p class="note">Der QR-Code wird lokal erkannt. Er geht nicht an ein KI-Modell oder in deinen Chat.</p>
-    <p class="note" id="qr-fallback" hidden>Klappt es nicht? Dann bedienst du den Bildschirm der virtual machine selbst.</p>
-    <div class="actions">
-      <button type="button" class="btn" id="qr-screen" hidden>Bildschirm selbst bedienen</button>
-      <button type="button" class="btn" id="qr-retry" hidden>Erneut versuchen</button>
-      <button type="button" class="btn primary" id="qr-done" disabled>Ich bin angemeldet</button>
-      <button type="button" class="btn" id="qr-close">Schließen</button>
-    </div>
-  </div>
-</div>
-
-<div class="overlay" id="screenbox">
-  <div class="sheet addon-sheet" role="dialog" aria-modal="true" aria-labelledby="screen-title">
-    <h2 id="screen-title">Selbst anmelden</h2>
-    <p class="lead" id="screen-lead">Der Bildschirm gerade. Klick auf ein Feld (zweimal klicken =
-      Doppelklick). Tipp unten ein, was hinein soll, zum Beispiel dein Passwort. Es kommt nur in das
-      Feld. Nicht in den Verlauf und nicht zu Aquaticy.</p>
-    <div class="screen-live">
-      <img id="screen-img" alt="Bildschirm der virtual machine — klicken, um dort zu klicken">
-      <div class="screen-leer" id="screen-leer" hidden></div>
-    </div>
-    <div class="screen-open" id="screen-open">
-      <input type="text" id="screen-url" placeholder="https://… — im Browser der virtual machine öffnen"
-             autocomplete="off" aria-label="Adresse im Browser der virtual machine öffnen">
-      <button type="button" class="btn" id="screen-go">Öffnen</button>
-    </div>
-    <div class="screen-type">
-      <input type="password" id="screen-text" autocomplete="off" spellcheck="false"
-             placeholder="Text für das angeklickte Feld" aria-label="Text zum Tippen">
-      <button type="button" class="btn" id="screen-show" title="Text zeigen oder verbergen"
-              aria-pressed="false">Zeigen</button>
-      <button type="button" class="btn primary" id="screen-send">Tippen</button>
-    </div>
-    <div class="screen-keys" role="group" aria-label="Tasten">
-      <button type="button" class="btn" data-key="Return">Enter ⏎</button>
-      <button type="button" class="btn" data-key="Tab">Tab ⇥</button>
-      <button type="button" class="btn" data-key="BackSpace">⌫</button>
-      <button type="button" class="btn" data-key="Escape">Esc</button>
-      <button type="button" class="btn" data-key="Up">↑</button>
-      <button type="button" class="btn" data-key="Down">↓</button>
-      <button type="button" class="btn" data-key="ctrl+a">Strg+A</button>
-    </div>
-    <div class="actions">
-      <span class="note" id="screen-note" role="status" aria-live="polite"></span>
-      <button type="button" class="btn" id="screen-done" hidden>Ich bin angemeldet</button>
-      <button type="button" class="btn primary" id="screen-close">Schließen</button>
     </div>
   </div>
 </div>
@@ -2313,7 +2211,7 @@ html.vv,html.vv body{height:var(--app-h)}
           <input type="checkbox" role="switch" class="schalter" id="memon" name="AQUATICY_MEMORY">
           <label for="memon" style="margin:0">Aquaticy darf sich Dinge merken
             <span class="why">Zum Beispiel, wo du wohnst, was du magst oder woran du arbeitest. Nur
-              Text, verschlüsselt, höchstens 400 MB.</span></label>
+              Text, verschlüsselt, höchstens 20 MB.</span></label>
         </div>
         <div class="inline">
           <div class="meter" id="storage-meter"><span></span></div>
@@ -2345,27 +2243,6 @@ html.vv,html.vv body{height:var(--app-h)}
           deinen Namen. Ausschalten nimmt deine Zustimmung zurück und löscht deine Beiträge. Gleiche
           Stellen von anderen Konten bleiben.</p>
         <p class="note" id="learning-status" role="status" aria-live="polite"></p>
-      </fieldset>
-
-      <fieldset><legend>Mitlesen</legend>
-        <div class="check">
-          <input type="checkbox" role="switch" class="schalter" id="showtrace">
-          <label for="showtrace" style="margin:0">Aktionen mitlesen
-            <span class="why">Zeigt dir, wonach Aquaticy sucht und welche Seiten es öffnet. Gilt
-              sofort, auch für die Antwort, die schon da ist. Die Gedanken selbst siehst du mit <b>Denken</b> in der Modellauswahl.</span></label>
-        </div>
-      </fieldset>
-
-      <fieldset id="pro-system" hidden><legend>Auslastung · Ultra</legend>
-        <div class="pro-lock" id="system-lock" hidden>Die Auslastungsanzeige
-          gehört zu Ultra.</div>
-        <div class="check">
-          <input type="checkbox" role="switch" class="schalter" id="showload">
-          <label for="showload" style="margin:0">Auslastung des Rechners anzeigen
-            <span class="why">Wie viel Prozessor, Speicher, Festplatte und Grafikkarte gerade
-              arbeiten. Läuft, solange das Fenster offen ist.</span></label>
-        </div>
-        <div class="note" id="usage-note"></div>
       </fieldset>
 
       <fieldset><legend>Ort &amp; Sprache</legend>
@@ -2517,261 +2394,17 @@ html.vv,html.vv body{height:var(--app-h)}
         </details>
       </fieldset>
 
-      <fieldset id="pro-features"><legend>Zuhause &amp; Netz</legend>
-        <div class="pro-lock" id="pro-lock" hidden>Das gibt es nur mit Ultra: Geräte im Heimnetz
-          finden, Home Assistant und die Lagerverwaltung.</div>
-        <div class="inline">
-          <label><span class="lbl">Home Assistant</span>
-            <input type="text" name="AQUATICY_HA_URL" placeholder="192.168.1.5:8123"></label>
-          <button type="button" class="btn" id="ha-find">Suchen</button>
-        </div>
-        <div class="inline">
-          <label><span class="lbl">Zugangsschlüssel (Token) <span id="ha-hint"></span></span>
-            <input type="password" name="__HA_TOKEN__"
-                   placeholder="leer lassen = unverändert"></label>
-          <button type="button" class="btn" id="ha-test">Testen</button>
-        </div>
-        <div class="note" id="ha-note"></div>
-        <div class="check">
-          <input type="checkbox" role="switch" class="schalter" id="hactl" name="AQUATICY_HA_CONTROL">
-          <label for="hactl" style="margin:0">Aquaticy darf auch schalten
-            <span class="why">Aus: Aquaticy schaut nur nach. An: Es darf schalten, zum Beispiel
-              Licht. Bei Schlössern, Alarm, Toren und Heizung fragt es trotzdem jedes Mal.</span></label>
-        </div>
-        <div class="check">
-          <input type="checkbox" role="switch" class="schalter" id="hadirect" name="AQUATICY_HA_DIRECT">
-          <label for="hadirect" style="margin:0">Auf Befehl ohne Rückfrage schalten
-            <span class="why">Du sagst „Mach die Lampen an“, und es passiert gleich. Das gilt auch
-              für Aufgaben von Coworkern. Nur für Licht, Steckdosen, Ventilatoren und Mediaplayer.
-              Schlösser, Alarm, Tore, Heizung, Skripte und Szenen fragen weiter jedes Mal.
-              Hat Aquaticy Webseiten oder Mails gelesen, fragt es auch hier. Braucht „Aquaticy
-              darf auch schalten“.</span></label>
-        </div>
-        <div class="check">
-          <input type="checkbox" role="switch" class="schalter" id="lanon" name="AQUATICY_LAN_ENABLED">
-          <label for="lanon" style="margin:0">Ins eigene Netz sehen dürfen
-            <span class="why">Für Fragen wie „Welche Geräte sind in meinem WLAN?“ oder „Ist mein
-              Drucker an?“. Aquaticy prüft nur, ob ein Gerät antwortet. Und nur in deinem Netz.</span></label>
-        </div>
-        <label><span class="lbl">Dein Netz (leer lassen = automatisch)</span>
-          <input type="text" name="AQUATICY_LAN_SUBNET" placeholder="192.168.1.0/24"></label>
+      <fieldset id="addons-section"><legend>Add-ons</legend>
+        <p class="note">KI-Schlüssel für NVIDIA NIM und Mistral, GitHub, Wetter, RSS-Feeds und
+          mehr.</p>
+        <button type="button" class="btn addon-btn" id="btn-addons">Add-ons</button>
+      </fieldset>
 
-        <div class="sub-title">Lagerverwaltung</div>
-        <div class="inline">
-          <label><span class="lbl">Adresse
-            <span class="why">Räume → Möbel → Dinge, mit Nummern. Aquaticy kann dann sagen, wo etwas
-              liegt und wie viel noch da ist.</span></span>
-            <input type="text" name="AQUATICY_STORAGE_URL" placeholder="192.168.1.5:3000"></label>
-          <button type="button" class="btn" id="storage-find">Suchen</button>
-          <button type="button" class="btn" id="storage-test">Testen</button>
-        </div>
-        <label><span class="lbl">Was Aquaticy dort darf</span>
-          <select name="AQUATICY_STORAGE_ACCESS">
-            <option value="off">Nichts — abgeschaltet</option>
-            <option value="read">Nur lesen — suchen und nachsehen</option>
-            <option value="write">Lesen und schreiben — auch anlegen und ändern</option>
-          </select></label>
-        <div class="note" id="lager-note"></div>
-        <div class="note">Löschen darf Aquaticy nie. Das machst nur du. Die Lagerverwaltung hat kein
-          Passwort. „Nur lesen“ gilt nur für Aquaticy, nicht für andere in deinem Netz.</div>
-
-        <div id="secure-section">
-        <div class="sub-title">Secure Pro</div>
-        <div class="check">
-          <input type="checkbox" role="switch" class="schalter" id="secure-setting">
-          <label for="secure-setting" style="margin:0">Secure Pro
-            <span class="why">Schützt dein Heimnetz. Secure Pro sucht Malware-Zeichen, Angriffe
-              und riskante Dienste. Es meldet sich im eigenen Chat, wenn etwas Wichtiges
-              passiert.</span></label>
-        </div>
-        <div id="secure-controls" class="cluster-box" hidden>
-          <p class="note">Cloud-Modelle bekommen deine Nachrichten und ausgewählte Netzbefunde.
-            Für lokale Verarbeitung wähle ein lokales Modell.</p>
-          <div class="sub-title">Netz freigeben</div>
-          <label for="secure-router">Router-IP</label>
-          <input type="text" id="secure-router" placeholder="192.168.1.1" maxlength="15"
-                 inputmode="decimal">
-          <button id="secure-detect" type="button" class="btn">Router automatisch erkennen</button>
-          <p id="secure-router-hint" class="note" role="status"></p>
-          <label for="secure-subnet">Eigenes Netz (CIDR, höchstens 256 Adressen)</label>
-          <input type="text" id="secure-subnet" placeholder="192.168.1.0/24" maxlength="32">
-          <label><input id="secure-consent" type="checkbox"> Dieses Netz gehört mir oder ich darf
-            es prüfen.</label>
-          <div class="actions">
-            <button id="secure-test" type="button" class="btn">Router testen und starten</button>
-            <button id="secure-apply" type="button" class="btn">Netz freigeben</button>
-            <button id="secure-check" type="button" class="btn">Prüfen</button>
-            <button id="secure-disable" type="button" class="btn">Secure Pro ausschalten</button>
-          </div>
-          <p class="note">Neue Werte gelten erst nach deiner bestätigten Netzfreigabe. Lokale
-            Dateiordner gibst du mit aquaticy secure-pro im Terminal frei.</p>
-          <div id="secure-more" hidden>
-            <div class="sub-title">Überwachung</div>
-            <div class="check">
-              <input type="checkbox" role="switch" class="schalter" id="secure-watch">
-              <label for="secure-watch" style="margin:0">Immer überwachen
-                <span class="why">Wie ein Coworker: Secure Pro prüft im gewählten Abstand. Aus:
-                  nur wenn du „Prüfen“ drückst.</span></label>
-            </div>
-            <label><span class="lbl">Wie oft</span>
-              <select id="secure-interval">
-                <option value="0">die ganze Zeit</option>
-                <option value="30">alle 30 Sekunden</option>
-                <option value="60">jede Minute</option>
-                <option value="120">alle 2 Minuten</option>
-                <option value="300">alle 5 Minuten</option>
-                <option value="900">alle 15 Minuten</option>
-                <option value="1800">alle 30 Minuten</option>
-                <option value="3600">stündlich</option>
-                <option value="10800">alle 3 Stunden</option>
-                <option value="21600">alle 6 Stunden</option>
-                <option value="43200">alle 12 Stunden</option>
-                <option value="86400">täglich</option>
-              </select></label>
-            <p class="note">Die ganze Zeit und kurze Abstände belasten Heimnetz und Geräte
-              stärker. Eine Prüfung dauert oft länger als 30 Sekunden.</p>
-            <p id="secure-next" class="note" role="status"></p>
-            <div class="check">
-              <input type="checkbox" role="switch" class="schalter" id="secure-packets">
-              <label for="secure-packets" style="margin:0">Pakete prüfen
-                <span class="why">Liest 15 Sekunden lang Adressen, Ports und DNS-Namen für dein
-                  freigegebenes Netz. Nachrichteninhalte werden nicht ausgewertet. Keine
-                  gespeicherten Paketmitschnitte.</span>
-                <span class="why">Befunde können Adressen und auffällige
-                  DNS-Namen enthalten. Sie erscheinen im Chat, im lokalen Protokoll und
-                  gegebenenfalls im Messenger. Cloud-Modelle erhalten ausgewählte Befunde.</span>
-                <span class="why">Braucht Linux und Root-Rechte oder CAP_NET_RAW. Mit Switch sieht dieser
-                  Rechner nur eigenen Verkehr und Rundrufe.</span></label>
-            </div>
-            <p id="secure-packet-note" class="note" role="status"></p>
-            <div class="check">
-              <input type="checkbox" role="switch" class="schalter" id="secure-nmap">
-              <label for="secure-nmap" style="margin:0">nmap für Schwachstellen nutzen
-                <span class="why">nmap liest Dienste und Versionen und führt nur sichere
-                  Prüfskripte aus. Nichts davon geht ins Internet. Secure Pro prüft neue oder
-                  geänderte Geräte, sonst jedes Gerät einmal am Tag. Im Chat kannst du gezielt
-                  prüfen lassen.</span></label>
-            </div>
-            <p id="secure-nmap-note" class="note" role="status"></p>
-            <div class="check">
-              <input type="checkbox" role="switch" class="schalter" id="secure-messenger">
-              <label for="secure-messenger" style="margin:0">Aufträge per WhatsApp/Signal
-                <span class="why">Schreib in deinem eigenen Chat zum Beispiel „Secure Pro
-                  prüfen“, „Secure Pro Status“ oder „Secure Pro Tipps“. Antworten beginnen mit
-                  [Aquaticy Secure Pro]. Fremde Nummern und Gruppen können das nicht.</span></label>
-            </div>
-            <div class="check">
-              <input type="checkbox" role="switch" class="schalter" id="secure-vm">
-              <label for="secure-vm" style="margin:0">VM für Abwehr nutzen
-                <span class="why">Secure Pro darf über SSH aus der VM Ports schließen, Geräte
-                  sperren und Dienste stoppen. Jeder Befehl braucht dein Ja im
-                  Secure-Pro-Chat. Den Router, Aquaticy und SSH sperrt es nie.</span></label>
-            </div>
-            <p id="secure-vm-note" class="note" role="status"></p>
-            <div class="sub-title">Aufgaben</div>
-            <p class="note">Sag Secure Pro, wann es sich melden soll. Zum Beispiel: „Melde dich,
-              wenn ein neues Gerät ins Netz kommt.“ oder „Sag Bescheid, wenn 192.168.1.20
-              offline geht.“</p>
-            <ul class="device-list" id="secure-tasks"></ul>
-            <div class="inline">
-              <label style="flex:1"><input type="text" id="secure-task-text" maxlength="300"
-                     placeholder="Melde dich, wenn ein neues Gerät ins Netz kommt"
-                     aria-label="Neue Aufgabe für Secure Pro"></label>
-              <button type="button" class="btn" id="secure-task-add">Hinzufügen</button>
-            </div>
-            <p id="secure-task-note" class="note" role="status"></p>
-          </div>
-          <p id="secure-scope-note" role="status"></p>
-          <p id="secure-note" role="status"></p>
-          <p id="secure-checked"></p>
-          <p id="secure-score" class="note" role="status"></p>
-          <h3>Wichtig</h3>
-          <ul id="secure-important"></ul>
-          <h3>Tipps für dein Heimnetz</h3>
-          <ul id="secure-tips"></ul>
-          <h3>Prüfhinweise</h3>
-          <ul id="secure-findings"></ul>
-          <h3>Positiv beobachtet</h3>
-          <ul id="secure-positive"></ul>
-          <h3>Geräte im freigegebenen Netz</h3>
-          <ul id="secure-devices"></ul>
-          <h3>Verlauf</h3>
-          <ul id="secure-history"></ul>
-          <p class="note">Offene Dienste sind Prüfhinweise, keine nachgewiesenen Infektionen.
-            Die Ergebnisse gelten für das Netz des Aquaticy-Servers. Sie sind keine vollständige
-            Sicherheitsprüfung.</p>
-          <button type="button" class="btn" id="secure-open">Secure-Pro-Chat öffnen</button>
-        </div>
+      <fieldset id="secure-section"><legend>Secure Pro</legend>
+        <p class="note">Secure Pro beantwortet deine Fragen zu Sicherheit: Malware, Passwörter,
+          sichere Einstellungen und Sicherheitslücken. Es sucht nicht in deinem Netz.</p>
+        <button type="button" class="btn" id="secure-open">Secure-Pro-Chat öffnen</button>
         <p id="feature-note" class="note" role="status"></p>
-        </div>
-      </fieldset>
-
-      <fieldset id="workshop-settings"><legend>virtual machine</legend>
-        <div class="pro-lock" id="vm-plus-lock" hidden>„Plus“ gibt es nur mit Ultra. „Normal“ kannst
-          du nutzen.</div>
-        <label><span class="lbl">Größe <span class="why">Gilt ab der nächsten virtual machine. Eine
-          laufende bleibt, wie sie ist</span></span>
-          <select name="AQUATICY_VM_SIZE">
-            <option value="normal">Normal — 2 Kerne, 3 GB Arbeitsspeicher, 4 GB Speicher</option>
-            <option value="plus">Plus — 4 Kerne, 6 GB Arbeitsspeicher, 20 GB Speicher</option>
-          </select></label>
-        <div class="note">Normal reicht für fast alles. Plus lohnt sich für schwere Arbeit, zum
-          Beispiel 3D mit Blender.</div>
-        <div class="check usermode-row">
-          <input type="checkbox" role="switch" class="schalter" id="usermode"
-                 name="AQUATICY_VM_USER_MODE">
-          <label for="usermode" style="margin:0">User mode — Aquaticy bedient die virtual machine
-            wie ein Mensch <span class="ultra-tag">Ultra</span>
-            <span class="lock-tag" data-lock hidden>Mit Ultra verfügbar</span>
-            <span class="why">Die virtual machine wird ein Computer mit Internet. Aquaticy bedient
-              ihn wie ein Mensch. Dein Heimnetz bleibt gesperrt. Absenden, Kaufen und Löschen nur
-              mit deinem Ja. Passwörter, Zahlungsdaten, Captchas und „Alle akzeptieren“ fasst
-              Aquaticy nie an.</span></label>
-          <button type="button" class="btn addon-btn" id="btn-addons"
-                  title="Add-ons: NVIDIA NIM, Mistral, GitHub, WhatsApp Web, Blender …">Add-ons</button>
-        </div>
-        <div class="check usermode-row">
-          <input type="checkbox" role="switch" class="schalter" id="vminternet"
-                 name="AQUATICY_VM_INTERNET">
-          <label for="vminternet" style="margin:0">Internet für die virtual machine
-            <span class="ultra-tag">Ultra</span>
-            <span class="lock-tag" data-lock hidden>Mit Ultra verfügbar</span>
-            <span class="why">Im Code-Modus darf die virtual machine dann ins Internet, etwa für pip
-              install oder um eine Seite zu laden. Dein Heimnetz bleibt gesperrt. Bei Normal- und
-              Pro-Konten hat sie gar kein Netz.</span></label>
-        </div>
-        <div class="check usermode-row">
-          <input type="checkbox" role="switch" class="schalter" id="vmlan"
-                 name="AQUATICY_VM_LAN">
-          <label for="vmlan" style="margin:0">Auch ins lokale Netz
-            <span class="ultra-tag">Ultra</span>
-            <span class="lock-tag" data-lock hidden>Mit Ultra verfügbar</span>
-            <span class="why">Nur mit Ultra: Die virtual machine erreicht dann auch Geräte in deinem
-              Heimnetz (Router, Lager, Home Assistant …), nicht nur das Internet. Die Sperre fällt
-              weg. Schalte das nur ein, wenn du es brauchst.</span></label>
-        </div>
-        <p class="note">Mit „Auch ins lokale Netz“ und „Ins eigene Netz sehen dürfen“ nutzt Aquaticy OpenSSH aus der VM. Du trägst den öffentlichen VM-Schlüssel an deinem Gerät ein und prüfst dort den Fingerabdruck. Jeder SSH-Befehl braucht dein Ja. Passwörter und private Schlüssel gehören nie in den Chat.</p>
-        <div class="login-apps" id="login-apps">
-          <div><b>Login-Apps</b> — hier meldest du dich selbst an. Du siehst den Bildschirm, klickst
-            hinein und tippst Name, Passwort oder Code selbst. Aquaticy tippt nie ein Passwort und
-            liest nicht mit.</div>
-          <button type="button" class="btn" id="btn-loginapps">⌨ Selbst anmelden</button>
-        </div>
-        <div class="note" id="usermode-note">Dafür braucht Aquaticy ein Modell, das Bilder versteht
-          (siehe Modell). Und der Computer muss einmal eingerichtet werden:
-          <code>docker build -f docker/workshop-desktop.Dockerfile -t aquaticy-werkstatt-desktop:local .</code>
-          Für den Browser reicht „Normal“. Für Browser und Office zusammen ist „Plus“ viel besser.</div>
-      </fieldset>
-
-      <fieldset id="messenger-section"><legend>Messenger</legend>
-        <div class="check">
-          <input type="checkbox" role="switch" class="schalter" id="voice-setting">
-          <label for="voice-setting">Sprachnachrichten an oder aus
-            <span class="why">Lokale Programme und Modell richtest du einmalig mit aquaticy voice ein.</span>
-          </label>
-        </div>
-        <p id="voice-note" class="note" role="status"></p>
-        <p class="note">WhatsApp und Signal verbindest du unter Add-ons.</p>
       </fieldset>
 
       <fieldset id="dev-settings"><legend>Dev settings</legend>
@@ -2806,69 +2439,6 @@ html.vv,html.vv body{height:var(--app-h)}
         </div>
         <div class="note" id="council-note"></div>
 
-        <div class="upgrade-box" id="upgrade-box">
-          <div class="check">
-            <input type="checkbox" role="switch" class="schalter" id="upgrade-on">
-            <label for="upgrade-on" style="margin:0">Auto-Upgrading
-              <span class="why">Aquaticy verbessert lokale Modelle mit Wissen, das mehrere Konten
-                unabhängig bestätigt haben. Das Wissen kommt aus öffentlichen Quellen;
-                Kontokennungen stehen nicht im Modelltext. Ein Lückentext-Test misst den Gewinn. Ab
-                5 % wird „Upgraden“ grün (gemma3:4b → 1.1), ab 30 % gibt es eine ganze neue Version
-                (→ 2). Gilt für jedes Konto.</span></label>
-          </div>
-          <p class="note" id="upgrade-lock" hidden>Auto-Upgrading gehört zu Ultra.</p>
-          <div class="note" id="upgrade-status" role="status"></div>
-          <div id="upgrade-panel" hidden>
-            <ul class="device-list upgrade-list" id="upgrade-tracks"></ul>
-            <button type="button" class="btn" id="upgrade-train">Jetzt trainieren</button>
-          </div>
-        </div>
-
-        <div class="cluster-box" id="cluster-box">
-          <div class="check">
-            <input type="checkbox" role="switch" class="schalter" id="cluster-on">
-            <label for="cluster-on" style="margin:0">Server-Verbund
-              <span class="why">Bis zu 10 Server teilen sich die Arbeit. Jeder hat alle Daten. Der
-                Server, der einlädt, wird der Haupt-Server.</span></label>
-          </div>
-          <p class="note" id="cluster-lock" hidden>Der Server-Verbund gehört zu Ultra.</p>
-          <div class="note" id="cluster-status" role="status"></div>
-          <div id="cluster-panel" hidden>
-            <ul class="device-list cluster-list" id="cluster-members"></ul>
-
-            <div class="split-box" id="split-box" hidden>
-              <div class="check">
-                <input type="checkbox" role="switch" class="schalter" id="split-on">
-                <label for="split-on" style="margin:0">Serverlast aufteilen
-                  <span class="why">Alle Server rechnen zusammen an einem Modell. Das geht auch mit
-                    einem Modell, das für einen Server allein zu groß ist. Alle Konten laufen dann
-                    über den Haupt-Server. Aquaticy installiert dafür llama.cpp selbst.</span></label>
-              </div>
-              <div class="split-row">
-                <select id="split-model" aria-label="Modell, das verteilt laufen soll"></select>
-                <button type="button" class="btn" id="split-restart">Neu verteilen</button>
-              </div>
-              <div class="note" id="split-status" role="status"></div>
-            </div>
-            <div class="cluster-title">Server im lokalen Netz</div>
-            <ul class="device-list cluster-list" id="cluster-found"></ul>
-            <div class="cluster-add">
-              <input type="text" id="cluster-ip" autocomplete="off" spellcheck="false"
-                     placeholder="IP-Adresse oder voller MagicDNS-Name"
-                     aria-label="IP-Adresse oder voller MagicDNS-Name"
-                     aria-describedby="cluster-network-note">
-              <input type="text" id="cluster-port" inputmode="numeric" autocomplete="off"
-                     placeholder="8765" aria-label="Port">
-              <button type="button" class="btn" id="cluster-add">Verbinden</button>
-            </div>
-            <div class="note" id="cluster-network-note">Über Tailscale: Trag die 100.x-Adresse oder
-              den vollen Gerätenamen (…ts.net) und den Aquaticy-Port des anderen Servers ein. Die
-              automatische Suche geht nur im lokalen Netz.</div>
-            <div id="cluster-invites"></div>
-            <div class="note">Verbinde nur deine eigenen Server. Der andere bekommt eine Kopie aller
-              Daten. Tipp dort im Terminal „yes“. Gib dann hier den Code ein, den er zeigt.</div>
-          </div>
-        </div>
       </fieldset>
 
 
@@ -2926,7 +2496,7 @@ const thread = $("#thread"), main = $("#main"), input = $("#input"), send = $("#
 let busy = false;
 let currentChat = "";
 let secureChat = false;
-const aquaticyVersion = window.__AQUATICY_VERSION__ || "15.8.8";
+const aquaticyVersion = window.__AQUATICY_VERSION__ || "16.0.0";
 $("#version").textContent = "v" + aquaticyVersion;
 // Laeuft noch die alte Version, obwohl eine neue installiert ist? (15.0.0)
 const aquaticyInstalliert = window.__AQUATICY_INSTALLED__ || "";
@@ -3073,80 +2643,9 @@ function setRecheck(on, { merken = true } = {}){
   refreshHeader();
 }
 
-function setSandbox(on, { merken = true } = {}){
-  sandbox = !!on;
-  $("#werkstatt").checked = sandbox;
-  if (merken) merkeZustand({ sandbox });
-  zeigeVmKnopf();
-  refreshHeader();
-}
-
-
-
-function zeigeVmKnopf(){
-  const knopf = $("#btn-vmfiles");
-  if (knopf) knopf.hidden = !(mode === "code" && sandbox);
-  zeigeVmNetz();
-}
-
-
-
-let vmStand = null;
-async function zeigeVmNetz(){
-  const zeile = $("#werkstatt-netz-zeile"), status = $("#werkstatt-status");
-  if (!zeile || !status) return;
-  const sichtbar = mode === "code" && sandbox;
-  zeile.hidden = !sichtbar;
-  if (!sichtbar){ status.hidden = true; return; }
-  try { vmStand = await (await api("/api/vm")).json(); }
-  catch { vmStand = null; }
-  if (!vmStand || typeof vmStand.internet !== "boolean") return;
-  const netz = $("#werkstatt-netz");
-  netz.checked = vmStand.internet;
-  netz.classList.toggle("gesperrt", !vmStand.ultra);
-  status.hidden = vmStand.runtime !== false;
-  status.className = "note vm-status bad";
-  status.textContent = "Auf diesem Rechner fehlt Podman oder Docker. Darum startet die virtual "
-    + "machine nicht. So richtest du es ein: im Terminal aquaticy install-vm.";
-}
-$("#werkstatt-netz").addEventListener("click", async (e) => {
-  const schalter = e.currentTarget;
-  if (!vmStand){
-
-    e.preventDefault();
-    zeigeVmNetz();
-    return;
-  }
-  if (!vmStand.ultra){
-    e.preventDefault();
-    schalter.checked = false;
-    await guardDialog({
-      title: "Das gibt es nur mit einem Ultra-Konto.",
-      text: "Bei Normal- und Pro-Konten hat die virtual machine kein Netz: weder Internet noch "
-        + "dein Heimnetz. Rechnen, Code ausführen und Dateien bearbeiten geht trotzdem.",
-      ok: "Verstanden",
-    });
-    return;
-  }
-  const an = schalter.checked;
-  try {
-    const res = await api("/api/config", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ AQUATICY_VM_INTERNET: String(an) }),
-    });
-    const daten = await res.json();
-    if (!daten.ok) throw new Error(daten.error || "");
-    vmStand.internet = an;
-
-    const gleich = $("#vminternet");
-    if (gleich) gleich.checked = an;
-    toast(an ? "Die virtual machine hat jetzt Internet."
-             : "Die virtual machine hat jetzt kein Internet mehr.");
-  } catch (fehler){
-    schalter.checked = !an;
-    toast(nutzerFehler(fehler.message, "Das ließ sich nicht speichern."));
-  }
-});
+// 16.0.0 (Aquaticy-Test): keine virtual machine mehr -- Code wird nie ausgefuehrt.
+function setSandbox(){ sandbox = false; }
+function zeigeVmKnopf(){}
 
 function setOnline(on, { merken = true } = {}){
   online = !!on;
@@ -3213,7 +2712,6 @@ document.querySelectorAll("#efforts .eff").forEach(button =>
   button.addEventListener("click", () => setEffort(button.dataset.effort)));
 $("#online").addEventListener("change", (e) => setOnline(e.target.checked));
 $("#visual-sources").addEventListener("change", (e) => setVisualSources(e.target.checked));
-$("#werkstatt").addEventListener("change", (e) => setSandbox(e.target.checked));
 $("#denken").addEventListener("change", (e) => setDenken(e.target.checked));
 $("#structure").addEventListener("change", (e) => setStructured(e.target.checked));
 $("#recheck").addEventListener("change", (e) => setRecheck(e.target.checked));
@@ -5674,47 +5172,23 @@ const EN = {
 "KI-Server": "AI server",
 "Höchstens 256 bekannte Geräte.": "At most 256 known devices.",
 "Aufträge per WhatsApp/Signal": "Tasks via WhatsApp/Signal",
-"Schreib in deinem eigenen Chat zum Beispiel „Secure Pro prüfen“, „Secure Pro Status“ oder „Secure Pro Tipps“. Antworten beginnen mit [Aquaticy Secure Pro]. Fremde Nummern und Gruppen können das nicht.": "Write in your own chat, for example “Secure Pro check”, “Secure Pro status” or “Secure Pro tips”. Replies start with [Aquaticy Secure Pro]. Other numbers and groups can't do this.",
 "Deine Repos, Commits, Issues, Pull Requests und Dateien. Aquaticy kann auch ändern, committen, pushen und Pull Requests öffnen. Code prüfen: „Prüfe https://github.com/besitzer/repo“.": "Your repos, commits, issues, pull requests and files. Aquaticy can also make changes, commit, push and open pull requests. Review code: “Review https://github.com/owner/repo”.",
 "Erstelle ein Fine-grained-Token auf GitHub. Wähle deine Repos unter Repository access. Zum Lesen reicht Contents: Read-only. Zum Ändern erlaube Contents: Read and write und Pull requests: Read and write. Füge das Token hier ein.": "Create a fine-grained token on GitHub. Choose your repos under Repository access. Contents: Read-only is enough for reading. To make changes, allow Contents: Read and write and Pull requests: Read and write. Paste the token here.",
 "Ausgewählte Dateien gehen an dein Chat-Modell. Jeder Commit, Push, Pull Request und Kommentar braucht dein Ja. Aquaticy pusht nie mit force. Der Schlüssel bleibt auf diesem Rechner, auch wenn die VM das Repo bearbeitet. Nach privaten Repo-Inhalten braucht öffentliche Recherche deine Bestätigung.": "Selected files go to your chat model. Every commit, push, pull request and comment needs your yes. Aquaticy never force-pushes. The token stays on this computer, even when the VM works on the repo. After private repo content, public research needs your confirmation.",
-"Die ganze Zeit und kurze Abstände belasten Heimnetz und Geräte stärker. Eine Prüfung dauert oft länger als 30 Sekunden.": "All the time and short intervals put more load on your home network and devices. A check often takes longer than 30 seconds.",
 "nmap für Schwachstellen nutzen": "Use nmap for vulnerabilities",
-"nmap liest Dienste und Versionen und führt nur sichere Prüfskripte aus. Nichts davon geht ins Internet. Secure Pro prüft neue oder geänderte Geräte, sonst jedes Gerät einmal am Tag. Im Chat kannst du gezielt prüfen lassen.": "nmap reads services and versions and only runs safe check scripts. None of it goes to the internet. Secure Pro checks new or changed devices, otherwise each device once a day. In the chat you can ask for targeted checks.",
-"Tipps für dein Heimnetz": "Tips for your home network",
 "alle 30 Sekunden": "every 30 seconds",
-"alle 2 Minuten": "every 2 minutes",
 "nmap findet eine Schwachstelle.": "nmap finds a vulnerability.",
 "nmap prüft nur das freigegebene private Netz.": "nmap only checks the authorized private network.",
 "Nenne eine IP-Adresse aus deinem freigegebenen Netz.": "Name an IP address from your authorized network.",
 "nmap hat zu lange gebraucht. Prüfe weniger Geräte auf einmal.": "nmap took too long. Check fewer devices at once.",
 "nmap ist fehlgeschlagen. Es liegt kein Ergebnis vor.": "nmap failed. There is no result.",
-"Höchstens zwei nmap-Prüfungen je Nachricht.": "At most two nmap checks per message.",
-"Schützt dein Heimnetz. Secure Pro sucht Malware-Zeichen, Angriffe und riskante Dienste. Es meldet sich im eigenen Chat, wenn etwas Wichtiges passiert.": "Protects your home network. Secure Pro looks for signs of malware, attacks and risky services. It reports in its own chat when something important happens.",
-"Cloud-Modelle bekommen deine Nachrichten und ausgewählte Netzbefunde. Für lokale Verarbeitung wähle ein lokales Modell.": "Cloud models receive your messages and selected network findings. For local processing, choose a local model.",
-"Neue Werte gelten erst nach deiner bestätigten Netzfreigabe. Lokale Dateiordner gibst du mit aquaticy secure-pro im Terminal frei.": "New values apply only after you confirm network authorization. Authorize local folders with aquaticy secure-pro in the terminal.",
 "Überwachung": "Monitoring",
 "Immer überwachen": "Always monitor",
-"Wie ein Coworker: Secure Pro prüft im gewählten Abstand. Aus: nur wenn du „Prüfen“ drückst.": "Like a coworker: Secure Pro checks at the chosen interval. Off: only when you press “Check”.",
 "Wie oft": "How often",
-"alle 3 Stunden": "every 3 hours",
-"alle 6 Stunden": "every 6 hours",
-"alle 12 Stunden": "every 12 hours",
 "Pakete prüfen": "Check packets",
-"Liest 15 Sekunden lang Adressen, Ports und DNS-Namen für dein freigegebenes Netz. Nachrichteninhalte werden nicht ausgewertet. Keine gespeicherten Paketmitschnitte.": "Reads addresses, ports and DNS names for your authorized network for 15 seconds. Message contents are not analyzed. No packet captures are saved.",
-"Befunde können Adressen und auffällige DNS-Namen enthalten. Sie erscheinen im Chat, im lokalen Protokoll und gegebenenfalls im Messenger. Cloud-Modelle erhalten ausgewählte Befunde.": "Findings may include addresses and suspicious DNS names. They appear in chat, in the local log and, if configured, in the messenger. Cloud models receive selected findings.",
-"Braucht Linux und Root-Rechte oder CAP_NET_RAW. Mit Switch sieht dieser Rechner nur eigenen Verkehr und Rundrufe.": "Requires Linux and root privileges or CAP_NET_RAW. With a switch, this computer only sees its own traffic and broadcasts.",
-"VM für Abwehr nutzen": "Use the VM for defense",
-"Secure Pro darf über SSH aus der VM Ports schließen, Geräte sperren und Dienste stoppen. Jeder Befehl braucht dein Ja im Secure-Pro-Chat. Den Router, Aquaticy und SSH sperrt es nie.": "Secure Pro may close ports, block devices and stop services over SSH from the VM. Every command needs your yes in the Secure Pro chat. It never blocks the router, Aquaticy or SSH.",
 "Aufgaben": "Tasks",
-"Sag Secure Pro, wann es sich melden soll. Zum Beispiel: „Melde dich, wenn ein neues Gerät ins Netz kommt.“ oder „Sag Bescheid, wenn 192.168.1.20 offline geht.“": "Tell Secure Pro when to report. For example: “Tell me when a new device joins the network.” or “Let me know when 192.168.1.20 goes offline.”",
 "Melde dich, wenn ein neues Gerät ins Netz kommt": "Tell me when a new device joins the network",
-"Neue Aufgabe für Secure Pro": "New task for Secure Pro",
-"Hinzufügen": "Add",
 "Wichtig": "Important",
-"Offene Dienste sind Prüfhinweise, keine nachgewiesenen Infektionen. Die Ergebnisse gelten für das Netz des Aquaticy-Servers. Sie sind keine vollständige Sicherheitsprüfung.": "Open services are review hints, not confirmed infections. Results apply to the Aquaticy server network. They are not a complete security assessment.",
-"Mit „Auch ins lokale Netz“ und „Ins eigene Netz sehen dürfen“ nutzt Aquaticy OpenSSH aus der VM. Du trägst den öffentlichen VM-Schlüssel an deinem Gerät ein und prüfst dort den Fingerabdruck. Jeder SSH-Befehl braucht dein Ja. Passwörter und private Schlüssel gehören nie in den Chat.": "With “Also into the local network” and “May look into your own network”, Aquaticy uses OpenSSH from the VM. You add the public VM key on your device and check the fingerprint there. Every SSH command needs your yes. Passwords and private keys never belong in the chat.",
-"WhatsApp und Signal verbindest du unter Add-ons.": "You connect WhatsApp and Signal under Add-ons.",
 "Ein neues Gerät kommt ins Netz.": "A new device joins the network.",
 "Ein Gerät ist nicht mehr erreichbar.": "A device is no longer reachable.",
 "Ein Gerät ist wieder erreichbar.": "A device is reachable again.",
@@ -5736,7 +5210,6 @@ const EN = {
 "Secure-Pro-Einstellungen": "Secure Pro settings",
 "Secure Pro einrichten": "Set up Secure Pro",
 "Geräte im freigegebenen Netz": "Devices in the authorized network",
-"Nur eine Adresse ist freigegeben. Bestätige einen größeren Prüfbereich für weitere Geräte.": "Only one address is authorized. Confirm a larger range to check more devices.",
 "Bestätige die Netzfreigabe in den Secure-Pro-Einstellungen.": "Confirm network authorization in Secure Pro settings.",
 "Der Prüfbereich bleibt privat und umfasst 1 Adresse.": "The check stays within a private range of one address.",
 "Bei einem erreichbaren Gerät antwortet keiner der geprüften Risikodienste.": "None of the checked risk services responded on the reachable device.",
@@ -5760,48 +5233,23 @@ const EN = {
 "ClamAV meldet in den geprüften lokalen Dateien keinen Fund. Dateien außerhalb der Scan-Grenzen wurden nicht geprüft.": "ClamAV reported no findings in the checked local files. Files beyond the scan limits were not checked.",
 
 "Router-IP": "Router IP",
-"Router automatisch erkennen": "Detect router automatically",
-"Router testen und starten": "Test router and start",
 "Positiv beobachtet": "Positive observations",
 "Prüfhinweise": "Findings to review",
 "Vorschlag aus der Standardroute des Aquaticy-Servers. Prüfe, ob es dein Heimnetz ist.": "Suggested by the Aquaticy server default route. Check that this is your home network.",
 "Keinen Router erkannt. Trage die private Router-IP und dein Netz ein.": "No router detected. Enter the private router IP and your network.",
 "Aquaticy läuft in einem Container. Die Route kann zum Container-Netz gehören.": "Aquaticy runs in a container. The route may belong to the container network.",
 "Die Prüfung läuft.": "The check is running.",
-"Die erste Prüfung steht noch aus.": "The first check is pending.",
-"Noch keine abgeschlossene Prüfung.": "No completed check yet.",
-"Router antwortet. Secure Pro wurde gestartet.": "Router responded. Secure Pro has started.",
 "Die Prüfung ist fehlgeschlagen. Es liegt kein sauberes Ergebnis vor.": "The check failed. There is no clean result.",
 
-"Eigenes Netz (CIDR, höchstens 256 Adressen)": "Your network (CIDR, up to 256 addresses)",
-"Dieses Netz gehört mir oder ich darf es prüfen.": "I own this network or have permission to check it.",
-"Netz freigeben": "Authorize network",
 "Prüfen": "Check",
-"Secure Pro ausschalten": "Turn off Secure Pro",
 "Secure-Pro-Chat öffnen": "Open Secure Pro chat",
-"Sprachnachrichten an oder aus": "Turn voice messages on or off",
-"Lokale Programme und Modell richtest du einmalig mit aquaticy voice ein.": "Set up local programs and the model once with aquaticy voice.",
 "Diese Funktionen verwaltet nur der Besitzer im Einzelkonto-Modus.": "Only the owner in single-account mode can manage these features.",
 "Secure Pro ist an.": "Secure Pro is on.",
 "Secure Pro ist aus.": "Secure Pro is off.",
 "Noch keine Prüfhinweise vorhanden. Das ist kein Sicherheitsnachweis.": "No findings available yet. This does not establish safety.",
 "Sprachnachrichten zuerst im Terminal mit aquaticy voice einrichten.": "First set up voice messages in the terminal with aquaticy voice.",
-"Kurze Unterbrechung. Die QR-Anzeige wird automatisch erneut geladen.": "Brief interruption. The QR display will reload automatically.",
 "Die QR-Erkennung fehlt. Aktualisiere Aquaticy und starte den Server neu.": "QR detection is missing. Update Aquaticy and restart the server.",
-"QR-Code anzeigen": "Show QR code",
-"Messenger verbinden": "Connect messenger",
-"WhatsApp Web verbinden": "Connect WhatsApp Web",
-"Signal verbinden": "Connect Signal",
-"QR-Code zum Verbinden deines Kontos": "QR code for linking your account",
-"Der QR-Code wird lokal erkannt. Er geht nicht an ein KI-Modell oder in deinen Chat.": "The QR code is detected locally. It is not sent to an AI model or your chat.",
 "Erneut versuchen": "Try again",
-"Öffne Signal auf deinem Handy. Wähle Einstellungen → Gekoppelte Geräte → +. Scanne dann diesen QR-Code.": "Open Signal on your phone. Choose Settings → Linked devices → +. Then scan this QR code.",
-"Öffne WhatsApp auf deinem Handy. Wähle Einstellungen → Verknüpfte Geräte → Gerät hinzufügen. Scanne dann diesen QR-Code.": "Open WhatsApp on your phone. Choose Settings → Linked devices → Link a device. Then scan this QR code.",
-"Die Anmeldung startet. Der QR-Code erscheint gleich hier.": "Sign-in is starting. The QR code will appear here shortly.",
-"Die Anmeldung konnte nicht geladen werden.": "Sign-in could not be loaded.",
-"Scanne den QR-Code mit deinem Handy. Bestätige danach die Anmeldung.": "Scan the QR code with your phone. Then confirm that you are signed in.",
-"Noch kein QR-Code erkannt. Warte kurz. Falls dein Handy schon gekoppelt ist, bestätige die Anmeldung.": "No QR code detected yet. Wait a moment. If your phone is already linked, confirm that you are signed in.",
-"Die Anmeldung braucht zu lange. Versuch es erneut.": "Sign-in is taking too long. Try again.",
 "Ein Chat läuft gerade. Warte, bis er fertig ist.": "A chat is running. Wait until it finishes.",
 "Die Anmeldung ist abgelaufen. Öffne sie erneut.": "Sign-in has expired. Open it again.",
 "Das Add-on ist nicht eingeschaltet.": "The add-on is not enabled.",
@@ -5854,7 +5302,6 @@ const EN = {
 "Anbieter aus Europa, Server in der EU. Zum Beispiel Mistral Large, Mistral Small und Codestral.": "A European provider with servers in the EU. For example Mistral Large, Mistral Small and Codestral.",
 "Melde dich bei Mistral an. Erstelle unter „API Keys“ einen Schlüssel. Füge ihn hier ein.": "Sign in at Mistral. Create a key under “API Keys”. Paste it here.",
 "Deine Fragen gehen an Mistral. Der Schlüssel wird verschlüsselt in deinem Konto gespeichert. Er geht nur an Mistral.": "Your questions go to Mistral. The key is saved encrypted in your account. It only goes to Mistral.",
-"Mit Microsoft": "With Microsoft",
 "Verknüpft": "Linked",
 "Schlüssel entfernen": "Remove key",
 "Schlüssel entfernt.": "Key removed.",
@@ -5910,7 +5357,6 @@ const EN = {
 "Die Verbindung zu Google hat sich geändert. Versuch es bitte noch einmal.": "The connection to Google has changed. Please try again.",
 "Diese Mail oder diesen Termin finde ich nicht.": "I can't find this email or appointment.",
 "Bitte bestätigen": "Please confirm",
-"Mit Ultra verfügbar": "Available with Ultra",
 "↻ Erneut versuchen": "↻ Try again",
 "Noch kein Gerät.": "No device yet.",
 "Dein Passwort": "Your password",
@@ -5977,20 +5423,13 @@ const EN = {
 "Seitenleiste ein- oder ausblenden": "Show or hide the sidebar",
 "Modell wechseln": "Change model",
 "Modell": "Model",
-"Dateien in der virtual machine": "Files in the virtual machine",
 "Modell wählen": "Choose model",
 "Denktiefe": "Thinking depth",
 "Wie gründlich Aquaticy nachdenkt. Low ist schnell. High braucht länger und hilft bei schweren Fragen.": "How carefully Aquaticy thinks. Low is fast. High takes longer and helps with hard questions.",
 "Agenten": "Agents",
 "Anzahl der Agenten": "Number of agents",
 "So viele Helfer suchen gleichzeitig, wenn „Strukturieren“ an ist. Normal: 1 bis 12.": "This many helpers search at the same time when “Structure” is on. Normal: 1 to 12.",
-"Code echt ausprobieren": "Really try the code",
-"Aquaticy bekommt einen eigenen, abgetrennten Rechner. Dort probiert es den Code aus, statt zu raten. Dein Heimnetz sieht dieser Rechner nicht. 20 Minuten nach deiner letzten Nachricht wird er gelöscht.": "Aquaticy gets its own separate computer. It tries the code there instead of guessing. This computer can't see your home network. It is deleted 20 minutes after your last message.",
 "Internet für die virtual machine": "Internet for the virtual machine",
-"Zum Beispiel für Downloads. Dein Heimnetz bleibt gesperrt. Läuft die virtual machine schon, startet sie dafür neu.": "For example for downloads. Your home network stays blocked. If the virtual machine is already running, it restarts for this.",
-"Auf diesem Rechner fehlt Podman oder Docker. Darum startet die virtual machine nicht. So richtest du es ein: im Terminal aquaticy install-vm.": "Podman or Docker is missing on this computer. That's why the virtual machine doesn't start. To set it up, run aquaticy install-vm in the terminal.",
-"Die virtual machine hat jetzt Internet.": "The virtual machine now has internet.",
-"Die virtual machine hat jetzt kein Internet mehr.": "The virtual machine no longer has internet.",
 "Im Web suchen": "Search the web",
 "Aus: Aquaticy sucht nicht im Internet. Es antwortet mit seinem Wissen, dem Chat und deinen Dateien. Es sagt dir, wo das alt sein kann.": "Off: Aquaticy doesn't search the internet. It answers with what it knows, the chat and your files. It tells you where that may be out of date.",
 "Öffentliche Webcams & Satellitenbilder": "Public webcams & satellite images",
@@ -6042,21 +5481,11 @@ const EN = {
 "Verstanden": "Understood",
 "virtual machine": "Virtual machine",
 "Internet für die virtual machine": "Internet for the virtual machine",
-"Die Dateien, an denen Aquaticy arbeitet. Deine Dateien liegen in „eingang“. Was Aquaticy macht, kannst du herunterladen. 20 Minuten nach deiner letzten Nachricht wird alles gelöscht.": "The files Aquaticy is working on. Your files are in “eingang”. You can download what Aquaticy makes. Everything is deleted 20 minutes after your last message.",
-"So sieht der Bildschirm der virtual machine gerade aus.": "This is the virtual machine's screen right now.",
-"Neu ansehen": "Refresh",
 "Fertig": "Done",
 "Selbst anmelden": "Sign in yourself",
-"Der Bildschirm gerade. Klick auf ein Feld (zweimal klicken = Doppelklick). Tipp unten ein, was hinein soll, zum Beispiel dein Passwort. Es kommt nur in das Feld. Nicht in den Verlauf und nicht zu Aquaticy.": "The screen right now. Click a field (click twice = double-click). Type below what goes in, for example your password. It only goes into the field. Not into the history and not to Aquaticy.",
-"https://… — im Browser der virtual machine öffnen": "https://… — open in the virtual machine browser",
-"Adresse im Browser der virtual machine öffnen": "Open address in the virtual machine browser",
 "Öffnen": "Open",
-"Text für das angeklickte Feld": "Text for the clicked field",
-"Text zum Tippen": "Text to type",
-"Text zeigen oder verbergen": "Show or hide text",
 "Tippen": "Type",
 "Tasten": "Keys",
-"Strg+A": "Ctrl+A",
 "Ich bin angemeldet": "I'm signed in",
 "Schließen": "Close",
 "Was Aquaticy über dich weiß": "What Aquaticy knows about you",
@@ -6080,17 +5509,12 @@ const EN = {
 "Test Version": "Test version",
 "Pro sucht gründlicher und braucht länger.": "Pro searches more carefully and takes longer.",
 "KI-Konten": "AI accounts",
-"Mit Google": "With Google",
-"Mit Apple": "With Apple",
-"Mit E-Mail": "With email",
 "Einfügen": "Paste",
 "Verknüpfen": "Link",
 "Aktualisieren": "Refresh",
 "NVIDIA NIM und Mistral lösen die Aufgabe. Eines prüft die Lösung auf Fehler. Aquaticy nimmt sie an oder schickt sie zurück. Das dauert länger und verbraucht bei beiden Anbietern mehr.": "NVIDIA NIM and Mistral solve the task. One of them checks the solution for mistakes. Aquaticy accepts it or sends it back. This takes longer and uses more at both providers.",
 "Server-Verbund": "Server cluster",
 "Serverlast aufteilen": "Split server load",
-"Alle Server rechnen zusammen an einem Modell. Das geht auch mit einem Modell, das für einen Server allein zu groß ist. Alle Konten laufen dann über den Haupt-Server. Aquaticy installiert dafür llama.cpp selbst.": "All servers work on one model together. This also works with a model that is too big for one server. All accounts then run through the main server. Aquaticy installs llama.cpp for this itself.",
-"Für dieses System gibt es llama.cpp nicht fertig. Mehr dazu steht im README.": "llama.cpp isn't ready-made for this system. See the README for more.",
 "Sucht die neueste Version von llama.cpp …": "Looking for the newest llama.cpp …",
 "Neu verteilen": "Redistribute",
 "Alle Befehle": "All commands",
@@ -6139,11 +5563,7 @@ const EN = {
 "In seiner virtual machine arbeiten": "Work in its virtual machine",
 "Coworker: arbeiten die ganze Zeit für dich": "Coworkers: working for you all the time",
 "Diesen Port gibt es nicht. Nimm eine Zahl von 1 bis 65535.": "This port doesn't exist. Use a number from 1 to 65535.",
-"Die Server-Gruppe lässt sich gerade nicht laden.": "The server group can't be loaded right now.",
-"Bis zu 10 Server teilen sich die Arbeit. Jeder hat alle Daten. Der Server, der einlädt, wird der Haupt-Server.": "Up to 10 servers share the work. Each one has all the data. The server that invites becomes the main server.",
 "Der Server-Verbund gehört zu Ultra.": "The server cluster is part of Ultra.",
-"Server im lokalen Netz": "Servers in the local network",
-"Verbinde nur deine eigenen Server. Der andere bekommt eine Kopie aller Daten. Tipp dort im Terminal „yes“. Gib dann hier den Code ein, den er zeigt.": "Only connect your own servers. The other one gets a copy of all data. Type “yes” in its terminal. Then enter the code it shows here.",
 "Gespeichert": "Saved",
 "Abschnitte": "Sections",
 "Konto": "Account",
@@ -6167,32 +5587,22 @@ const EN = {
 "— automatisch erkennen —": "— detect automatically —",
 "Eigene Modelle": "Own models",
 "Modell speichern": "Save model",
-"„Plus“ gibt es nur mit Ultra. „Normal“ kannst du nutzen.": "“Plus” is only with Ultra. You can use “Normal”.",
 "Größe": "Size",
-"Gilt ab der nächsten virtual machine. Eine laufende bleibt, wie sie ist": "Applies from the next virtual machine. A running one stays as it is",
-"Normal — 2 Kerne, 3 GB Arbeitsspeicher, 4 GB Speicher": "Normal — 2 cores, 3 GB RAM, 4 GB storage",
-"Plus — 4 Kerne, 6 GB Arbeitsspeicher, 20 GB Speicher": "Plus — 4 cores, 6 GB RAM, 20 GB storage",
-"Normal reicht für fast alles. Plus lohnt sich für schwere Arbeit, zum Beispiel 3D mit Blender.": "Normal is enough for almost everything. Plus is worth it for heavy work, for example 3D with Blender.",
-"User mode — Aquaticy bedient die virtual machine wie ein Mensch": "User mode — Aquaticy uses the virtual machine like a person",
-"Die virtual machine wird ein Computer mit Internet. Aquaticy bedient ihn wie ein Mensch. Dein Heimnetz bleibt gesperrt. Absenden, Kaufen und Löschen nur mit deinem Ja. Passwörter, Zahlungsdaten, Captchas und „Alle akzeptieren“ fasst Aquaticy nie an.": "The virtual machine becomes a computer with internet. Aquaticy uses it like a person. Your home network stays blocked. Sending, buying and deleting only with your yes. Aquaticy never touches passwords, payment details, captchas or “Accept all”.",
 "Login-Apps": "Login apps",
-"— hier meldest du dich selbst an. Du siehst den Bildschirm, klickst hinein und tippst Name, Passwort oder Code selbst. Aquaticy tippt nie ein Passwort und liest nicht mit.": "— you sign in here yourself. You see the screen, click into it and type your name, password or code yourself. Aquaticy never types a password and doesn't read along.",
-"⌨ Selbst anmelden": "⌨ Sign in yourself",
-"Dafür braucht Aquaticy ein Modell, das Bilder versteht (siehe Modell). Und der Computer muss einmal eingerichtet werden:": "For this, Aquaticy needs a model that understands images (see Model). And the computer has to be set up once:",
-"Für den Browser reicht „Normal“. Für Browser und Office zusammen ist „Plus“ viel besser.": "“Normal” is enough for the browser. For browser and office together, “Plus” is much better.",
 "Speicher": "Memory",
 "Aquaticy darf sich Dinge merken": "Aquaticy may remember things",
-"Zum Beispiel, wo du wohnst, was du magst oder woran du arbeitest. Nur Text, verschlüsselt, höchstens 400 MB.": "For example where you live, what you like or what you're working on. Text only, encrypted, at most 400 MB.",
+"Zum Beispiel, wo du wohnst, was du magst oder woran du arbeitest. Nur Text, verschlüsselt, höchstens 20 MB.": "For example where you live, what you like or what you're working on. Text only, encrypted, at most 20 MB.",
 "Nachsehen, was Aquaticy weiß, und einzelne Dinge löschen.": "See what Aquaticy knows and delete single things.",
 "Was weißt du über mich?": "What do you know about me?",
+"Frag mich zu Sicherheit: Malware, Passwörter, sichere Einstellungen und Sicherheitslücken. Ich suche nicht in deinem Netz.": "Ask me about security: malware, passwords, safe settings and security holes. I don't search your network.",
+"Secure Pro beantwortet deine Fragen zu Sicherheit: Malware, Passwörter, sichere Einstellungen und Sicherheitslücken. Es sucht nicht in deinem Netz.": "Secure Pro answers your security questions: malware, passwords, safe settings and security holes. It doesn't search your network.",
+"Du nutzt Aquaticy Standard: Es antwortet ohne Sprachmodell. Mit einem eigenen API-Schlüssel beantwortet Aquaticy alles.": "You are using Aquaticy Standard: it answers without a language model. With your own API key Aquaticy answers everything.",
+"API-Schlüssel hinzufügen": "Add API key",
+"Hinweis schließen": "Close notice",
+"Ohne Sprachmodell und ohne Schlüssel": "Without a language model and without a key",
 "Mitlesen": "Read along",
-"Aktionen mitlesen": "Show actions",
-"Zeigt dir, wonach Aquaticy sucht und welche Seiten es öffnet. Gilt sofort, auch für die Antwort, die schon da ist. Die Gedanken selbst siehst du mit": "Shows you what Aquaticy searches for and which pages it opens. Applies right away, also to the answer that's already there. You see the thoughts themselves with",
+"KI-Schlüssel für NVIDIA NIM und Mistral, GitHub, Wetter, RSS-Feeds und mehr.": "AI keys for NVIDIA NIM and Mistral, GitHub, weather, RSS feeds and more.",
 "in der Modellauswahl.": "in the model picker.",
-"Auslastung · Ultra": "Load · Ultra",
-"Die Auslastungsanzeige gehört zu Ultra.": "The load display is part of Ultra.",
-"Auslastung des Rechners anzeigen": "Show the computer's load",
-"Wie viel Prozessor, Speicher, Festplatte und Grafikkarte gerade arbeiten. Läuft, solange das Fenster offen ist.": "How much the processor, memory, disk and graphics card are working. Runs while this window is open.",
 "Wie viel du fragen kannst, zählt in zwei Zeiträumen: einer": "How much you can ask is counted in two periods: a",
 "Sitzung": "session",
 "von fünf Stunden ab deiner ersten Nachricht und einer": "of five hours from your first message and a",
@@ -6268,25 +5678,12 @@ const EN = {
 ", dann auf": ", then click",
 "Deine Zugangsdaten sind verschlüsselt. Sie bleiben auf diesem Rechner. „Trennen“ löscht sie.": "Your sign-in details are encrypted. They stay on this computer. “Disconnect” deletes them.",
 "Zuhause & Netz": "Home & network",
-"Das gibt es nur mit Ultra: Geräte im Heimnetz finden, Home Assistant und die Lagerverwaltung.": "This is only in Ultra: finding devices in your home network, Home Assistant and the storage manager.",
 "Suchen": "Search",
-"Zugangsschlüssel (Token)": "Access key (token)",
 "Testen": "Test",
 "Aquaticy darf auch schalten": "Aquaticy may also switch things",
-"Auf Befehl ohne Rückfrage schalten": "Switch on command without asking",
-"Du sagst „Mach die Lampen an“, und es passiert gleich. Das gilt auch für Aufgaben von Coworkern. Nur für Licht, Steckdosen, Ventilatoren und Mediaplayer. Schlösser, Alarm, Tore, Heizung, Skripte und Szenen fragen weiter jedes Mal. Hat Aquaticy Webseiten oder Mails gelesen, fragt es auch hier. Braucht „Aquaticy darf auch schalten“.": "You say “Turn on the lamps”, and it happens right away. This also applies to coworker tasks. Only for lights, plugs, fans and media players. Locks, alarm, doors, heating, scripts and scenes still ask every time. If Aquaticy has read web pages or mails, it asks here too. Needs “Aquaticy may also switch things”.",
-"Aus: Aquaticy schaut nur nach. An: Es darf schalten, zum Beispiel Licht. Bei Schlössern, Alarm, Toren und Heizung fragt es trotzdem jedes Mal.": "Off: Aquaticy only looks. On: it may switch things, for example lights. For locks, alarms, gates and heating it still asks every time.",
 "Ins eigene Netz sehen dürfen": "May look into my own network",
-"Für Fragen wie „Welche Geräte sind in meinem WLAN?“ oder „Ist mein Drucker an?“. Aquaticy prüft nur, ob ein Gerät antwortet. Und nur in deinem Netz.": "For questions like “Which devices are on my Wi-Fi?” or “Is my printer on?”. Aquaticy only checks whether a device answers. And only on your network.",
-"Dein Netz (leer lassen = automatisch)": "Your network (leave empty = automatic)",
 "Lagerverwaltung": "Storage manager",
 "Adresse": "Address",
-"Räume → Möbel → Dinge, mit Nummern. Aquaticy kann dann sagen, wo etwas liegt und wie viel noch da ist.": "Rooms → furniture → items, with numbers. Aquaticy can then say where something is and how much is left.",
-"Was Aquaticy dort darf": "What Aquaticy may do there",
-"Nichts — abgeschaltet": "Nothing — switched off",
-"Nur lesen — suchen und nachsehen": "Read only — search and look",
-"Lesen und schreiben — auch anlegen und ändern": "Read and write — also create and change",
-"Löschen darf Aquaticy nie. Das machst nur du. Die Lagerverwaltung hat kein Passwort. „Nur lesen“ gilt nur für Aquaticy, nicht für andere in deinem Netz.": "Aquaticy may never delete. Only you do that. The storage manager has no password. “Read only” only applies to Aquaticy, not to others on your network.",
 "Suche": "Search",
 "Suchmaschine": "Search engine",
 "Offene Suche (kostenlos, ohne Schlüssel)": "Open search (free, no key)",
@@ -6349,10 +5746,6 @@ const EN = {
 "Der Speicher ließ sich nicht laden.": "Memory couldn't be loaded.",
 "Der Zählerstand ließ sich nicht laden.": "The usage couldn't be loaded.",
 "Die Add-ons ließen sich nicht laden.": "The add-ons couldn't be loaded.",
-"Die Datei ist nicht angekommen.": "The file didn't arrive.",
-"Die virtual machine antwortet nicht.": "The virtual machine isn't answering.",
-"Die virtual machine läuft, es liegt aber noch nichts darin.": "The virtual machine is running, but there's nothing in it yet.",
-"Die virtual machine öffnet die Seite …": "The virtual machine is opening the page …",
 "Einen Moment …": "One moment …",
 "Google ist in einem neuen Fenster offen. Füg danach die Adresse hier ein.": "Google is open in a new window. Then paste the address here.",
 "Ging nicht.": "Didn't work.",
@@ -6478,21 +5871,13 @@ const EN = {
 "virtual machine, Suche, Strukturieren und mehr": "virtual machine, search, structuring and more",
 "Dateien anhängen": "Attach files",
 "Keine Verbindung — Aquaticy macht von selbst weiter, sobald das Netz wieder da ist.": "No connection — Aquaticy carries on by itself as soon as the network is back.",
-"Neues Modell": "New model",
-"Ausprobieren": "Try it",
 "Fehler": "Error",
 "Da ist etwas schiefgelaufen.": "Something went wrong.",
 "Versuch es gleich noch einmal. Bleibt es so, lade die Seite neu.": "Try again in a moment. If it keeps happening, reload the page.",
 "Seite neu laden": "Reload page",
 "Bild des Coworkers": "Coworker picture",
 "Ist Auto-Upgrading an, können mehrfach bestätigte Auszüge auch in lokale Ollama-Modelltexte kommen (dort unverschlüsselt). Ist Wissen abgelaufen oder nicht mehr bestätigt, werden die betroffenen Fassungen zurückgezogen. Aquaticy versucht das Löschen so lange, bis der Ollama-Dienst erreichbar ist. Einzelheiten:": "If Auto-Upgrading is on, excerpts confirmed several times can also go into local Ollama model texts (unencrypted there). If knowledge expires or is no longer confirmed, the affected versions are withdrawn. Aquaticy keeps trying to delete them until the Ollama service is reachable. Details:",
-"Im Code-Modus darf die virtual machine dann ins Internet, etwa für pip install oder um eine Seite zu laden. Dein Heimnetz bleibt gesperrt. Bei Normal- und Pro-Konten hat sie gar kein Netz.": "In Code mode the virtual machine may then go online, for example for pip install or to load a page. Your home network stays blocked. With Normal and Pro accounts it has no network at all.",
 "Auch ins lokale Netz": "Also into the local network",
-"Nur mit Ultra: Die virtual machine erreicht dann auch Geräte in deinem Heimnetz (Router, Lager, Home Assistant …), nicht nur das Internet. Die Sperre fällt weg. Schalte das nur ein, wenn du es brauchst.": "Ultra only: the virtual machine then also reaches devices in your home network (router, storage, Home Assistant …), not just the internet. The block is lifted. Only turn this on if you need it.",
-"Aquaticy verbessert lokale Modelle mit Wissen, das mehrere Konten unabhängig bestätigt haben. Das Wissen kommt aus öffentlichen Quellen; Kontokennungen stehen nicht im Modelltext. Ein Lückentext-Test misst den Gewinn. Ab 5 % wird „Upgraden“ grün (gemma3:4b → 1.1), ab 30 % gibt es eine ganze neue Version (→ 2). Gilt für jedes Konto.": "Aquaticy improves local models with knowledge that several accounts confirmed independently. The knowledge comes from public sources; account IDs are not in the model text. A fill-in-the-gap test measures the gain. From 5 % “Upgrade” turns green (gemma3:4b → 1.1), from 30 % there is a whole new version (→ 2). Applies to every account.",
-"Auto-Upgrading gehört zu Ultra.": "Auto-Upgrading is part of Ultra.",
-"Jetzt trainieren": "Train now",
-"Modell, das verteilt laufen soll": "Model to run distributed",
 "IP-Adresse": "IP address",
 "kein Ortsfilter": "no location filter",
 "ohne Web": "without web",
@@ -6504,7 +5889,6 @@ const EN = {
 "Speicher an": "memory on",
 "Wie viele Helfer gleichzeitig suchen, wenn „Strukturieren“ an ist. Pro: 1 bis 50.": "How many helpers search at the same time when “Structure” is on. Pro: 1 to 50.",
 "Das gibt es nur mit einem Ultra-Konto.": "That's only available with an Ultra account.",
-"Bei Normal- und Pro-Konten hat die virtual machine kein Netz: weder Internet noch dein Heimnetz. Rechnen, Code ausführen und Dateien bearbeiten geht trotzdem.": "With Normal and Pro accounts the virtual machine has no network: neither the internet nor your home network. Calculating, running code and editing files still work.",
 "Das ließ sich nicht speichern.": "That couldn't be saved.",
 "Melde dich an, um deine Chats und Einstellungen auf diesem Gerät zu öffnen.": "Sign in to open your chats and settings on this device.",
 "Einrichtungscode": "Setup code",
@@ -6539,15 +5923,11 @@ const EN = {
 "Nur mit einem Ultra-Konto lassen sich die Rechts-Leitplanken nach Grundgesetz und BGB abschalten. Bei deinem Konto bleiben sie immer an.": "Only an Ultra account can turn off the legal guardrails based on the German Basic Law and Civil Code. On your account they always stay on.",
 "Bist du dir wirklich sicher?": "Are you really sure?",
 "Aquaticy prüft Anfragen dann nicht mehr gegen Grundgesetz und BGB und zieht Antworten nicht automatisch zurück. Feste Grenzen bleiben (Bezahlschranken, Heimnetz, Schalten, Google). Gilt sofort.": "Aquaticy then stops checking requests against the Basic Law and the Civil Code and stops automatic answer withdrawal. Fixed limits stay (paywalls, home network, switching devices, Google). Applies immediately.",
-"Der User mode gehört zu Ultra. Das ist die virtual machine als Desktop mit Internet. Die Add-ons ohne virtual machine kannst du trotzdem nutzen: GitHub, Wetter, RSS-Feeds, Tagesschau, Wikipedia, Währungsrechner, Feiertage.": "User mode is part of Ultra. It's the virtual machine as a desktop with internet. You can still use the add-ons without a virtual machine: GitHub, weather, RSS feeds, Tagesschau, Wikipedia, currency converter, public holidays.",
-"Nur mit Ultra darf die virtual machine auch ins Heimnetz. Bei Normal- und Pro-Konten hat sie gar kein Netz.": "Only with Ultra may the virtual machine reach the home network too. With Normal and Pro accounts it has no network at all.",
 "Programm und Anmeldung werden gelöscht. Eine laufende virtual machine startet dafür neu.": "The program and the sign-in are deleted. A running virtual machine restarts for this.",
 "Die Einrichtung und die Anmeldung werden gelöscht.": "The setup and the sign-in are deleted.",
 "Keine Anmeldung nötig.": "No sign-in needed.",
 "ghp_… oder github_pat_…": "ghp_… or github_pat_…",
 "Feed-Adressen, eine je Zeile": "Feed addresses, one per line",
-"Schalte es oben rechts in der Karte ein.": "Turn it on at the top right of the card.",
-"Die Anmeldung in der virtual machine wird gelöscht. Eine laufende virtual machine startet dafür neu.": "The sign-in in the virtual machine is deleted. A running virtual machine restarts for this.",
 "Rechte": "Permissions",
 "— was Aquaticy hier darf": "— what Aquaticy may do here",
 "arbeitet gerade …": "working …",
@@ -6561,70 +5941,31 @@ const EN = {
 "Schlüssel kopiert? Dann auf „Einfügen“ klicken.": "Key copied? Then click “Paste”.",
 "verknüpft": "linked",
 "Der Schlüssel wird gelöscht. Die Modelle sind dann nicht mehr wählbar.": "The key is deleted. The models can then no longer be chosen.",
-"Die virtual machine läuft gerade nicht. Öffne oben eine Adresse oder starte eine Login-App unter Add-ons → Anmelden.": "The virtual machine isn't running right now. Open an address above or start a login app under Add-ons → Sign in.",
-"Login-Apps laufen im User mode der virtual machine. Den gibt es nur mit Ultra.": "Login apps run in the virtual machine's User mode. That's only available with Ultra.",
 "Unbekannter Browser": "Unknown browser",
 "unbekanntes Gerät": "unknown device",
 "Überall sonst abmelden?": "Sign out everywhere else?",
 "Alle anderen Geräte und Browser werden abgemeldet. Dieses Gerät bleibt angemeldet.": "All other devices and browsers are signed out. This device stays signed in.",
 "Chats, Bilder, Uploads, Erinnerungen, Coworker, Einstellungen und eigene Schlüssel sind danach weg. Dein Konto bleibt.": "Chats, images, uploads, memories, tasks, settings and your own keys are gone afterwards. Your account stays.",
-"Tritt bei und übernimmt die Daten …": "Joining and taking over the data …",
-"Dieser Server ist nur auf diesem Rechner erreichbar. Für den Verbund starte ihn mit „aquaticy web --lan“.": "This server is only reachable on this computer. For the cluster, start it with “aquaticy web --lan”.",
-"Dieser Server ist der Master.": "This server is the master.",
-"Dieser Server ist Mitglied im Verbund.": "This server is a member of the cluster.",
-"Noch kein Verbund. Lade einen anderen Server ein. Dieser hier wird dann Master.": "No cluster yet. Invite another server. This one then becomes master.",
 "nicht erreichbar": "not reachable",
 "Konten übernehmen": "Take over accounts",
-"Nur, wenn der Server wirklich aus ist. Die anderen Server arbeiten dann mit ihrer letzten Kopie weiter. Die kann ein paar Sekunden alt sein. Kommt der Server zurück, gibt er die Konten ab.": "Only if the server is really off. The other servers then carry on with their last copy. It can be a few seconds old. If the server comes back, it hands the accounts over.",
-"Der Server behält seine Kopie der Daten, bekommt aber keine neuen mehr.": "The server keeps its copy of the data but gets no new data.",
-"Verbund auflösen": "Dissolve cluster",
-"Den Verbund auflösen?": "Dissolve the cluster?",
-"Den Verbund verlassen?": "Leave the cluster?",
-"Jeder Server arbeitet danach allein mit seiner Kopie der Daten weiter.": "Each server then carries on alone with its copy of the data.",
-"Auflösen": "Dissolve",
-"Verlassen": "Leave",
-"Keine weiteren Server gefunden.": "No other servers found.",
-"IP-Adresse oder voller MagicDNS-Name": "IP address or full MagicDNS name",
-"Über Tailscale: Trag die 100.x-Adresse oder den vollen Gerätenamen (…ts.net) und den Aquaticy-Port des anderen Servers ein. Die automatische Suche geht nur im lokalen Netz.": "Via Tailscale: enter the 100.x address or the full device name (…ts.net) and the other server's Aquaticy port. Automatic search only works on the local network.",
 "Gib eine private IP-Adresse oder den vollen MagicDNS-Namen deines Tailscale-Servers an (…ts.net).": "Enter a private IP address or your Tailscale server's full MagicDNS name (…ts.net).",
 "MagicDNS ist nicht erreichbar. Prüf Tailscale und MagicDNS oder nimm die Tailscale-IP-Adresse.": "MagicDNS can't be reached. Check Tailscale and MagicDNS, or use the Tailscale IP address.",
 "Der MagicDNS-Name darf nur auf Tailscale-Adressen zeigen.": "The MagicDNS name may only point to Tailscale addresses.",
 "Die Art der Adresse (IPv4 oder IPv6) passt nicht zu diesem Server. Nimm auf allen Servern IPv4 mit --lan oder passende IPv6-Adressen.": "The address type (IPv4 or IPv6) doesn't match this server. Use IPv4 with --lan on all servers, or matching IPv6 addresses.",
-"Schalte den Server-Verbund auch auf dem anderen Server ein.": "Turn on the server cluster on the other server too.",
 "schon in einem Verbund": "already in a cluster",
-"Bestätigen": "Confirm",
-"noch nicht bereit": "not ready yet",
-"Das schaltet der Master.": "The master switches this.",
-"Dieser Server rechnet am verteilten Modell mit.": "This server helps compute the distributed model.",
-"llama.cpp installiert sich beim Einschalten von selbst.": "llama.cpp installs itself when you turn this on.",
 "Warte auf die anderen Server …": "Waiting for the other servers …",
-"Verteilt das Modell auf die Server — bei großen Modellen kann das einige Minuten dauern …": "Distributing the model across the servers — with large models this can take a few minutes …",
-"Wähle zuerst ein Modell aus, das in Ollama auf diesem Server liegt.": "First choose a model that is in Ollama on this server.",
-"Alle Server rechnen dann zusammen an einem Modell. Der Master bedient alle Konten. Antworten, die gerade auf einem anderen Server laufen, werden dort noch fertig.": "All servers then compute one model together. The master serves all accounts. Answers currently running on another server still finish there.",
 "Einschalten": "Turn on",
 "Schlüssel einfügen": "Paste key",
 "Hauptmodell (noch nicht gespeichert)": "Main model (not saved yet)",
-"Die virtual machine läuft gerade nicht. Sie startet mit der nächsten Frage im Code-Modus und verschwindet 20 Minuten nach der letzten Frage.": "The virtual machine isn't running right now. It starts with the next question in Code mode and disappears 20 minutes after the last question.",
 "Der Speicher ist aus. Solange er aus ist, speichert Aquaticy AI nichts — und es steht auch nichts drin.": "Memory is off. While it's off, Aquaticy AI stores nothing — and there's nothing in it.",
 "Noch nichts gemerkt. Was du im Chat über dich erzählst, landet von selbst hier.": "Nothing remembered yet. What you say about yourself in a chat ends up here by itself.",
 "Wirklich alles vergessen, was Aquaticy AI über dich weiß?": "Really forget everything Aquaticy AI knows about you?",
 "Freiwillig: eine Seite, auf der Aquaticy zuerst sucht. Leer = überall suchen.": "Optional: a page Aquaticy searches first. Empty = search everywhere.",
 "z. B. neu oder gebraucht, Versand nach Deutschland": "e.g. new or used, shipping to Germany",
-"Nichts gefunden. Die Adresse siehst du oben im Browser, wenn Home Assistant offen ist.": "Nothing found. You'll see the address at the top of the browser when Home Assistant is open.",
 "Noch kein Konto verbunden.": "No account connected yet.",
 "Trag Client-ID und Client-Secret ein. Dann klick auf „Verbinden“.": "Enter the client ID and client secret. Then click “Connect”.",
-"Suche im Netz …": "Searching the network …",
-"Frage nach …": "Asking …",
 "Nicht gespeichert": "Not saved",
 "Auto-Upgrading läuft nur mit der Weboberfläche.": "Auto-Upgrading only runs with the web interface.",
-"Trainiert gerade …": "Training …",
-"An — trainiert von selbst, sobald es neues bestätigtes Wissen gibt.": "On — trains by itself as soon as there's new confirmed knowledge.",
-"Kein lokales Modell gefunden — Auto-Upgrading braucht Ollama.": "No local model found — Auto-Upgrading needs Ollama.",
-"Neueste Version — noch keine bessere": "Newest version — no better one yet",
-"Version überspringen?": "Skip version?",
-"Zurückziehen: diese Version wird wieder die neueste": "Withdraw: this version becomes the newest again",
-"Version zurückziehen?": "Withdraw version?",
-"Zurückziehen": "Withdraw",
 "Stärkstes Code-Modell wählen": "Choose the strongest code model",
 "Stärkstes Modell wählen": "Choose the strongest model",
 "Kein Modell gefunden. Trag unter Chat → Modelle und Verbindungen einen eigenen Schlüssel ein oder installiere ein Modell mit aquaticy install-model.": "No model found. Add your own key under Chat → Models and connections, or install a model with aquaticy install-model.",
@@ -6771,26 +6112,7 @@ const EN = {
 "Chat-Infos verbergen": "Hide chat details",
 "Infos": "Details",
 "Diesen Modus gibt es nicht mehr.": "This mode no longer exists.",
-"Mit Aquaticy schreiben": "Chat with Aquaticy",
-"Schreib Aquaticy hier wie auf der Website. Du bestimmst, wer schreiben darf und was Aquaticy tun darf.": "Write to Aquaticy here like on the website. You decide who may write and what Aquaticy may do.",
-"Wer darf schreiben?": "Who may write?",
-"Freigegebene Nummern oder Namen, eine je Zeile. Diese Chats gelten wie du: Aquaticy darf dort deine Dienste nutzen.": "Approved numbers or names, one per line. These chats count like you: Aquaticy may use your services there.",
-"Freigegebene Nummern oder Namen, eine je Zeile": "Approved numbers or names, one per line",
-"Im Add-on steht „Nur Einzelchats“. Aquaticy schreibt deshalb nur in Einzelchats.": "The add-on says “Single chats only”. So Aquaticy only writes in single chats.",
-"Was darf Aquaticy hier nutzen?": "What may Aquaticy use here?",
-"Das gilt nur für dich und freigegebene Nummern. Alle anderen bekommen nur Web und Rechnen.": "This applies only to you and approved numbers. Everyone else gets only web and calculator.",
-"Wie oft nachsehen?": "How often to check?",
-"Bereit. Schreib jetzt im Messenger.": "Ready. Write in the messenger now.",
-"Antworten in dieser Stunde:": "Replies this hour:",
-"Startet … Beim ersten Blick merkt sich Aquaticy nur, was schon im Chat steht. Schreib erst, wenn „Bereit“ dasteht.": "Starting … On the first look, Aquaticy only notes what is already in the chat. Write only once it says “Ready”.",
 "Ausschalten": "Turn off",
-"Gut zu wissen": "Good to know",
-"Aquaticy sieht den Messenger über den Bildschirm der virtual machine. Antworten brauchen deshalb etwas Zeit.": "Aquaticy sees the messenger through the screen of the virtual machine. So replies take a little time.",
-"Antworten beginnen mit [Aquaticy]. So erkennt Aquaticy seine eigenen Nachrichten.": "Replies start with [Aquaticy]. That is how Aquaticy recognises its own messages.",
-"In Gruppen antwortet Aquaticy nur, wenn eine Nachricht mit „Aquaticy“ beginnt.": "In groups, Aquaticy only replies when a message starts with “Aquaticy”.",
-"Zum Lesen öffnet Aquaticy Chats. Andere sehen dann, dass die Nachricht gelesen wurde.": "To read, Aquaticy opens chats. Others then see that the message was read.",
-"Rückfragen kann Aquaticy hier nicht stellen. Was eine Bestätigung braucht, machst du in der App.": "Aquaticy can't ask follow-up questions here. What needs a confirmation, you do in the app.",
-"Messenger erlauben oft keine Programme, die für dich schreiben. Dein Konto könnte gesperrt werden.": "Messengers often don't allow programs that write for you. Your account could be blocked.",
 "Nur mein eigener Chat": "Only my own chat",
 "Mein Chat und diese Nummern": "My chat and these numbers",
 "Alle Einzelchats": "All single chats",
@@ -6801,29 +6123,7 @@ const EN = {
 "Die Messenger-Brücke gehört zu Ultra.": "The messenger bridge is part of Ultra.",
 "Der User mode ist aus. Schalte ihn unter „virtual machine“ ein.": "User mode is off. Turn it on under “virtual machine”.",
 "Aquaticy braucht ein Vision-Modell, um den Messenger zu sehen (Modelle und Verbindungen → Vision-Modell).": "Aquaticy needs a vision model to see the messenger (Models and connections → Vision model).",
-"Eine Nummer ist sicherer als ein Name. Einen Namen kann sich bei Signal jeder geben.": "A number is safer than a name. Anyone can pick any name on Signal.",
-"Klappt es nicht? Dann bedienst du den Bildschirm der virtual machine selbst.": "Not working? Then you use the screen of the virtual machine yourself.",
-"Bildschirm selbst bedienen": "Use the screen yourself",
-"Das Fenster ist noch nicht offen. Warte kurz.": "The window is not open yet. Wait a moment.",
-"Ein anderes Fenster ist vorn. Aquaticy versucht es gleich noch einmal.": "Another window is in front. Aquaticy will try again in a moment.",
-"Das Fenster zeigt noch keinen QR-Code. Warte kurz.": "The window does not show a QR code yet. Wait a moment.",
-"Der Browser ist abgestürzt. Aquaticy startet ihn neu. Warte kurz.": "The browser crashed. Aquaticy is restarting it. Wait a moment.",
-"Der Browser stürzt immer wieder ab. Gib der virtual machine mehr Speicher oder melde dich selbst an.": "The browser keeps crashing. Give the virtual machine more memory or sign in yourself.",
-"Ohne virtual machine verbinden": "Connect without a virtual machine",
-"Aquaticy wird wie ein weiteres Gerät an dein Handy gekoppelt. Du scannst einen QR-Code.": "Aquaticy is linked to your phone like another device. You scan a QR code.",
-"Noch nicht verbunden.": "Not connected yet.",
 "Verbunden.": "Connected.",
-"Die Kopplung wird gelöscht. Entferne Aquaticy am Handy auch unter „Verknüpfte Geräte“.": "The link will be deleted. Also remove Aquaticy on your phone under “Linked devices”.",
-"Die Verbindung startet. Der QR-Code erscheint gleich hier.": "The connection is starting. The QR code will appear here shortly.",
-"Scanne den QR-Code mit deinem Handy. Es klappt von selbst weiter.": "Scan the QR code with your phone. It continues by itself.",
-"Freigegebene Nummern mit Landesvorwahl, eine je Zeile, zum Beispiel +49 151 2345678. Diese Nummern gelten wie du: Aquaticy darf dort deine Dienste nutzen. Sie bekommen auch die Meldungen von Secure Pro und den Coworkern.": "Approved numbers with country code, one per line, for example +49 151 2345678. These numbers count like you: Aquaticy may use your services there. They also get the messages from Secure Pro and the coworkers.",
-"Hier zählt die echte Nummer des Absenders, mit Landesvorwahl. Namen und Nummern wie 0151 … passen nicht.": "Only the real number of the sender counts here, with country code. Names and numbers like 0151 … don't match.",
-"Die Verbindung steht noch nicht. Warte kurz.": "The connection is not up yet. Wait a moment.",
-"Gekoppelt, aber die Brücke ist aus. Klick auf „Einschalten“, damit Aquaticy antwortet.": "Linked, but the bridge is off. Click “Einschalten” (turn on) so Aquaticy replies.",
-"Aquaticy ist direkt mit deinem Handy gekoppelt. Antworten kommen sofort.": "Aquaticy is linked directly to your phone. Replies come right away.",
-"Aquaticy zeigt „gelesen“ und „schreibt …“, sobald es deine Nachricht annimmt.": "Aquaticy shows “read” and “typing …” as soon as it accepts your message.",
-"Befehle mit / gehen auch hier. Schreib /help, dann siehst du alle.": "Commands with / work here too. Write /help to see them all.",
-"Meldungen deiner Coworker kommen in deinen eigenen Chat, solange die Brücke an ist.": "Messages from your coworkers arrive in your own chat as long as the bridge is on.",
 "WhatsApp hat die Kopplung beendet (am Handy abgemeldet).": "WhatsApp ended the link (signed out on the phone).",
 "Das Koppeln hat nicht geklappt. Versuch es erneut.": "Linking didn't work. Try again.",
 "Der QR-Code ist abgelaufen. Verbinde noch einmal.": "The QR code expired. Connect again.",
@@ -7777,13 +7077,10 @@ document.addEventListener("keydown", (e) => {
   if (voiceBox.classList.contains("open")) { closeOverlay(voiceBox); return; }
   if (hoeren) { hoerenStoppen(false); return; }
   if (guardBox.classList.contains("open")) { guardSchliessen(false); return; }
-  if (qrBox.classList.contains("open")) { qrDialogSchliessen(); return; }
-  if (screenBox.classList.contains("open")) { bildschirmSchliessen(); return; }
   if (addonBox.classList.contains("open")) { addonsSchliessen(); return; }
   if (coworkerBox.classList.contains("open")) { coworkerSchliessen(); return; }
   if (minwinOffen) { minwinSchliessen(); return; }
   if (pickerOpen()) { closePicker(true); return; }
-  if (vmBox.classList.contains("open")) { closeOverlay(vmBox); return; }
   if (memBox.classList.contains("open")) { closeOverlay(memBox); return; }
   if (themeBox.classList.contains("open")) { closeTheme(); return; }
   if (modelOverlay.classList.contains("open")) { closeModelSettings(); return; }
@@ -7876,15 +7173,8 @@ let devGeladen = false;
 let devSichtbar = false;
 new IntersectionObserver((eintraege) => {
   devSichtbar = eintraege.some(e => e.isIntersecting);
-  if (!devSichtbar || !overlay.classList.contains("open")){
-    clearTimeout(upgradeTakt);
-    return;
-  }
-  if (devGeladen){ upgradeLaden(); return; }
+  if (!devSichtbar || !overlay.classList.contains("open") || devGeladen) return;
   devGeladen = true;
-
-  if (kontoUltra) verbundLaden(); else verbundZeigen({});
-  upgradeLaden();
   kontenLaden();
 }, { root: form.closest(".sheet") }).observe($("#dev-settings"));
 function fill(values, target = form){
@@ -7917,26 +7207,18 @@ async function showSettings(){
   $("#provider").value = "";
   $("#provider-note").textContent = "";
   $("#model-note").textContent = "";
-  $("#usage-note").innerHTML = "";
   api("/api/memory").then(r => r.json()).then(d => showStorage(d.usage)).catch(() => {});
   loadUsage();
   loadAccount(cfg.account);
   loadLearning();
-  $("#showtrace").checked = document.body.classList.contains("tracing");
-  const wanted = START.load === true && kontoUltra;
-  $("#showload").checked = wanted;
-  if (wanted) $("#showload").dispatchEvent(new Event("change"));
   eigeneModelleZeigen();
   $("#probe-note").textContent = ""; $("#probe-note").className = "note";
   $("#google-step").hidden = true;
   showGoogle(cfg.google);
-  $("#lager-note").textContent = ""; $("#lager-note").className = "note";
-  $("#ha-hint").textContent = cfg.ha_connected ? "(gesetzt)" : "";
   showLegalRules(cfg.legal_rules || []);
 
   devGeladen = false;
   $("#savenote").textContent = ""; $("#savenote").className = "note";
-  $("#ha-note").textContent = ""; $("#ha-note").className = "note";
   openOverlay(overlay);
   featureLoad();
 }
@@ -7987,31 +7269,9 @@ async function loadAccount(account){
 
 
   const ultra = account?.ultra === true;
-  const section = $("#pro-features");
-  section.classList.toggle("locked-feature", !ultra);
-  $("#pro-lock").hidden = ultra;
-  section.querySelectorAll("input,select,button").forEach(field => {
-    if (!field.closest("#secure-section")) field.disabled = !ultra;
-  });
-
-  const system = $("#pro-system");
-  system.hidden = !ultra;
-  $("#system-lock").hidden = true;
-  system.querySelectorAll("input,button").forEach(field => { field.disabled = !ultra; });
-  if (!ultra){
-    stopLoad();
-    $("#showload").checked = false;
-    $("#usage-note").innerHTML = "";
-  }
 
   kontoUltra = ultra;
 
-  for (const id of ["usermode", "vminternet", "vmlan"]){
-    const schalter = $("#" + id);
-
-
-    schalter.classList.toggle("gesperrt", !ultra);
-  }
   document.querySelectorAll("[data-lock]").forEach(tag => { tag.hidden = ultra; });
   ladeSicherheit();
 
@@ -8023,11 +7283,6 @@ async function loadAccount(account){
     feld.title = ultra ? "" : "Diese Adresse legt der Betreiber fest. Nur Ultra kann sie ändern.";
   }
   if (!ultra) $("#legalguard").checked = true;
-  const plus = form.elements["AQUATICY_VM_SIZE"].querySelector('option[value="plus"]');
-  plus.disabled = !ultra;
-  $("#vm-plus-lock").hidden = ultra;
-  if (!ultra && form.elements["AQUATICY_VM_SIZE"].value === "plus")
-    form.elements["AQUATICY_VM_SIZE"].value = "normal";
   try {
     const data = await (await api("/api/account")).json();
 
@@ -8263,44 +7518,7 @@ $("#legalguard").addEventListener("click", async (e) => {
 
 
 
-$("#usermode").addEventListener("click", async (e) => {
-  if (kontoUltra || !e.currentTarget.checked) return;
-  e.preventDefault();
-  await guardDialog({
-    title: "Das gibt es nur mit einem Ultra-Konto.",
-    text: "Der User mode gehört zu Ultra. Das ist die virtual machine als Desktop mit Internet. "
-      + "Die Add-ons ohne virtual machine kannst du trotzdem nutzen: GitHub, Wetter, RSS-Feeds, "
-      + "Tagesschau, Wikipedia, Währungsrechner, Feiertage.",
-    ok: "Verstanden",
-  });
-});
-
-
-
-$("#vminternet").addEventListener("click", async (e) => {
-  if (kontoUltra || !e.currentTarget.checked) return;
-  e.preventDefault();
-  e.currentTarget.checked = false;
-  await guardDialog({
-    title: "Das gibt es nur mit einem Ultra-Konto.",
-    text: "Bei Normal- und Pro-Konten hat die virtual machine kein Netz: weder Internet noch dein "
-      + "Heimnetz. Rechnen, Code ausführen und Dateien bearbeiten geht trotzdem.",
-    ok: "Verstanden",
-  });
-});
-$("#vmlan").addEventListener("click", async (e) => {
-  if (kontoUltra || !e.currentTarget.checked) return;
-  e.preventDefault();
-  await guardDialog({
-    title: "Das gibt es nur mit einem Ultra-Konto.",
-    text: "Nur mit Ultra darf die virtual machine auch ins Heimnetz. Bei Normal- und Pro-Konten "
-      + "hat sie gar kein Netz.",
-    ok: "Verstanden",
-  });
-});
-
-
-const addonBox = $("#addonbox"), screenBox = $("#screenbox");
+const addonBox = $("#addonbox");
 let addonDaten = null, addonTakt = null;
 
 async function addonsLaden(){
@@ -8402,7 +7620,6 @@ function addonKarte(a){
     kopf.appendChild(schalter);
   }
   karte.appendChild(kopf);
-  if (a.native) karte.appendChild(addonNative(a));
 
   const zeile = document.createElement("div");
   zeile.className = "addon-row";
@@ -8460,7 +7677,6 @@ function addonKarte(a){
   if (a.installed && !laeuft && (a.rechte_katalog || []).length)
     karte.appendChild(addonRechte(a));
 
-  if ((a.installed && !laeuft || a.native?.linked) && a.bruecke) karte.appendChild(addonBruecke(a));
 
   if ((a.inhalt || []).length){
     const mehr = document.createElement("details");
@@ -8532,40 +7748,8 @@ function addonAnmeldung(a){
     zeile.appendChild(knopf("Feeds speichern", "primary", (b) =>
       addonTun({ action: "feeds", id: a.id, feeds: feld.value.split("\n") }, b)));
   } else {
-    wie.textContent = angemeldet
-      ? `Angemeldet (${a.login.who || "laut dir"}).`
-      : a.anmelden;
-    zeile.appendChild(knopf(angemeldet ? "QR-Code anzeigen" : "Anmelden", angemeldet ? "" : "primary",
-      async (b) => {
-        if (!a.usable){
-          guardDialog({ title: `${a.name} ist gerade nicht nutzbar.`, text: a.reason,
-                        ok: "Verstanden" });
-          return;
-        }
-        if (!a.enabled){
-          guardDialog({ title: `${a.name} ist ausgeschaltet.`,
-                        text: "Schalte es oben rechts in der Karte ein.", ok: "Verstanden" });
-          return;
-        }
-        $("#addon-note").textContent = "Die virtual machine startet — das dauert beim ersten Mal "
-          + "etwas …";
-        await qrAnmelden(a);
-      }));
-    if (angemeldet){
-      zeile.appendChild(knopf("Öffnen", "", async b => {
-        const ok = await addonTun({action:"login", id:a.id}, b);
-        if (ok) bildschirmOeffnen(null);
-      }));
-      zeile.appendChild(knopf("Abmelden", "", async (b) => {
-        const weiter = await guardDialog({
-          title: `Von ${a.name} abmelden?`,
-          text: "Die Anmeldung in der virtual machine wird gelöscht. Eine laufende virtual machine startet "
-            + "dafür neu.",
-          ok: "Abmelden", cancel: "Abbrechen",
-        });
-        if (weiter) addonTun({ action: "logout", id: a.id }, b);
-      }));
-    }
+    // 16.0.0 (Aquaticy-Test): keine Anmeldung in einer virtual machine mehr.
+    wie.textContent = a.anmelden || "";
   }
   box.appendChild(zeile);
   return box;
@@ -8606,258 +7790,6 @@ function addonRechte(a){
 }
 
 
-
-function addonNative(a){
-  const n = a.native;
-  const box = document.createElement("div");
-  box.className = "addon-rechte addon-native";
-  const titel = document.createElement("div");
-  titel.className = "how"; titel.innerHTML = "<b></b>";
-  titel.firstChild.textContent = "Ohne virtual machine verbinden";
-  const wie = document.createElement("div");
-  wie.className = "addon-hint";
-  wie.textContent = "Aquaticy wird wie ein weiteres Gerät an dein Handy gekoppelt. Du scannst einen QR-Code.";
-  box.append(titel, wie);
-  const stand = document.createElement("div");
-  stand.className = "note addon-status";
-  const zeile = document.createElement("div");
-  zeile.className = "addon-row";
-  if (!n.available){
-    stand.textContent = n.hinweis;
-  } else if (n.linked){
-    if (n.state === "fehler" && n.error){
-      stand.classList.add("bad"); stand.textContent = n.error;
-    } else {
-      stand.classList.add("ok");
-      stand.textContent = n.who ? `Verbunden mit ${n.who}.` : "Verbunden.";
-    }
-    zeile.appendChild(knopf("Trennen", "", async (b) => {
-      const weiter = await guardDialog({
-        title: `Von ${a.name} trennen?`,
-        text: "Die Kopplung wird gelöscht. Entferne Aquaticy am Handy auch unter „Verknüpfte Geräte“.",
-        ok: "Trennen", cancel: "Abbrechen",
-      });
-      if (weiter) await nativeTrennen(a, b);
-    }));
-  } else {
-    stand.textContent = "Noch nicht verbunden.";
-    zeile.appendChild(knopf("Verbinden", "primary", () => nativeAnmelden(a)));
-  }
-  box.append(stand, zeile);
-  return box;
-}
-
-const brueckenEntwurf = new Map();
-function addonBruecke(a){
-  const b = a.bruecke, st = b.status, an = !!b.config.an, direkt = !!b.direkt;
-  if (!brueckenEntwurf.has(a.id)){
-    const c = b.config;
-    brueckenEntwurf.set(a.id, { wer: c.wer, nummern: [...c.nummern], takt: c.takt,
-                                dienste: { ...c.dienste } });
-  }
-  const entwurf = brueckenEntwurf.get(a.id);
-  const felder = () => ({ wer: entwurf.wer, nummern: entwurf.nummern, takt: entwurf.takt,
-                          dienste: entwurf.dienste });
-  const box = document.createElement("div");
-  box.className = "addon-rechte addon-bruecke";
-  const titel = document.createElement("div");
-  titel.className = "how"; titel.innerHTML = "<b></b>";
-  titel.firstChild.textContent = "Mit Aquaticy schreiben";
-  const wie = document.createElement("div");
-  wie.className = "addon-hint";
-  wie.textContent = "Schreib Aquaticy hier wie auf der Website. Du bestimmst, wer schreiben darf "
-    + "und was Aquaticy tun darf.";
-  box.append(titel, wie);
-
-
-  const werZeile = document.createElement("div");
-  werZeile.className = "recht";
-  const werName = document.createElement("span");
-  werName.className = "recht-name"; werName.textContent = "Wer darf schreiben?";
-  const wer = document.createElement("select");
-  wer.setAttribute("aria-label", `${a.name}: Wer darf schreiben?`);
-  for (const o of b.katalog.wer){
-    const opt = document.createElement("option");
-    opt.value = o.value; opt.textContent = o.label;
-    wer.appendChild(opt);
-  }
-  wer.value = entwurf.wer;
-  werZeile.append(werName, wer);
-  box.appendChild(werZeile);
-
-
-  const nummern = document.createElement("div");
-  const nummernNote = document.createElement("div");
-  nummernNote.className = "addon-hint";
-  nummernNote.textContent = direkt
-    ? "Freigegebene Nummern mit Landesvorwahl, eine je Zeile, zum Beispiel +49 151 2345678. Diese Nummern gelten wie du: Aquaticy darf dort deine Dienste nutzen. "
-      + "Sie bekommen auch die Meldungen von Secure Pro und den Coworkern."
-    : "Freigegebene Nummern oder Namen, eine je Zeile. Diese Chats gelten "
-    + "wie du: Aquaticy darf dort deine Dienste nutzen.";
-  const nummernFeld = document.createElement("textarea");
-  nummernFeld.rows = 3; nummernFeld.value = entwurf.nummern.join("\n");
-  nummernFeld.placeholder = "+49 151 2345678";
-  nummernFeld.setAttribute("aria-label", "Freigegebene Nummern oder Namen, eine je Zeile");
-  nummernFeld.addEventListener("input", () => {
-    entwurf.nummern = nummernFeld.value.split("\n");
-  });
-  const nummernWarnung = document.createElement("div");
-  nummernWarnung.className = "addon-hint";
-  nummernWarnung.textContent = direkt
-    ? "Hier zählt die echte Nummer des Absenders, mit Landesvorwahl. Namen und Nummern wie 0151 … passen nicht."
-    : "Eine Nummer ist sicherer als ein Name. Einen Namen kann sich bei "
-    + "Signal jeder geben.";
-  nummern.append(nummernNote, nummernFeld, nummernWarnung);
-  box.appendChild(nummern);
-
-
-  const gruppenNote = document.createElement("div");
-  gruppenNote.className = "addon-hint";
-  gruppenNote.textContent = "Im Add-on steht „Nur Einzelchats“. Aquaticy schreibt deshalb nur in "
-    + "Einzelchats.";
-  box.appendChild(gruppenNote);
-  const zeigeWer = () => {
-    nummern.hidden = entwurf.wer === "selbst";
-    gruppenNote.hidden = direkt || !(entwurf.wer === "gruppen" && a.rechte && a.rechte.wo !== "alle");
-  };
-  wer.addEventListener("change", () => { entwurf.wer = wer.value; zeigeWer(); });
-  zeigeWer();
-
-
-  const nutzen = document.createElement("div");
-  nutzen.className = "how"; nutzen.textContent = "Was darf Aquaticy hier nutzen?";
-  const nutzenNote = document.createElement("div");
-  nutzenNote.className = "addon-hint";
-  nutzenNote.textContent = "Das gilt nur für dich und freigegebene Nummern. Alle anderen "
-    + "bekommen nur Web und Rechnen.";
-  box.append(nutzen, nutzenNote);
-  for (const dienst of b.katalog.dienste){
-    const zeile = document.createElement("div");
-    zeile.className = "recht";
-    const name = document.createElement("span");
-    name.className = "recht-name"; name.textContent = dienst.label;
-    const gruppe = document.createElement("div");
-    gruppe.className = "seg"; gruppe.setAttribute("role", "radiogroup");
-    gruppe.setAttribute("aria-label", `${a.name}: ${dienst.label}`);
-    for (const stufe of dienst.stufen){
-      const knopfStufe = document.createElement("button");
-      knopfStufe.type = "button"; knopfStufe.textContent = stufe.label;
-      knopfStufe.setAttribute("role", "radio");
-      const markiere = () => {
-        for (const x of gruppe.children){
-          const dran = x === knopfStufe;
-          x.classList.toggle("on", dran);
-          x.setAttribute("aria-checked", String(dran));
-        }
-      };
-      const dran = entwurf.dienste[dienst.key] === stufe.value;
-      knopfStufe.setAttribute("aria-checked", String(dran));
-      if (dran) knopfStufe.classList.add("on");
-      knopfStufe.addEventListener("click", () => {
-        entwurf.dienste[dienst.key] = stufe.value; markiere();
-      });
-      gruppe.appendChild(knopfStufe);
-    }
-    zeile.append(name, gruppe);
-    box.appendChild(zeile);
-  }
-
-
-  const taktZeile = document.createElement("div");
-  taktZeile.className = "recht";
-  const taktName = document.createElement("span");
-  taktName.className = "recht-name"; taktName.textContent = "Wie oft nachsehen?";
-  const takt = document.createElement("select");
-  takt.setAttribute("aria-label", `${a.name}: Wie oft nachsehen?`);
-  for (const o of b.katalog.takt){
-    const opt = document.createElement("option");
-    opt.value = String(o.value); opt.textContent = o.label;
-    takt.appendChild(opt);
-  }
-  takt.value = String(entwurf.takt);
-  takt.addEventListener("change", () => { entwurf.takt = Number(takt.value); });
-  taktZeile.append(taktName, takt);
-  if (!direkt) box.appendChild(taktZeile);
-
-
-  const stand = document.createElement("div");
-  stand.className = "note addon-status";
-  if (!an && b.problem){
-    stand.textContent = b.problem;
-  } else if (an && st.fehler && !st.ok){
-    stand.classList.add("bad"); stand.textContent = st.fehler;
-  } else if (an && st.bereit){
-    stand.classList.add("ok");
-    stand.textContent = "Bereit. Schreib jetzt im Messenger.";
-    const zahl = document.createElement("span");
-    zahl.textContent = ` ${st.diese_stunde} / ${st.grenze}`;
-    const zahlName = document.createElement("span");
-    zahlName.textContent = " Antworten in dieser Stunde:";
-    stand.append(zahlName, zahl);
-  } else if (!an && direkt){
-    stand.textContent = "Gekoppelt, aber die Brücke ist aus. Klick auf „Einschalten“, "
-      + "damit Aquaticy antwortet.";
-  } else if (an && direkt){
-    stand.textContent = "Die Verbindung steht noch nicht. Warte kurz.";
-  } else if (an){
-    stand.textContent = "Startet … Beim ersten Blick merkt sich Aquaticy nur, was schon im "
-      + "Chat steht. Schreib erst, wenn „Bereit“ dasteht.";
-  }
-  if (stand.textContent) box.appendChild(stand);
-
-  const zeile = document.createElement("div");
-  zeile.className = "addon-row";
-  const speichern = (extra, b2) => addonTun(
-    { action: "bridge", id: a.id, bruecke: { ...felder(), ...extra } }, b2)
-    .then(ok => { if (ok) brueckenEntwurf.delete(a.id); return ok; });
-  if (an){
-    zeile.appendChild(knopf("Speichern", "primary", (k) => speichern({}, k)));
-    zeile.appendChild(knopf("Ausschalten", "", (k) =>
-      addonTun({ action: "bridge", id: a.id, bruecke: { an: false } }, k)
-        .then(ok => { if (ok) brueckenEntwurf.delete(a.id); })));
-  } else {
-    const ein = knopf("Einschalten", "primary", (k) => speichern({ an: true }, k));
-    ein.disabled = !!b.problem;
-    zeile.appendChild(ein);
-    zeile.appendChild(knopf("Speichern", "", (k) => speichern({}, k)));
-  }
-  box.appendChild(zeile);
-
-  const mehr = document.createElement("details");
-  mehr.className = "addon-inhalt";
-  const mehrTitel = document.createElement("summary");
-  mehrTitel.textContent = "Gut zu wissen";
-  const liste = document.createElement("ul");
-  for (const punkt of direkt ? [
-    "Aquaticy ist direkt mit deinem Handy gekoppelt. Antworten kommen sofort.",
-    "Antworten beginnen mit [Aquaticy]. So erkennt Aquaticy seine eigenen Nachrichten.",
-    "Aquaticy zeigt „gelesen“ und „schreibt …“, sobald es deine Nachricht annimmt.",
-    "Befehle mit / gehen auch hier. Schreib /help, dann siehst du alle.",
-    "Meldungen deiner Coworker kommen in deinen eigenen Chat, solange die Brücke an ist.",
-    "In Gruppen antwortet Aquaticy nur, wenn eine Nachricht mit „Aquaticy“ beginnt.",
-    "Rückfragen kann Aquaticy hier nicht stellen. Was eine Bestätigung braucht, machst du "
-      + "in der App.",
-    "Messenger erlauben oft keine Programme, die für dich schreiben. Dein Konto könnte "
-      + "gesperrt werden.",
-  ] : [
-    "Aquaticy sieht den Messenger über den Bildschirm der virtual machine. Antworten "
-      + "brauchen deshalb etwas Zeit.",
-    "Antworten beginnen mit [Aquaticy]. So erkennt Aquaticy seine eigenen Nachrichten.",
-    "In Gruppen antwortet Aquaticy nur, wenn eine Nachricht mit „Aquaticy“ beginnt.",
-    "Zum Lesen öffnet Aquaticy Chats. Andere sehen dann, dass die Nachricht gelesen wurde.",
-    "Rückfragen kann Aquaticy hier nicht stellen. Was eine Bestätigung braucht, machst du "
-      + "in der App.",
-    "Messenger erlauben oft keine Programme, die für dich schreiben. Dein Konto könnte "
-      + "gesperrt werden.",
-  ]){
-    const li = document.createElement("li");
-    li.textContent = punkt;
-    liste.appendChild(li);
-  }
-  mehr.append(mehrTitel, liste);
-  box.appendChild(mehr);
-  return box;
-}
 
 function zeigeAddons(){
   const liste = $("#addon-list");
@@ -9497,10 +8429,10 @@ function addonKonto(a){
   }
   const anmelden = document.createElement("div");
   anmelden.className = "anmelden";
-  for (const weg of k.sign_in || []){
+  if (k.get_key){
     const link = document.createElement("a");
     link.className = "btn"; link.href = k.get_key; link.target = "_blank"; link.rel = "noopener";
-    link.textContent = weg.label;
+    link.textContent = sp(`Schlüssel bei ${k.company} holen`, `Get a key from ${k.company}`);
     link.addEventListener("click", () => { kontoWartet = a.id; box.classList.add("wartet"); });
     anmelden.appendChild(link);
   }
@@ -9537,334 +8469,6 @@ addonBox.addEventListener("click", (e) => { if (e.target === addonBox) addonsSch
 
 
 
-
-let qrAddon = null, qrToken = "", qrGeneration = 0, qrTimer = null, qrRequest = null;
-let qrFehler = 0, qrLeer = 0;
-const QR_GRUENDE = {
-  kein_fenster: "Das Fenster ist noch nicht offen. Warte kurz.",
-  nicht_vorn: "Ein anderes Fenster ist vorn. Aquaticy versucht es gleich noch einmal.",
-  kein_qr: "Das Fenster zeigt noch keinen QR-Code. Warte kurz.",
-  neustart: "Der Browser ist abgestürzt. Aquaticy startet ihn neu. Warte kurz.",
-  abgestuerzt: "Der Browser stürzt immer wieder ab. Gib der virtual machine mehr Speicher oder melde dich selbst an.",
-};
-const QR_LEER_BIS_AUSWEG = 5;
-function qrAusweg(zeigen){
-  $("#qr-fallback").hidden = !zeigen;
-  $("#qr-screen").hidden = !zeigen;
-}
-const qrBox = $("#qrbox");
-function qrAbmelden(id, token){
-  if (!token) return;
-  api("/api/addons/qr", {method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({id, token, close:true})}).catch(() => {});
-}
-function qrSchliessen(){
-  qrGeneration++;
-  clearTimeout(qrTimer);
-  qrRequest?.abort(); qrRequest = null;
-  if (qrAddon) qrAbmelden(qrAddon.id, qrToken);
-  qrAddon = null; qrToken = ""; qrFehler = 0; qrLeer = 0;
-  qrAusweg(false);
-  $("#qr-image").removeAttribute("src"); $("#qr-image").hidden = true;
-  closeOverlay(qrBox);
-}
-async function qrAnmelden(addon){
-  nativeSchliessen(false);
-  qrSchliessen();
-  const generation = qrGeneration;
-  qrAddon = addon;
-  $("#qr-title").textContent = addon.id === "signal" ? "Signal verbinden" : "WhatsApp Web verbinden";
-  $("#qr-help").textContent = addon.id === "signal"
-    ? "Öffne Signal auf deinem Handy. Wähle Einstellungen → Gekoppelte Geräte → +. Scanne dann diesen QR-Code."
-    : "Öffne WhatsApp auf deinem Handy. Wähle Einstellungen → Verknüpfte Geräte → Gerät hinzufügen. Scanne dann diesen QR-Code.";
-  $("#qr-status").textContent = "Die Anmeldung startet. Der QR-Code erscheint gleich hier.";
-  $("#qr-done").disabled = true;
-  $("#qr-retry").hidden = true;
-  qrAusweg(false);
-  openOverlay(qrBox); $("#qr-close").focus();
-  const data = await addonTun({action:"login", id:addon.id}, null);
-  if (generation !== qrGeneration){
-    if (data) qrAbmelden(addon.id, data.qr_token);
-    return;
-  }
-  if (!data){
-    $("#qr-status").textContent = $("#addon-note").textContent;
-    $("#qr-retry").hidden = false;
-    qrAusweg(true);
-    return;
-  }
-  qrToken = data.qr_token;
-  $("#qr-done").disabled = false;
-  qrAktualisieren();
-}
-async function qrAktualisieren(){
-  clearTimeout(qrTimer);
-  if (!qrAddon || !qrToken || qrRequest) return;
-  if (document.hidden){ qrTimer = setTimeout(qrAktualisieren, 2000); return; }
-  const generation = qrGeneration, controller = new AbortController();
-  qrRequest = controller;
-  const timeout = setTimeout(() => controller.abort(), 30000);
-  let weiter = true, pause = 2000;
-  try {
-    const res = await api("/api/addons/qr", {method:"POST", quietErrors:true, signal:controller.signal,
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({id:qrAddon.id, token:qrToken})});
-    const data = await res.json().catch(() => ({}));
-    if (generation !== qrGeneration) return;
-    if (!res.ok || data.ok !== true){
-      const error = new Error(data.error || "Die Anmeldung konnte nicht geladen werden.");
-      error.retryable = res.ok || [408,429,500,502,503,504].includes(res.status);
-      throw error;
-    }
-    qrFehler = 0;
-    $("#qr-retry").hidden = true;
-    const image = $("#qr-image");
-    if (data.image && data.image.startsWith("data:image/png;base64,")){
-      image.src = data.image; image.hidden = false;
-      $("#qr-done").disabled = false;
-      qrLeer = 0; qrAusweg(false);
-      $("#qr-status").textContent = "Scanne den QR-Code mit deinem Handy. Bestätige danach die Anmeldung.";
-    } else {
-      image.removeAttribute("src"); image.hidden = true;
-      qrLeer++;
-      qrAusweg(qrLeer >= QR_LEER_BIS_AUSWEG || data.reason === "abgestuerzt");
-      $("#qr-status").textContent = QR_GRUENDE[data.reason]
-        || "Noch kein QR-Code erkannt. Warte kurz. Falls dein Handy schon gekoppelt ist, bestätige die Anmeldung.";
-    }
-  } catch (error){
-    if (generation !== qrGeneration) return;
-    $("#qr-image").removeAttribute("src"); $("#qr-image").hidden = true;
-    $("#qr-status").textContent = error.name === "AbortError"
-      ? "Die Anmeldung braucht zu lange. Versuch es erneut."
-      : (error.message || "Die Anmeldung konnte nicht geladen werden.");
-    qrFehler++;
-    weiter = error.retryable !== false && qrFehler <= 3;
-    pause = 2000 * (2 ** (qrFehler - 1));
-    $("#qr-retry").hidden = weiter;
-    if (weiter) $("#qr-status").textContent = "Kurze Unterbrechung. Die QR-Anzeige wird automatisch erneut geladen.";
-    qrAusweg(!weiter);
-  } finally {
-    clearTimeout(timeout);
-    if (qrRequest === controller) qrRequest = null;
-    if (generation === qrGeneration && weiter) qrTimer = setTimeout(qrAktualisieren, pause);
-  }
-}
-function qrDialogSchliessen(){
-  if (nativeAddon){ nativeSchliessen(); closeOverlay(qrBox); return; }
-  qrSchliessen();
-}
-$("#qr-close").addEventListener("click", qrDialogSchliessen);
-qrBox.addEventListener("click", e => { if (e.target === qrBox) qrDialogSchliessen(); });
-$("#qr-retry").addEventListener("click", () => {
-  if (nativeAddon) nativeAnmelden(nativeAddon);
-  else if (qrAddon) qrAnmelden(qrAddon);
-});
-$("#qr-screen").addEventListener("click", () => {
-  const addon = qrAddon;
-  if (!addon) return;
-  qrSchliessen();
-  bildschirmOeffnen(addon);
-});
-$("#qr-done").addEventListener("click", async () => {
-  if (!qrAddon || !qrToken) return;
-  const generation = qrGeneration;
-  const data = await addonTun({action:"login_done", id:qrAddon.id, token:qrToken}, $("#qr-done"));
-  if (generation === qrGeneration){
-    if (data) qrSchliessen();
-    else $("#qr-status").textContent = $("#addon-note").textContent;
-  }
-});
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && qrAddon && qrToken) qrAktualisieren();
-});
-let nativeAddon = null, nativeGeneration = 0, nativeTimer = null;
-async function nativePost(body){
-  const res = await api("/api/messenger/native", {method:"POST", quietErrors:true,
-    headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.ok !== true) throw new Error(data.error || "Das hat nicht geklappt.");
-  return data;
-}
-function nativeSchliessen(abbrechen = true){
-  nativeGeneration++;
-  clearTimeout(nativeTimer);
-  const addon = nativeAddon;
-  nativeAddon = null;
-  if (addon && abbrechen) nativePost({action:"cancel", id:addon.id}).catch(() => {});
-  $("#qr-done").hidden = false;
-}
-async function nativeAnmelden(addon){
-  qrSchliessen();
-  nativeSchliessen(false);
-  const generation = nativeGeneration;
-  nativeAddon = addon;
-  $("#qr-title").textContent = addon.id === "signal" ? "Signal verbinden" : "WhatsApp Web verbinden";
-  $("#qr-help").textContent = addon.id === "signal"
-    ? "Öffne Signal auf deinem Handy. Wähle Einstellungen → Gekoppelte Geräte → +. Scanne dann diesen QR-Code."
-    : "Öffne WhatsApp auf deinem Handy. Wähle Einstellungen → Verknüpfte Geräte → Gerät hinzufügen. Scanne dann diesen QR-Code.";
-  $("#qr-status").textContent = "Die Verbindung startet. Der QR-Code erscheint gleich hier.";
-  $("#qr-image").removeAttribute("src"); $("#qr-image").hidden = true;
-  $("#qr-done").hidden = true; $("#qr-retry").hidden = true; qrAusweg(false);
-  openOverlay(qrBox); $("#qr-close").focus();
-  try {
-    await nativePost({action:"link", id:addon.id});
-  } catch (error){
-    if (generation !== nativeGeneration) return;
-    $("#qr-status").textContent = error.message;
-    $("#qr-retry").hidden = false;
-    return;
-  }
-  if (generation === nativeGeneration) nativeAbfragen(generation);
-}
-async function nativeAbfragen(generation){
-  if (generation !== nativeGeneration || !nativeAddon) return;
-  if (document.hidden){ nativeTimer = setTimeout(() => nativeAbfragen(generation), 2000); return; }
-  const addon = nativeAddon;
-  let weiter = true;
-  try {
-    const d = await nativePost({action:"status", id:addon.id});
-    if (generation !== nativeGeneration) return;
-    const bild = $("#qr-image");
-    if (d.state === "qr" && d.image && d.image.startsWith("data:image/png;base64,")){
-      bild.src = d.image; bild.hidden = false;
-      $("#qr-status").textContent = "Scanne den QR-Code mit deinem Handy. Es klappt von selbst weiter.";
-    } else if (d.state === "verbunden"){
-      bild.removeAttribute("src"); bild.hidden = true;
-      $("#qr-status").textContent = d.who ? `Verbunden mit ${d.who}.` : "Verbunden.";
-      weiter = false;
-      setTimeout(() => {
-        if (generation !== nativeGeneration) return;
-        nativeSchliessen(false); closeOverlay(qrBox); addonsLaden();
-      }, 1500);
-    } else if (d.state === "fehler"){
-      bild.removeAttribute("src"); bild.hidden = true;
-      $("#qr-status").textContent = d.error || "Das hat nicht geklappt.";
-      $("#qr-retry").hidden = false;
-      weiter = false;
-    } else {
-      bild.removeAttribute("src"); bild.hidden = true;
-      $("#qr-status").textContent = "Die Verbindung startet. Der QR-Code erscheint gleich hier.";
-    }
-  } catch (error){
-    if (generation !== nativeGeneration) return;
-    $("#qr-status").textContent = error.message;
-    $("#qr-retry").hidden = false;
-    weiter = false;
-  }
-  if (weiter && generation === nativeGeneration) nativeTimer = setTimeout(() => nativeAbfragen(generation), 2000);
-}
-async function nativeTrennen(addon, knopfEl){
-  if (knopfEl) knopfEl.disabled = true;
-  const note = $("#addon-note");
-  try {
-    const d = await nativePost({action:"unlink", id:addon.id});
-    note.className = "note ok"; note.textContent = d.message || "Getrennt.";
-    await addonsLaden();
-  } catch (error){
-    note.className = "note bad"; note.textContent = error.message;
-  } finally { if (knopfEl) knopfEl.disabled = false; }
-}
-
-
-let bildTakt = null, bildAddon = null;
-
-function bildNeu(){
-  const bild = $("#screen-img"), leer = $("#screen-leer");
-  bild.onload = () => { leer.hidden = true; bild.hidden = false; };
-  bild.onerror = () => {
-    bild.hidden = true; leer.hidden = false;
-    leer.textContent = "Die virtual machine läuft gerade nicht. Öffne oben eine Adresse oder "
-      + "starte eine Login-App unter Add-ons → Anmelden.";
-  };
-  bild.src = "/api/werkstatt/bildschirm?leise=1&t=" + Date.now();
-}
-
-function bildschirmOeffnen(addon){
-  bildAddon = addon;
-  $("#screen-title").textContent = addon ? `${addon.name}: selbst anmelden` : "Selbst anmelden";
-  $("#screen-done").hidden = !addon;
-  $("#screen-open").hidden = !!addon;
-  $("#screen-note").textContent = "";
-  openOverlay(screenBox);
-  bildNeu();
-  clearInterval(bildTakt);
-  bildTakt = setInterval(() => {
-    if (!document.hidden && screenBox.classList.contains("open")) bildNeu();
-  }, 1500);
-}
-
-function bildschirmSchliessen(){
-  clearInterval(bildTakt);
-  $("#screen-text").value = "";
-  closeOverlay(screenBox);
-}
-
-async function eingabe(body){
-  const note = $("#screen-note");
-  try {
-    const res = await api("/api/werkstatt/eingabe", {
-      method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    note.className = "note" + (data.ok ? "" : " bad");
-    note.textContent = data.ok ? "" : (data.error || "Das hat nicht geklappt.");
-    setTimeout(bildNeu, 350);
-    return !!data.ok;
-  } catch { note.className = "note bad"; note.textContent = "Keine Verbindung zu Aquaticy. Versuch es gleich noch einmal."; }
-  return false;
-}
-
-
-let letzterKlick = 0;
-$("#screen-img").addEventListener("click", (e) => {
-  const bild = e.currentTarget, rahmen = bild.getBoundingClientRect();
-  const x = Math.round((e.clientX - rahmen.left) * 1280 / rahmen.width);
-  const y = Math.round((e.clientY - rahmen.top) * 800 / rahmen.height);
-  const doppelt = Date.now() - letzterKlick < 350;
-  letzterKlick = Date.now();
-  eingabe({ art: "click", x, y, double: doppelt });
-});
-$("#screen-send").addEventListener("click", async () => {
-  const feld = $("#screen-text"), text = feld.value;
-  if (!text) return;
-  if (await eingabe({ art: "type", text })) feld.value = "";
-});
-$("#screen-text").addEventListener("keydown", (e) => {
-  if (e.key === "Enter"){ e.preventDefault(); $("#screen-send").click(); }
-});
-$("#screen-show").addEventListener("click", (e) => {
-  const feld = $("#screen-text"), zeigen = feld.type === "password";
-  feld.type = zeigen ? "text" : "password";
-  e.currentTarget.setAttribute("aria-pressed", String(zeigen));
-});
-for (const taste of document.querySelectorAll(".screen-keys [data-key]")){
-  taste.addEventListener("click", () => eingabe({ art: "key", key: taste.dataset.key }));
-}
-$("#screen-go").addEventListener("click", async () => {
-  const url = $("#screen-url").value.trim();
-  if (!url) return;
-  $("#screen-note").className = "note";
-  $("#screen-note").textContent = "Die virtual machine öffnet die Seite …";
-  if (await eingabe({ art: "open", url })) $("#screen-note").textContent = "";
-});
-$("#screen-done").addEventListener("click", async () => {
-  if (!bildAddon) return;
-  await addonTun({ action: "login_done", id: bildAddon.id }, $("#screen-done"));
-  bildschirmSchliessen();
-});
-$("#screen-close").addEventListener("click", bildschirmSchliessen);
-screenBox.addEventListener("click", (e) => { if (e.target === screenBox) bildschirmSchliessen(); });
-$("#btn-loginapps").addEventListener("click", async () => {
-  if (!kontoUltra){
-    await guardDialog({
-      title: "Das gibt es nur mit einem Ultra-Konto.",
-      text: "Login-Apps laufen im User mode der virtual machine. Den gibt es nur mit Ultra.",
-      ok: "Verstanden",
-    });
-    return;
-  }
-  bildschirmOeffnen(null);
-});
 
 $("#account-logout").addEventListener("click", async () => {
   await api("/api/auth/logout", {method:"POST"});
@@ -10024,11 +8628,6 @@ form.addEventListener("change", (e) => {
 });
 function closeSettings(){
   closeOverlay(overlay);
-  stopLoad();
-  clearTimeout(verbundTakt);
-  verbundAnfrage++;
-  clearTimeout(upgradeTakt);
-  upgradeAnfrage++;
 }
 
 async function featureRequest(payload){
@@ -10038,241 +8637,9 @@ async function featureRequest(payload){
   if (!response.ok) throw new Error(data.error || "Das hat nicht geklappt.");
   return data;
 }
-let secureRefreshTimer = null, secureRefreshPending = false, secureSetup = false;
-let secureWichtigVorher = null;
-function secureListe(id, items){
-  const list = $("#" + id); list.replaceChildren();
-  for (const item of items || []){
-    const li = document.createElement("li"); li.textContent = item; list.appendChild(li);
-  }
-  uebersetze(list);
-}
-function secureAufgabeText(task){
-  return enOderDe(task.label) + (task.host ? " " + sp("Gerät: ", "Device: ") + task.host : "")
-    + (task.port ? " · Port " + task.port : "");
-}
-function secureOptionen(data){
-  // Zeitplan, Paketpruefung, VM und Aufgaben (14.1.3 Luna) -- erst nach der Netzfreigabe.
-  $("#secure-more").hidden = !data.secure;
-  if (!data.secure) return;
-  $("#secure-watch").checked = data.watch !== false;
-  if (document.activeElement !== $("#secure-interval"))
-    $("#secure-interval").value = String(data.seconds ?? 900);
-  $("#secure-interval").disabled = data.watch === false;
-  $("#secure-packets").checked = !!data.packets;
-  $("#secure-vm").checked = !!data.vm;
-  $("#secure-next").textContent = data.watch === false
-    ? sp("Secure Pro prüft nur, wenn du „Prüfen“ drückst.",
-         "Secure Pro only checks when you press “Check”.")
-    : data.next_check
-      ? sp("Nächste Prüfung: ", "Next check: ") + new Date(data.next_check * 1000).toLocaleString()
-      : "";
-  $("#secure-packet-note").textContent = data.packets ? enOderDe(data.packet_status || "") : "";
-  $("#secure-nmap").checked = !!data.nmap;
-  $("#secure-messenger").checked = !!data.messenger;
-  $("#secure-nmap-note").textContent = !data.nmap_ready
-    ? sp("nmap fehlt. Installiere es mit aquaticy secure-pro oder sudo apt install nmap.",
-         "nmap is missing. Install it with aquaticy secure-pro or sudo apt install nmap.")
-    : data.nmap ? enOderDe(data.nmap_status || "") : "";
-  $("#secure-vm-note").textContent = data.vm && !data.vm_network
-    ? sp("Schalte dafür „Auch ins lokale Netz“ (virtual machine) und „Ins eigene Netz sehen dürfen“ (Zuhause & Netz) ein.",
-         "For this, turn on “Also into the local network” (virtual machine) and “May look into your own network” (Home & network).")
-    : "";
-  const liste = $("#secure-tasks"); liste.replaceChildren();
-  for (const task of data.tasks || []){
-    const li = document.createElement("li");
-    const text = document.createElement("span");
-    text.textContent = task.text;
-    const was = document.createElement("small");
-    was.className = "note"; was.textContent = " · " + secureAufgabeText(task);
-    const weg = document.createElement("button");
-    weg.type = "button"; weg.className = "btn"; weg.textContent = sp("Löschen", "Delete");
-    weg.addEventListener("click", async () => {
-      weg.disabled = true;
-      try { secureRender(await featureRequest({action:"task_remove", id:task.id})); }
-      catch(error){ $("#secure-task-note").textContent = error.message; weg.disabled = false; }
-    });
-    li.append(text, was, weg);
-    liste.appendChild(li);
-  }
-}
-function secureRender(data, fill = false){
-  if (fill){
-    for (const id of ["subnet", "router"]){
-      const field = $("#secure-" + id);
-      if (document.activeElement !== field) field.value = data[id] || "";
-    }
-  }
-  let note = data.secure ? sp("Secure Pro ist an.", "Secure Pro is on.")
-    : sp("Secure Pro ist aus.", "Secure Pro is off.");
-  if (data.scanning) note += " " + sp("Die Prüfung läuft.", "The check is running.");
-  else if (data.secure && !data.checked)
-    note += " " + sp("Die erste Prüfung steht noch aus.", "The first check is pending.");
-  if (data.error) note += " " + enOderDe(data.error);
-  $("#secure-note").textContent = note;
-  if (secureChat) $("#secure-chat-note").textContent = note;
-  $("#secure-scope-note").textContent = (data.subnet || "").endsWith("/32")
-    ? sp("Nur eine Adresse ist freigegeben. Bestätige einen größeren Prüfbereich für weitere Geräte.",
-         "Only one address is authorized. Confirm a larger range to check more devices.") : "";
-  const devices = $("#secure-devices"); devices.replaceChildren();
-  for (const item of data.devices || []){
-    const li = document.createElement("li");
-    const text = document.createElement("span");
-    text.textContent = (item.name ? item.name + " · " : "") + item.address
-      + (item.vendor ? " · " + item.vendor : "") + (item.kind ? " · " + enOderDe(item.kind) : "")
-      + (item.mac ? " · " + item.mac : "") + " · "
-      + (item.active ? sp("TCP-Antwort", "TCP response")
-                     : sp("Nachbartabelle, kann veraltet sein", "Neighbor table, may be stale"))
-      + (item.ports?.length ? " · " + sp("Ports: ", "Ports: ") + item.ports.join(", ") : "");
-    const benennen = document.createElement("button");
-    benennen.type = "button"; benennen.className = "btn";
-    benennen.textContent = item.name ? sp("Umbenennen", "Rename") : sp("Benennen", "Name");
-    const feld = document.createElement("input");
-    feld.type = "text"; feld.maxLength = 40; feld.hidden = true; feld.value = item.name || "";
-    feld.setAttribute("aria-label", sp("Name des Geräts (leer: vergessen)",
-                                       "Device name (empty: forget)"));
-    async function speichern(){
-      try {
-        secureRender(await featureRequest({action:"device_name", address:item.address,
-                                           mac:item.mac || "", name:feld.value.trim()}));
-      } catch(error){ $("#secure-note").textContent = error.message; }
-    }
-    benennen.addEventListener("click", () => {
-      if (feld.hidden){ feld.hidden = false; feld.focus(); benennen.textContent =
-        sp("Speichern", "Save"); return; }
-      speichern();
-    });
-    feld.addEventListener("keydown", e => {
-      if (e.key === "Enter"){ e.preventDefault(); speichern(); }
-    });
-    li.append(text, feld, benennen);
-    devices.appendChild(li);
-  }
-  $("#secure-score").textContent = data.score === null || data.score === undefined ? ""
-    : sp("Sicherheitswert: ", "Security score: ") + data.score + "/100 ("
-      + data.grade + ")" + (data.trend > 0 ? sp(", besser als zuvor", ", better than before")
-        : data.trend < 0 ? sp(", schlechter als zuvor", ", worse than before") : "");
-  secureListe("secure-history", (data.history || []).map(e =>
-    new Date(e.t * 1000).toLocaleString() + " · " + e.text));
-  $("#secure-checked").textContent = data.checked
-    ? sp("Letzte abgeschlossene Prüfung: ", "Last completed check: ")
-      + new Date(data.checked * 1000).toLocaleString()
-    : sp("Noch keine abgeschlossene Prüfung.", "No completed check yet.");
-  const wichtig = data.important || [];
-  secureListe("secure-important", wichtig.length ? wichtig
-    : [sp("Nichts Wichtiges.", "Nothing important.")]);
-  secureListe("secure-findings", (data.findings || []).filter(item => !wichtig.includes(item)));
-  secureListe("secure-positive", data.positives);
-  secureListe("secure-tips", data.tips);
-  secureOptionen(data);
-  // Neue wichtige Meldung, waehrend der Secure-Pro-Chat offen ist: Verlauf neu laden.
-  const kennung = wichtig.join("\n");
-  if (secureChat && secureWichtigVorher !== null && kennung !== secureWichtigVorher && !busy
-      && wichtig.length)
-    openChat(currentChat, {force:true});
-  secureWichtigVorher = kennung;
-}
-function secureSchedule(){
-  clearTimeout(secureRefreshTimer);
-  if ((!secureChat && !secureSettingsVisible()) || document.hidden) return;
-  secureRefreshTimer = setTimeout(async () => {
-    if ((!secureChat && !secureSettingsVisible()) || document.hidden) return;
-    const chat = currentChat;
-    if (!secureRefreshPending){
-      secureRefreshPending = true;
-      try {
-        const response = await api("/api/features", {quietErrors:true});
-        const data = await response.json();
-        if (chat === currentChat && (secureChat || secureSettingsVisible())){
-          if (response.ok && data.allowed) secureRender(data);
-          else $("#secure-note").textContent = data.error || sp(
-            "Diese Funktionen verwaltet nur der Besitzer im Einzelkonto-Modus.",
-            "Only the owner in single-account mode can manage these features.");
-        }
-      } catch {
-        if (chat === currentChat && secureChat)
-          $("#secure-note").textContent = sp("Aquaticy ist gerade nicht erreichbar.",
-                                           "Aquaticy is currently unreachable.");
-      } finally { secureRefreshPending = false; }
-    }
-    secureSchedule();
-  }, 5000);
-}
-document.addEventListener("visibilitychange", secureSchedule);
-async function featureLoad(){
-  try {
-    const response = await api("/api/features", {quietErrors:true});
-    const data = await response.json();
-    const allowed = response.ok && data.allowed;
-    for (const id of ["voice-setting", "secure-setting", "secure-open", "secure-watch",
-                      "secure-interval", "secure-packets", "secure-vm", "secure-nmap",
-                      "secure-messenger", "secure-task-add"]){
-      $("#" + id).disabled = !allowed;
-    }
-    $("#voice-setting").checked = !!data.voice;
-    $("#secure-setting").checked = !!data.secure || secureSetup;
-    $("#secure-controls").hidden = !allowed || !$("#secure-setting").checked;
-    $("#secure-setting").setAttribute("aria-expanded", String(!$("#secure-controls").hidden));
-    $("#feature-note").textContent = allowed ? ""
-      : "Diese Funktionen verwaltet nur der Besitzer im Einzelkonto-Modus.";
-    $("#voice-note").textContent = $("#feature-note").textContent;
-    if (allowed){
-      secureRender(data, true);
-      if (!$("#secure-controls").hidden && (!data.router || (data.subnet || "").endsWith("/32")))
-        await secureDetect();
-      secureSchedule();
-    }
-  } catch {
-    $("#feature-note").textContent = "Aquaticy ist gerade nicht erreichbar.";
-    $("#voice-note").textContent = $("#feature-note").textContent;
-  }
-}
-async function secureDetect(replace = false){
-  const chat = currentChat, button = $("#secure-detect");
-  if (button.disabled) return;
-  button.disabled = true;
-  $("#secure-router").disabled = true; $("#secure-subnet").disabled = true;
-  try {
-    const data = await featureRequest({action:"detect"});
-    if (chat !== currentChat) return;
-    for (const id of ["router", "subnet"]){
-      const field = $("#secure-" + id);
-      if (replace || !field.value || (id === "subnet" && field.value.endsWith("/32"))){
-        if (field.value !== data[id]) $("#secure-consent").checked = false;
-        field.value = data[id] || "";
-      }
-    }
-    $("#secure-router-hint").textContent = data.hint || "";
-    uebersetze($("#secure-router-hint"));
-  } catch(error){
-    if (chat === currentChat) $("#secure-router-hint").textContent = error.message;
-  } finally {
-    button.disabled = false;
-    $("#secure-router").disabled = false; $("#secure-subnet").disabled = false;
-  }
-}
-async function loadSecureChat(){
-  const chat = currentChat;
-  await featureLoad();
-  if (!secureChat || chat !== currentChat) return;
-  secureSchedule();
-}
-$("#secure-detect").addEventListener("click", () => secureDetect(true));
-$("#secure-test").addEventListener("click", async event => {
-  const button = event.target, chat = currentChat; button.disabled = true;
-  try {
-    const data = await featureRequest({action:"router_test", router:$("#secure-router").value.trim(),
-      subnet:$("#secure-subnet").value.trim(), consent:$("#secure-consent").checked});
-    if (chat !== currentChat) return;
-    secureSetup = true;
-    secureRender(data);
-    $("#secure-router-hint").textContent = sp("Router antwortet. Secure Pro wurde gestartet.",
-                                            "Router responded. Secure Pro has started.");
-    secureSchedule();
-  } catch(error){
-    if (chat === currentChat) $("#secure-note").textContent = error.message;
-  } finally { button.disabled = false; }
-});
+// 16.0.0 (Aquaticy-Test): Secure Pro beantwortet nur noch Fragen -- kein Netz, keine Pruefung.
+async function featureLoad(){}
+async function loadSecureChat(){}
 async function openSecureChat(){
   try {
     const data = await featureRequest({action:"open"});
@@ -10282,417 +8649,7 @@ async function openSecureChat(){
     await openChat(data.session_id, {force:true});
   } catch (error){ $("#feature-note").textContent = error.message; }
 }
-function secureSettingsVisible(){
-  return overlay.classList.contains("open") && !$("#secure-controls").hidden;
-}
-$("#secure-settings-open").addEventListener("click", async () => {
-  await showSettings();
-  $("#secure-section").scrollIntoView({behavior:"smooth", block:"start"});
-});
 $("#secure-open").addEventListener("click", openSecureChat);
-$("#secure-setting").addEventListener("change", async event => {
-  secureSetup = event.target.checked;
-  $("#secure-controls").hidden = !secureSetup;
-  event.target.setAttribute("aria-expanded", String(secureSetup));
-  if (secureSetup){
-    await secureDetect(true);
-    secureSchedule();
-    return;
-  }
-  try { await featureRequest({action:"configure", enabled:false}); }
-  catch(error){ $("#feature-note").textContent = error.message; }
-  featureLoad();
-});
-for (const id of ["secure-router", "secure-subnet"])
-  $("#" + id).addEventListener("input", () => { $("#secure-consent").checked = false; });
-$("#voice-setting").addEventListener("change", async event => {
-  const field = event.target; field.disabled = true;
-  try { await featureRequest({action:"voice", enabled:field.checked}); }
-  catch(error){ $("#voice-note").textContent = error.message; field.checked = !field.checked; }
-  finally { field.disabled = false; }
-});
-$("#secure-apply").addEventListener("click", async () => {
-  try {
-    const data = await featureRequest({action:"configure", enabled:true,
-      subnet:$("#secure-subnet").value.trim(), consent:$("#secure-consent").checked});
-    secureSetup = true; secureRender(data); secureSchedule();
-  } catch(error){ $("#secure-note").textContent = error.message; }
-});
-$("#secure-disable").addEventListener("click", async () => {
-  try { secureSetup = false; await featureRequest({action:"configure", enabled:false}); featureLoad(); }
-  catch(error){ $("#secure-note").textContent = error.message; }
-});
-$("#secure-check").addEventListener("click", async () => {
-  try {
-    const data = await featureRequest({action:"check"});
-    secureRender(data);
-    $("#secure-note").textContent = data.requested
-      ? sp("Prüfung angefordert.", "Check requested.")
-      : sp("Warte vor einer weiteren Prüfung mindestens eine Minute.", "Wait a minute before another check.");
-    secureSchedule();
-  } catch(error){ $("#secure-note").textContent = error.message; }
-});
-async function secureOption(werte, feld){
-  const chat = currentChat;
-  if (feld) feld.disabled = true;
-  try {
-    const data = await featureRequest({action:"options", ...werte});
-    if (chat === currentChat) secureRender(data);
-  } catch(error){
-    $("#secure-note").textContent = error.message;
-    featureLoad();
-  } finally { if (feld) feld.disabled = false; }
-}
-$("#secure-watch").addEventListener("change", e => secureOption({watch:e.target.checked}, e.target));
-$("#secure-interval").addEventListener("change", e =>
-  secureOption({seconds:Number(e.target.value)}, e.target));
-$("#secure-nmap").addEventListener("change", e => secureOption({nmap:e.target.checked}, e.target));
-$("#secure-messenger").addEventListener("change", e =>
-  secureOption({messenger:e.target.checked}, e.target));
-$("#secure-packets").addEventListener("change", e =>
-  secureOption({packets:e.target.checked}, e.target));
-$("#secure-vm").addEventListener("change", e => secureOption({vm:e.target.checked}, e.target));
-async function secureAufgabe(){
-  const feld = $("#secure-task-text"), knopf = $("#secure-task-add");
-  const text = feld.value.trim();
-  if (!text){
-    $("#secure-task-note").textContent = sp("Beschreib die Aufgabe in einem Satz.",
-                                            "Describe the task in one sentence.");
-    return;
-  }
-  knopf.disabled = true;
-  try {
-    const data = await featureRequest({action:"task_add", text});
-    feld.value = "";
-    $("#secure-task-note").textContent = sp("Verstanden: ", "Understood: ")
-      + secureAufgabeText(data.task);
-    secureRender(data);
-  } catch(error){ $("#secure-task-note").textContent = enOderDe(error.message); }
-  finally { knopf.disabled = false; }
-}
-$("#secure-task-add").addEventListener("click", secureAufgabe);
-$("#secure-task-text").addEventListener("keydown", e => {
-  if (e.key === "Enter"){ e.preventDefault(); secureAufgabe(); }
-});
-
-
-let verbundTakt = null;
-let verbundAnfrage = 0;
-let verbundEinladungLaeuft = false, verbundStand = {};
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) clearTimeout(verbundTakt);
-  else if (devSichtbar && kontoUltra && overlay.classList.contains("open")) verbundLaden();
-});
-function verbundEinladenSperren(){
-  $("#cluster-add").disabled = verbundEinladungLaeuft || !kontoUltra || !verbundStand.enabled
-    || !verbundStand.lan || verbundStand.joining || (verbundStand.joined && !verbundStand.master);
-}
-function verbundZeile(liste, punkt, titel, unter, knopfText, tun){
-  const li = document.createElement("li");
-  if (punkt !== null){
-    const p = document.createElement("span");
-    p.className = "punkt" + (punkt ? " an" : "");
-    li.appendChild(p);
-  }
-  const wer = document.createElement("span");
-  wer.className = "wer";
-  wer.textContent = titel;
-  const klein = document.createElement("small");
-  klein.textContent = unter;
-  wer.appendChild(klein);
-  li.appendChild(wer);
-  if (knopfText){
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "btn"; b.textContent = knopfText;
-    b.addEventListener("click", async () => { b.disabled = true; await tun(); b.disabled = false; });
-    li.appendChild(b);
-  }
-  liste.appendChild(li);
-}
-async function verbundTun(body){
-  clearTimeout(verbundTakt);
-  const anfrage = ++verbundAnfrage;
-  const status = $("#cluster-status");
-  try {
-    const res = await api("/api/cluster", {
-      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body),
-    });
-    const daten = await res.json();
-    if (anfrage !== verbundAnfrage) return null;
-    if (!res.ok || daten?.error || typeof daten?.enabled !== "boolean"){
-      status.textContent = daten?.error || "Die Server-Gruppe lässt sich gerade nicht laden.";
-      status.className = "note bad";
-      return null;
-    }
-    verbundZeigen(daten);
-    return daten;
-  } catch {
-    if (anfrage !== verbundAnfrage) return null;
-    status.textContent = "Keine Verbindung zu Aquaticy."; status.className = "note bad";
-    return null;
-  } finally {
-    if (anfrage === verbundAnfrage && !document.hidden
-        && overlay.classList.contains("open") && kontoUltra)
-      verbundTakt = setTimeout(verbundLaden, 3000);
-  }
-}
-async function verbundLaden(){
-  clearTimeout(verbundTakt);
-  if (document.hidden) return;
-  const anfrage = ++verbundAnfrage;
-  let erneut = true;
-  try {
-
-
-    const res = await api("/api/cluster", { quietErrors: true });
-    if (res.status === 401 || res.status === 403) erneut = false;
-    const daten = await res.json();
-    if (anfrage !== verbundAnfrage) return;
-    if (daten?.locked){
-      verbundZeigen(daten);
-      erneut = false;
-    } else {
-      if (!res.ok || daten?.error || typeof daten?.enabled !== "boolean")
-        throw new Error(daten?.error || "Die Server-Gruppe lässt sich gerade nicht laden.");
-      verbundZeigen(daten);
-      erneut = daten.enabled;
-    }
-  } catch (error){
-    if (anfrage !== verbundAnfrage) return;
-
-
-    $("#cluster-status").textContent = error.message || "Keine Verbindung zu Aquaticy.";
-    $("#cluster-status").className = "note bad";
-  }
-  if (!document.hidden && overlay.classList.contains("open") && kontoUltra && erneut)
-    verbundTakt = setTimeout(verbundLaden, 3000);
-}
-function verbundZeigen(d){
-  verbundStand = d;
-  verbundEinladenSperren();
-  const gesperrt = !kontoUltra || d.locked;
-  $("#cluster-lock").hidden = !gesperrt;
-  $("#cluster-on").disabled = gesperrt;
-  $("#cluster-on").checked = !gesperrt && !!d.enabled;
-  $("#cluster-panel").hidden = gesperrt || !d.enabled;
-  const status = $("#cluster-status");
-  status.className = "note";
-  if (gesperrt || !d.enabled){ status.textContent = ""; return; }
-  status.textContent = d.joining ? "Tritt bei und übernimmt die Daten …"
-    : !d.lan ? "Dieser Server ist nur auf diesem Rechner erreichbar. Für den Verbund starte ihn mit „aquaticy web --lan“."
-    : d.joined ? (d.master ? "Dieser Server ist der Master." : "Dieser Server ist Mitglied im Verbund.")
-      + ` ${d.members.length} von ${d.max} Servern.` + (d.notice ? " " + d.notice : "")
-    : "Noch kein Verbund. Lade einen anderen Server ein. Dieser hier wird dann Master.";
-  const mitglieder = $("#cluster-members");
-  mitglieder.innerHTML = "";
-  for (const m of d.members || []){
-    const rolle = (m.master ? "Master" : "Mitglied") + (m.self ? " · dieser Server" : "");
-    const last = m.alive ? ` · ${m.accounts} Konten · ${m.runs} laufende Antworten`
-      + (typeof m.cpu === "number" ? ` · CPU ${Math.round(m.cpu * 100)} %` : "")
-
-      + (m.role && !d.split_on ? " · " + (m.role === "modelle"
-        ? sp("Modelle und etwas Website", "models and some website")
-        : sp("nur Website", "website only")) : "")
-      + (d.split_on ? splitAnteil(m, d) : "") : " · nicht erreichbar";
-    let knopf = "", tun = null;
-    if (d.master && !m.self && !m.alive && m.accounts > 0){
-
-      knopf = "Konten übernehmen";
-      tun = async () => {
-        if (await frage(`Die ${m.accounts} Konten von „${m.name}“ übernehmen?`,
-            "Nur, wenn der Server wirklich aus ist. Die anderen Server arbeiten dann mit ihrer letzten Kopie weiter. Die kann ein paar Sekunden alt sein. Kommt der Server zurück, gibt er die Konten ab.",
-            "Übernehmen"))
-          await verbundTun({ action: "failover", node: m.node });
-      };
-    } else if (d.master && !m.self){
-      knopf = "Entfernen";
-      tun = async () => {
-        if (await frage(`„${m.name}“ aus dem Verbund nehmen?`, "Der Server behält seine Kopie der Daten, bekommt aber keine neuen mehr.", "Entfernen"))
-          await verbundTun({ action: "remove", node: m.node });
-      };
-    } else if (m.self && d.members.length > 1){
-      knopf = d.master ? "Verbund auflösen" : "Verlassen";
-      tun = async () => {
-        if (await frage(d.master ? "Den Verbund auflösen?" : "Den Verbund verlassen?", "Jeder Server arbeitet danach allein mit seiner Kopie der Daten weiter.", d.master ? "Auflösen" : "Verlassen"))
-          await verbundTun({ action: "leave" });
-      };
-    }
-    verbundZeile(mitglieder, m.alive, `${m.name || "Server"} (${m.address || "?"}:${m.port})`,
-                 rolle + last, knopf, tun);
-  }
-  const gefunden = $("#cluster-found");
-  gefunden.innerHTML = "";
-  const kandidaten = (d.found || []).filter(f => !f.member);
-  if (!kandidaten.length){
-    verbundZeile(gefunden, null, "Keine weiteren Server gefunden.",
-                 "Schalte den Server-Verbund auch auf dem anderen Server ein.", "", null);
-  }
-  for (const f of kandidaten){
-    const darf = !d.joined || d.master;
-    verbundZeile(gefunden, true, `${f.name || "Server"} (${f.address}:${f.port})`,
-                 `Aquaticy ${f.version || "?"}` + (f.cluster ? " · schon in einem Verbund" : ""),
-                 darf && !f.cluster && d.lan ? "Verbinden" : "",
-                 async () => { await verbundTun({ action: "invite", address: f.address, port: f.port }); });
-  }
-  const einladungen = $("#cluster-invites");
-
-
-  const vorhanden = new Map([...einladungen.children].map(box => [box.dataset.inviteId, box]));
-  for (const e of d.invites || []){
-    let box = vorhanden.get(e.id);
-    vorhanden.delete(e.id);
-    if (!box){
-      box = document.createElement("div");
-      box.className = "cluster-invite";
-      box.dataset.inviteId = e.id;
-      box.appendChild(document.createElement("div"));
-      einladungen.appendChild(box);
-    }
-    const text = box.firstElementChild;
-    const ziel = `${e.peer.name || "Server"} (${e.peer.address})`;
-    text.textContent = e.status === "pending"
-      ? `Warte auf ${ziel}: dort im Terminal mit „yes“ oder „no“ antworten.`
-      : `${ziel}: ${nutzerFehler(e.message)}`;
-    const codeRow = box.querySelector(".code-row");
-    if (!e.needs_code && codeRow) codeRow.remove();
-    if (e.needs_code && !codeRow){
-      const reihe = document.createElement("div");
-      reihe.className = "code-row";
-      const feld = document.createElement("input");
-      feld.type = "text"; feld.inputMode = "numeric"; feld.autocomplete = "off";
-      feld.placeholder = "123 456"; feld.setAttribute("aria-label", "Code vom anderen Server");
-      const b = document.createElement("button");
-      b.type = "button"; b.className = "btn primary"; b.textContent = "Bestätigen";
-      b.addEventListener("click", async () => {
-        b.disabled = true;
-        await verbundTun({ action: "confirm", id: e.id, code: feld.value });
-        b.disabled = false;
-      });
-      feld.addEventListener("keydown", (ev) => { if (ev.key === "Enter"){ ev.preventDefault(); b.click(); } });
-      reihe.append(feld, b);
-      box.appendChild(reihe);
-    }
-  }
-  for (const box of vorhanden.values()) box.remove();
-  splitZeigen(d);
-}
-
-
-
-function splitAnteil(m, d){
-  const s = m.split || {};
-  if (s.direct) return ` · rechnet direkt über seine Grafikkarte mit${s.mem_gb ? ` (etwa ${s.mem_gb} GB)` : ""}`;
-  if (s.ready) return ` · rechnet mit${s.mem_gb ? ` (etwa ${s.mem_gb} GB)` : ""}`;
-
-  if (s.note) return ` · ${s.note}`;
-  return s.error ? ` · ${nutzerFehler(s.error)}` : " · noch nicht bereit";
-}
-function splitText(d, s){
-  if (!d.master){
-    if (!s.on) return "Das schaltet der Master.";
-    if (s.self && s.self.note) return s.self.note;
-    return s.self && s.self.ready ? "Dieser Server rechnet am verteilten Modell mit."
-      : nutzerFehler(s.message || "rpc-server startet …");
-  }
-  if (!s.on){
-
-    if (!s.server_binary && !s.auto_install) return "Für dieses System gibt es llama.cpp nicht fertig. Mehr dazu steht im README.";
-    const llama = s.llama && s.llama.label ? ` ${s.llama.label} ist installiert.` : " llama.cpp installiert sich beim Einschalten von selbst.";
-    return `Im Verbund stehen zusammen etwa ${s.memory_gb} GB Speicher bereit.` + (s.server_binary && !(s.llama && s.llama.label) ? "" : llama);
-  }
-  switch (s.phase){
-    case "wartet": return nutzerFehler(s.message || "Warte auf die anderen Server …");
-    case "lädt": return "Verteilt das Modell auf die Server — bei großen Modellen kann das einige Minuten dauern …";
-    case "bereit": return `Bereit: ${s.model} läuft verteilt auf ${s.servers} Servern und steht in der Modellauswahl.`;
-    case "fehler": return "Das hat nicht geklappt: " + nutzerFehler(s.message);
-    default: return "Warte auf die anderen Server …";
-  }
-}
-function splitZeigen(d){
-  const box = $("#split-box");
-  const s = d.split;
-  box.hidden = !d.joined || !s || (d.members || []).length < 2;
-  if (box.hidden) return;
-  const schalter = $("#split-on");
-  schalter.checked = !!s.on;
-  schalter.disabled = !d.master;
-  const auswahl = $("#split-model");
-  const modelle = (s.models && s.models.length) ? s.models
-    : (s.model ? [{ name: s.model, size_gb: 0, needed_gb: 0 }] : []);
-
-
-  const liste = JSON.stringify(modelle.map(m => [m.name, m.size_gb]));
-  if (auswahl.dataset.liste !== liste){
-    auswahl.dataset.liste = liste;
-    auswahl.replaceChildren();
-    for (const m of modelle){
-      const option = document.createElement("option");
-      option.value = m.name;
-      option.textContent = m.size_gb
-        ? `${m.name} · ${m.size_gb} GB (braucht etwa ${Math.round(m.needed_gb)} GB)` : m.name;
-      auswahl.appendChild(option);
-    }
-  }
-  if (document.activeElement !== auswahl && s.model) auswahl.value = s.model;
-  auswahl.disabled = !d.master || !modelle.length;
-  $("#split-restart").hidden = !d.master || !s.on;
-  const status = $("#split-status");
-  status.className = "note" + (s.phase === "fehler" && s.on ? " bad" : "");
-  status.textContent = splitText(d, s);
-}
-$("#split-on").addEventListener("change", async (e) => {
-  const schalter = e.currentTarget;
-  const an = schalter.checked;
-  const modell = $("#split-model").value;
-  if (an && !modell){
-    schalter.checked = false;
-    hinweis("Wähle zuerst ein Modell aus, das in Ollama auf diesem Server liegt.");
-    return;
-  }
-  if (an && !(await frage("Serverlast aufteilen?",
-      "Alle Server rechnen dann zusammen an einem Modell. Der Master bedient alle Konten. Antworten, die gerade auf einem anderen Server laufen, werden dort noch fertig.",
-      "Einschalten"))){
-    schalter.checked = false;
-    return;
-  }
-  await verbundTun({ action: "split", on: an, model: modell });
-});
-$("#split-model").addEventListener("change", async (e) => {
-  if ($("#split-on").checked) await verbundTun({ action: "split", on: true, model: e.currentTarget.value });
-});
-$("#split-restart").addEventListener("click", async (e) => {
-  const knopf = e.currentTarget;
-  knopf.disabled = true;
-  await verbundTun({ action: "split-restart" });
-  knopf.disabled = false;
-});
-$("#cluster-on").addEventListener("change", async (e) => {
-  await verbundTun({ action: "enable", on: e.currentTarget.checked });
-  verbundLaden();
-});
-$("#cluster-add").addEventListener("click", async () => {
-  if (verbundEinladungLaeuft) return;
-  const adresse = $("#cluster-ip").value.trim();
-  if (!adresse){ $("#cluster-ip").focus(); return; }
-  const feld = $("#cluster-port");
-  const eingabe = feld.value.trim() || "8765";
-  const port = Number(eingabe);
-  if (!/^[0-9]{1,5}$/.test(eingabe) || port < 1 || port > 65535){
-    $("#cluster-status").textContent = "Diesen Port gibt es nicht. Nimm eine Zahl von 1 bis 65535.";
-    $("#cluster-status").className = "note bad";
-    feld.focus();
-    return;
-  }
-  verbundEinladungLaeuft = true;
-  verbundEinladenSperren();
-  try {
-    if (await verbundTun({ action: "invite", address: adresse, port }))
-      $("#cluster-ip").value = "";
-  } finally {
-    verbundEinladungLaeuft = false;
-    verbundEinladenSperren();
-  }
-});
 $("#cancel").addEventListener("click", closeSettings);
 overlay.addEventListener("click", (e) => { if (e.target === overlay) closeSettings(); });
 
@@ -10836,95 +8793,6 @@ $("#limit-banner-open").addEventListener("click", async () => {
     if (chip) chip.click();
   }, 350);
 });
-
-
-
-
-const vmBox = $("#vmbox");
-
-async function loadVm(){
-  const liste = $("#vmliste"), note = $("#vm-note");
-  liste.innerHTML = "";
-  note.textContent = "";
-  $("#vm-screen").hidden = true;
-  let data;
-  try { data = await (await api("/api/werkstatt")).json(); }
-  catch { note.textContent = "Die virtual machine antwortet nicht."; return; }
-  if (data.running && data.status?.user_mode) zeigeBildschirm();
-
-  if (!data.running){
-    const leer = document.createElement("div");
-    leer.className = "merk-leer";
-    leer.textContent = "Die virtual machine läuft gerade nicht. Sie startet mit der nächsten "
-      + "Frage im Code-Modus und verschwindet 20 Minuten nach der letzten Frage.";
-    liste.appendChild(leer);
-    return;
-  }
-  const dateien = data.files || [];
-  if (!dateien.length){
-    const leer = document.createElement("div");
-    leer.className = "merk-leer";
-    leer.textContent = "Die virtual machine läuft, es liegt aber noch nichts darin.";
-    liste.appendChild(leer);
-  }
-  for (const datei of dateien) liste.appendChild(vmZeile(datei));
-  stagger(liste.querySelectorAll(".merk"), 16);
-  const belegt = data.usage_gb;
-  note.textContent = `${dateien.length} ${dateien.length === 1 ? "Datei" : "Dateien"}`
-    + (belegt != null ? ` · ${belegt} von ${data.disk_gb || 4} GB belegt` : "")
-    + (data.status?.idle_left_seconds != null
-        ? ` · noch ${Math.ceil(data.status.idle_left_seconds / 60)} Min.` : "");
-}
-
-
-
-function zeigeBildschirm(){
-  const bild = $("#vm-screen-img"), rahmen = $("#vm-screen");
-  bild.onload = () => { rahmen.hidden = false; };
-  bild.onerror = () => { rahmen.hidden = true; };
-  bild.src = "/api/werkstatt/bildschirm?t=" + Date.now();
-}
-
-function vmZeile(datei){
-  const zeile = document.createElement("div");
-  zeile.className = "merk";
-  zeile.innerHTML = '<div class="inhalt"><div class="kopf">'
-    + '<span class="thema"></span></div><div class="text"></div></div>'
-    + '<button type="button" class="weg">Holen</button>';
-  const kurzname = String(datei.path).replace(/^\/work\/?/, "") || datei.path;
-  zeile.querySelector(".thema").textContent = datei.size_text || "";
-  zeile.querySelector(".text").textContent = kurzname;
-  const knopf = zeile.querySelector(".weg");
-  knopf.addEventListener("click", async () => {
-    knopf.disabled = true;
-    try {
-      const res = await api(
-        `/api/werkstatt/datei?path=${encodeURIComponent(datei.path)}`);
-      if (!res.ok){
-        const fehler = await res.json().catch(() => ({}));
-        $("#vm-note").textContent = fehler.error || "Die Datei ist nicht angekommen.";
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url; link.download = kurzname.split("/").pop() || "datei";
-      document.body.appendChild(link); link.click(); link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-    } catch { $("#vm-note").textContent = "Die Datei ist nicht angekommen."; }
-    finally { knopf.disabled = false; }
-  });
-  return zeile;
-}
-
-$("#btn-vmfiles").addEventListener("click", () => {
-  loadVm();
-  openOverlay(vmBox);
-});
-$("#vm-refresh").addEventListener("click", loadVm);
-$("#vm-close").addEventListener("click", () => closeOverlay(vmBox));
-vmBox.addEventListener("click", (e) => { if (e.target === vmBox) closeOverlay(vmBox); });
-
 
 
 
@@ -11174,82 +9042,8 @@ $("#save-model").addEventListener("click", async () => {
 
 
 
-function setTracing(on, { merken = true } = {}){
-  document.body.classList.toggle("tracing", on);
-  if (merken) merkeZustand({ tracing: !!on });
-}
-
-
-setTracing(START.tracing === true, { merken: false });
-$("#showtrace").addEventListener("change", (e) => setTracing(e.target.checked));
-
-
-function gauge(name, value, sub, percent){
-  const hot = percent >= 85 ? " hot" : "";
-  const width = Math.max(0, Math.min(100, percent || 0));
-
-
-  return `<div class="gauge"><div class="g-name">${esc(String(name))}</div>
-    <div class="g-val">${esc(String(value))}</div>
-    <div class="bar${hot}"><span style="width:${width}%"></span></div>
-    <div class="g-sub">${esc(String(sub))}</div></div>`;
-}
-
-
-let loadTimer = null;
-
-function stopLoad(){
-  clearInterval(loadTimer);
-  loadTimer = null;
-}
-
-$("#showload").addEventListener("change", (e) => {
-  stopLoad();
-  const on = e.target.checked;
-  merkeZustand({ load: !!on });
-  if (!on){ $("#usage-note").innerHTML = ""; return; }
-  showLoad();
-  loadTimer = setInterval(() => { if (!document.hidden) showLoad(); }, 4000);
-});
-
-async function showLoad(){
-  const note = $("#usage-note");
-  if (!note.innerHTML) note.textContent = "Sehe nach …";
-  let data;
-  try { data = await (await api("/api/system")).json(); }
-  catch (err){ note.className = "note bad"; note.textContent = nutzerFehler(err && err.message); return; }
-
-
-  const parts = (data.gauges || []).map(g => gauge(g.name, g.value, g.sub, g.percent));
-
-  note.className = "note";
-  note.innerHTML = `<div class="gauges">${parts.join("")}</div>`
-    + `<div style="margin-top:8px">${esc(String(data.system))} · Python ${
-      esc(String(data.python))}</div>` + verbundLast(data.cluster);
-  showStorage(data.storage);
-}
-
-
-
-function verbundLast(server){
-  if (!Array.isArray(server) || !server.length) return "";
-  const bloecke = server.map(s => {
-    const marken = [s.self ? sp("dieser Server", "this server") : "", s.master ? "Master" : ""]
-      .filter(Boolean).join(" · ");
-    const kopf = `<div class="vl-kopf"><b>${esc(String(s.name))}</b>${
-      marken ? ` <span class="vl-marke">${esc(marken)}</span>` : ""}</div>`;
-    const konten = Number(s.accounts) || 0;
-    const rolle = s.alive
-      ? `<div class="vl-rolle"><span>${esc(String(s.role_label || ""))}</span>${konten
-          ? ` · ${esc(sp(`${konten} ${konten === 1 ? "Konto" : "Konten"}`,
-                         `${konten} ${konten === 1 ? "account" : "accounts"}`))}` : ""}</div>`
-      : `<div class="vl-rolle bad">${esc(sp("nicht erreichbar", "not reachable"))}</div>`;
-    const anzeigen = (s.gauges || []).map(g => gauge(g.name, g.value, g.sub, g.percent));
-    return `<div class="vl-server">${kopf}${rolle}${
-      anzeigen.length ? `<div class="gauges">${anzeigen.join("")}</div>` : ""}</div>`;
-  });
-  return `<div class="vl"><div class="vl-titel">Server-Verbund</div>${bloecke.join("")}</div>`;
-}
+// 16.0.0 (Aquaticy-Test): kein Mitlesen und keine Auslastung mehr.
+document.body.classList.remove("tracing");
 
 function showStorage(storage){
   const meter = $("#storage-meter");
@@ -11264,61 +9058,6 @@ function showStorage(storage){
   meter.title = storage.title || "";
   if (note) note.textContent = storage.text || "";
 }
-
-async function haCall(payload){
-  const note = $("#ha-note");
-  note.className = "note"; note.textContent = "Moment …";
-  try {
-    const res = await api("/api/ha", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify(payload)
-    });
-    return await res.json();
-  } catch (err){
-    note.className = "note bad"; note.textContent = nutzerFehler(err && err.message);
-    return null;
-  }
-}
-$("#ha-find").addEventListener("click", async () => {
-  const data = await haCall({ action: "discover" });
-  if (!data) return;
-  const note = $("#ha-note");
-  if (!data.ok || !data.found?.length){
-    note.className = "note bad";
-    note.textContent = "Nichts gefunden. Die Adresse siehst du oben im Browser, wenn Home "
-      + "Assistant offen ist.";
-    return;
-  }
-  form.elements["AQUATICY_HA_URL"].value = data.found[0];
-  note.className = "note ok";
-  note.textContent = data.found.length === 1
-    ? `Gefunden: ${data.found[0]}`
-    : `Gefunden: ${data.found.join(", ")} — die erste ist eingetragen.`;
-});
-$("#ha-test").addEventListener("click", async () => {
-
-  const data = await haCall({
-    url: form.elements["AQUATICY_HA_URL"].value.trim(),
-    token: form.elements["__HA_TOKEN__"].value.trim(),
-    save: true,
-  });
-  if (!data) return;
-  const note = $("#ha-note");
-  if (!data.ok){ note.className = "note bad"; note.textContent = data.error; return; }
-  note.className = "note ok";
-  if (data.saved){
-    form.elements["AQUATICY_HA_URL"].value = data.url;
-    form.elements["__HA_TOKEN__"].value = "";
-    $("#ha-hint").textContent = "(gesetzt)";
-  }
-  note.textContent = `Verbunden mit ${data.name} — ${data.entities} Geräte und Werte. `
-    + (data.control ? "Aquaticy kann jetzt nachsehen und schalten."
-       : "Aquaticy kann jetzt nachsehen. Zum Schalten „Aquaticy darf auch schalten“ "
-         + "einschalten und unten speichern.");
-});
-
-
-
 
 async function googleCall(body){
   try {
@@ -11404,40 +9143,6 @@ $("#google-off").addEventListener("click", async () => {
     showGoogle(data);
   }
 });
-
-
-async function storageCall(url){
-  try {
-    return await (await api("/api/storage", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ url }),
-    })).json();
-  } catch { return null; }
-}
-
-async function storageProbe(url, searching){
-  const note = $("#lager-note");
-  note.className = "note";
-  note.textContent = searching ? "Suche im Netz …" : "Frage nach …";
-  const data = await storageCall(url);
-  if (!data){ note.className = "note bad"; note.textContent = "Keine Verbindung zu Aquaticy. Versuch es gleich noch einmal."; return; }
-  if (!data.ok){ note.className = "note bad"; note.textContent = data.error; return; }
-  form.elements["AQUATICY_STORAGE_URL"].value = data.url;
-  note.className = "note ok";
-  note.textContent = data.rooms === undefined
-    ? `Gefunden: ${data.url}. Zum Übernehmen unten speichern.`
-    : `${data.name} ${data.version} unter ${data.url} — `
-      + `${data.rooms} ${data.rooms === 1 ? "Raum" : "Räume"}, `
-      + `${data.items} ${data.items === 1 ? "Artikel" : "Artikel"}. `
-      + "Zum Übernehmen unten speichern.";
-}
-
-$("#storage-find").addEventListener("click", () => storageProbe("", true));
-$("#storage-test").addEventListener("click", () =>
-  storageProbe(form.elements["AQUATICY_STORAGE_URL"].value.trim(), false));
-
-
-
 
 
 $("#probe").addEventListener("click", async () => {
@@ -11622,6 +9327,7 @@ async function kopfNeuZeichnen(){
 
     currentModel = kopf.model || "";
     flash($("#model-name"), kopf.model_label || "Modell wählen");
+    schluesselHinweis(kopf.key_hint === true);
     flash($("#status"), kopf.status || "");
     $("#status").title = kopf.status_title || "";
   } catch {   }
@@ -11630,176 +9336,26 @@ async function kopfNeuZeichnen(){
 
 
 
-const launchBox = $("#launchbox");
-let launchStart = null;
-async function pruefeUpgrade(){
+// 16.0.0 (Aquaticy-Test): Wer nur Aquaticy Standard hat, sieht beim ersten Anmelden und danach
+// bei jedem fuenften Start, dass eigene API-Schluessel mehr koennen -- mit dem Weg dorthin.
+let schluesselGezeigt = false;
+async function schluesselHinweis(nurStandard){
+  const banner = $("#key-banner");
+  if (!nurStandard){ banner.hidden = true; return; }
+  if (schluesselGezeigt) return;
+  schluesselGezeigt = true;
+  // Der Server zaehlt die Starts je Konto: beim ersten und bei jedem 5. zeigt er den Hinweis.
   try {
-    const res = await api("/api/upgrades");
-    if (!res.ok) return;
-    const daten = await res.json();
-    const n = daten.notice;
-    if (!n || overlay.classList.contains("open")) return;
-    launchStart = n;
-    $("#launch-title").textContent = n.title;
-    $("#launch-gain").textContent = n.gain + " stärker";
-    $("#launch-text").textContent = n.text;
-    openOverlay(launchBox);
-    requestAnimationFrame(() => $("#launch-try").focus());
-  } catch {   }
+    const response = await api("/api/key-hint", {method:"POST", quietErrors:true});
+    const data = await response.json();
+    banner.hidden = data.show !== true;
+  } catch { banner.hidden = true; }
 }
-async function launchSchliessen(){
-  closeOverlay(launchBox);
-  const start = launchStart;
-  launchStart = null;
-  if (!start) return;
-  try {
-    await api("/api/upgrades", { method: "POST", headers: {"Content-Type": "application/json"},
-                                 body: JSON.stringify({ action: "seen", id: start.id }) });
-  } catch {}
-  return start;
-}
-$("#launch-back").addEventListener("click", () => launchSchliessen());
-$("#launch-try").addEventListener("click", async () => {
-  const start = await launchSchliessen();
-  if (start) chooseModel({ id: start.model, label: start.label }, "AQUATICY_MODEL");
+$("#key-banner-open").addEventListener("click", () => {
+  $("#key-banner").hidden = true;
+  addonsOeffnen();
 });
-launchBox.addEventListener("click", (e) => { if (e.target === launchBox) launchSchliessen(); });
-launchBox.addEventListener("keydown", (e) => { if (e.key === "Escape") launchSchliessen(); });
-
-async function upgradeLaden(){
-  if (upgradeBusy || !overlay.classList.contains("open") || document.hidden) return;
-  const anfrage = ++upgradeAnfrage;
-  if (!kontoUltra){ upgradeZeigen({ locked: true }); return; }
-  try {
-    const res = await api("/api/upgrades", { quietErrors: true });
-    if (!res.ok) throw new Error();
-    const daten = await res.json();
-    if (anfrage !== upgradeAnfrage) return;
-    upgradeZeigen(daten.ultra ? daten.ultra : { unavailable: !daten.available });
-  } catch (err){
-    if (anfrage !== upgradeAnfrage) return;
-    $("#upgrade-status").textContent = nutzerFehler(err && err.message);
-    upgradeStand = "";
-    upgradePlanen();
-  }
-}
-async function upgradeAktion(body, knopf){
-  if (upgradeBusy) return;
-  upgradeBusy = true;
-  upgradeAnfrage++;
-  clearTimeout(upgradeTakt);
-  let nachladen = false;
-  if (knopf) knopf.disabled = true;
-  try {
-    const res = await api("/api/upgrades", { method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify(body) });
-    const daten = await res.json();
-    if (!res.ok || daten.error){ hinweis(nutzerFehler(daten.error)); nachladen = true; return; }
-    upgradeZeigen(daten.ultra);
-    if (body.action === "upgrade" || body.action === "rollback") refreshHeader();
-  } catch (err){ hinweis(nutzerFehler(err && err.message)); nachladen = true; }
-  finally {
-    upgradeBusy = false;
-    if (knopf) knopf.disabled = knopf.id === "upgrade-on"
-      && (!kontoUltra || upgradeDaten.locked || upgradeDaten.unavailable);
-    if (nachladen) upgradeLaden(); else upgradePlanen();
-  }
-}
-let upgradeTakt = null;
-let upgradeAnfrage = 0, upgradeBusy = false, upgradeStand = "", upgradeDaten = {};
-function upgradePlanen(){
-  clearTimeout(upgradeTakt);
-
-
-  if (devSichtbar && upgradeDaten.enabled && !upgradeBusy && !document.hidden
-      && overlay.classList.contains("open") && !overlay.classList.contains("closing"))
-    upgradeTakt = setTimeout(upgradeLaden, upgradeDaten.running ? 4000 : 10000);
-}
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) clearTimeout(upgradeTakt);
-  else if (devSichtbar && overlay.classList.contains("open")) upgradeLaden();
-});
-function upgradeZeigen(d){
-  d = d || { unavailable: true };
-  upgradeDaten = d;
-  upgradePlanen();
-  const stand = JSON.stringify({ ultra: kontoUltra, ...d });
-  if (stand === upgradeStand) return;
-  upgradeStand = stand;
-  const gesperrt = !kontoUltra || d.locked;
-  $("#upgrade-lock").hidden = !gesperrt;
-  $("#upgrade-on").disabled = gesperrt || d.unavailable;
-  $("#upgrade-on").checked = !!d.enabled;
-  $("#upgrade-panel").hidden = gesperrt || !d.enabled;
-  const status = $("#upgrade-status");
-  status.className = "note";
-  if (d.unavailable){ status.textContent = "Auto-Upgrading läuft nur mit der Weboberfläche."; return; }
-  if (gesperrt){ status.textContent = ""; return; }
-  status.textContent = d.running ? "Trainiert gerade …"
-    : (d.message || (d.enabled ? "An — trainiert von selbst, sobald es neues bestätigtes Wissen gibt." : ""));
-  const liste = $("#upgrade-tracks");
-  liste.replaceChildren();
-  if (d.enabled && !(d.tracks || []).length){
-    const li = document.createElement("li");
-    li.textContent = "Kein lokales Modell gefunden — Auto-Upgrading braucht Ollama.";
-    liste.appendChild(li);
-  }
-  for (const t of d.tracks || []){
-    const li = document.createElement("li");
-    const zeile = document.createElement("div");
-    zeile.className = "zeile";
-    const wer = document.createElement("span");
-    wer.className = "wer";
-    wer.textContent = t.current_label;
-    const klein = document.createElement("small");
-    const k = t.candidate;
-    klein.textContent = k
-      ? `Neu: ${k.label} · ${k.gain_text}` + (k.can_upgrade ? "" : ` · Upgraden ab ${d.minor} %`)
-      : "Neueste Version — noch keine bessere";
-    wer.appendChild(klein);
-    const los = document.createElement("button");
-    los.type = "button";
-    los.className = "btn upgrade-go" + (k && k.can_upgrade ? " bereit" : "");
-    los.textContent = "Upgraden";
-    los.disabled = !(k && k.can_upgrade);
-    los.title = k && !k.can_upgrade ? `Erst ab ${d.minor} % besser` : "";
-    los.addEventListener("click", () => upgradeAktion({ action: "upgrade", base: t.base }, los));
-    zeile.append(wer, los);
-    if (k){
-      const weg = document.createElement("button");
-      weg.type = "button"; weg.className = "btn"; weg.textContent = "Überspringen";
-      weg.addEventListener("click", async () => {
-        if (await frage("Version überspringen?", `${k.label} wird verworfen.`, "Überspringen"))
-          upgradeAktion({ action: "skip", base: t.base }, weg);
-      });
-      zeile.appendChild(weg);
-    }
-    li.appendChild(zeile);
-    const alte = (t.versions || []).filter(v => !v.current);
-    if (alte.length){
-      const versionen = document.createElement("div");
-      versionen.className = "versionen";
-      for (const v of alte){
-        const b = document.createElement("button");
-        b.type = "button"; b.className = "btn";
-        b.textContent = `${v.label} als neueste`;
-        b.title = "Zurückziehen: diese Version wird wieder die neueste";
-        b.addEventListener("click", async () => {
-          if (await frage("Version zurückziehen?",
-                          `${v.label} wird wieder die neueste Version für alle.`, "Zurückziehen"))
-            upgradeAktion({ action: "rollback", base: t.base, version: v.version }, b);
-        });
-        versionen.appendChild(b);
-      }
-      li.appendChild(versionen);
-    }
-    liste.appendChild(li);
-  }
-}
-$("#upgrade-on").addEventListener("change", (e) =>
-  upgradeAktion({ action: "enable", on: e.target.checked }, e.target));
-$("#upgrade-train").addEventListener("click", (e) =>
-  upgradeAktion({ action: "train" }, e.target));
+$("#key-banner-x").addEventListener("click", () => { $("#key-banner").hidden = true; });
 
 async function starteOberflaeche(){
   angemeldet = true;
@@ -11809,7 +9365,6 @@ async function starteOberflaeche(){
   pruefeLimits();
   pluginsLaden();
   coworkerAbzeichenLaden();
-  pruefeUpgrade();
   pruefeSperre();
   await wiederAufnehmen();
   input.focus();

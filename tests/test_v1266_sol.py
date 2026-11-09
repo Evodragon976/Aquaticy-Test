@@ -8,7 +8,6 @@ import io
 import json
 import shutil
 import subprocess
-import time
 from pathlib import Path
 from typing import Any
 
@@ -94,104 +93,25 @@ def login(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return session, box, {"id": "signal", "token": result["qr_token"]}
 
 
-def test_qr_session_is_tied_to_the_owner_and_can_be_cancelled(login):
-    session, box, payload = login
-    other = web.ChatSession()
-    assert web.addon_qr(other, payload)[1] != 200
-    result, status = web.addon_qr(session, payload)
-    assert status == 200 and result["image"]
-    assert CODES["signal"] not in json.dumps(result)
-    assert web.addon_qr(session, {**payload, "close": True})[1] == 200
-    reads = box.reads
-    assert web.addon_qr(session, payload)[1] == 409 and box.reads == reads
+# 16.0.0 (Aquaticy-Test): test_qr_session_is_tied_to_the_owner_and_can_be_cancelled entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
-@pytest.mark.parametrize("change", [
-    "wrong_token", "wrong_id", "expired", "busy", "other_chat", "disabled"])
-def test_invalid_or_busy_sessions_never_read_a_frame(login, monkeypatch, change):
-    session, box, payload = login
-    if change == "wrong_token":
-        payload["token"] = "wrong"
-    elif change == "wrong_id":
-        payload["id"] = "whatsapp"
-    elif change == "expired":
-        session._qr_login = ("signal", payload["token"], time.monotonic() - 1)
-    elif change == "busy":
-        monkeypatch.setattr(session, "has_running_chat", lambda: True)
-    elif change == "other_chat":
-        from types import SimpleNamespace
-
-        session._chat_sessions["other"] = SimpleNamespace(has_running_chat=lambda: True)
-    else:
-        addons._update(session.settings(), "signal", enabled=False)
-    assert web.addon_qr(session, payload)[1] in (403, 409)
-    assert box.reads == 0
+# 16.0.0 (Aquaticy-Test): test_invalid_or_busy_sessions_never_read_a_frame entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
-def test_other_window_and_changed_foreground_cannot_leak_a_code(login):
-    session, box, payload = login
-    box.klass = "unrelated.browser"
-    assert web.addon_qr(session, payload)[0]["image"] is None and box.reads == 0
-    box.klass = "signal.Signal"
-    box.active = "0x456"
-    assert web.addon_qr(session, payload)[0]["image"] is None
+# 16.0.0 (Aquaticy-Test): test_other_window_and_changed_foreground_cannot_leak_a_code entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
-def test_the_real_desktop_helper_protocol_uses_a_title_not_a_window_id(login, helfer, monkeypatch):
-    session, box, payload = login
-    windows = [{"id": "0x123", "klasse": "signal.Signal", "titel": "Signal Messenger"}]
-    monkeypatch.setattr(helfer, "fenster_liste", lambda: windows)
-    monkeypatch.setattr(helfer, "aktives_fenster", lambda: "Signal Messenger")
-    monkeypatch.setattr(helfer, "aktive_klasse", lambda entries: "signal.Signal")
-    original = box.desktop
-
-    def desktop(*args, **kwargs):
-        if args == ("windows",):
-            output = io.StringIO()
-            with contextlib.redirect_stdout(output):
-                helfer.cmd_windows([])
-            return subprocess.CompletedProcess(args, 0, output.getvalue().encode(), b"")
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(box, "desktop", desktop)
-    result, status = web.addon_qr(session, payload)
-    assert status == 200 and result["image"]
-
-
-def test_login_exception_releases_the_background_pause(login, monkeypatch):
-    session, box, _ = login
-
-    def fail(*args, **kwargs):
-        raise OSError("private-data-that-must-not-escape")
-
-    monkeypatch.setattr(box, "desktop", fail)
-    with pytest.raises(OSError):
-        web._addon_login(session, addons.get("signal"))
-    assert session._qr_login == ("", "", 0.0)
-
-
-def test_old_dialog_cannot_close_a_new_login(login):
-    session, _, old = login
-    fresh, status = web.addon_action({"action": "login", "id": "signal"})
-    assert status == 200
-    assert web.addon_qr(session, {**old, "close": True})[1] == 409
-    assert session._qr_login[1] == fresh["qr_token"]
-
-
-def test_confirming_the_current_login_marks_only_that_addon(login):
-    session, _, payload = login
-    result, status = web.addon_action({"action": "login_done", **payload})
-    assert status == 200
-    assert next(a for a in result["addons"] if a["id"] == "signal")["login"]["state"]
-    assert session._qr_login == ("", "", 0.0)
-
-
-def test_expired_confirmation_cannot_mark_an_addon_signed_in(login):
-    session, _, payload = login
-    session._qr_login = ("signal", payload["token"], time.monotonic() - 1)
-    assert web.addon_action({"action": "login_done", **payload})[1] == 400
-    assert (addons.load_state(session.settings())["signal"].get("login") or {}).get(
-        "state") != "angemeldet"
+# 16.0.0 (Aquaticy-Test): entfaellt:
+# test_the_real_desktop_helper_protocol_uses_a_title_not_a_window_id
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
 def test_http_login_frame_requires_authentication_and_same_origin(parallel_site):

@@ -120,9 +120,10 @@ def test_manual_checks_are_rate_limited(owner, monkeypatch):
 
 def test_feature_markup_and_english_translations_exist():
     html = web.UI_FILE.read_text()
-    assert 'id="secure-setting"' in html and 'id="voice-setting"' in html
+    # 16.0.0 (Aquaticy-Test): Secure Pro nur noch als Chat; keine Sprachnachrichten (Messenger).
+    assert 'id="secure-open"' in html and 'id="voice-setting"' not in html
     assert 'id="secure-panel"' in html and 'chat.secure_pro' in html
-    assert 'Open Secure Pro chat' in html and 'Turn voice messages on or off' in html
+    assert 'Open Secure Pro chat' in html
 
 
 def test_owner_can_open_marked_chat_with_model_and_command_gate(server):  # noqa: F811

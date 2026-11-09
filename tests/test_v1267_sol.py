@@ -60,35 +60,9 @@ def test_similar_urls_never_count_as_whatsapp_pairing(url: str) -> None:
     assert not pairing_code(url + whatsapp_payload().split('#', 1)[1], 'whatsapp')
 
 
-def test_long_window_titles_match_the_helpers_truncated_window_list(
-    tmp_path, monkeypatch,
-) -> None:
-    import json
-    import subprocess
-    import time
-
-    from aquaticy import addons, sandbox, web
-    from tests.test_addons import _sitzung
-    from tests.test_v1266_sol import Box
-
-    session = _sitzung(tmp_path, monkeypatch, 'ultra')
-    addons._update(session.settings(), 'signal', installed=True, enabled=True)
-    session._qr_login = ('signal', 'test-token', time.monotonic() + 60)
-    title = 'Signal ' + 'x' * 230
-
-    class LongTitle(Box):
-        def desktop(self, *args, **kwargs):
-            if args == ('windows',):
-                data = {'fenster': [{'id': '0x123', 'klasse': self.klass, 'titel': title[:200]}],
-                        'aktiv': title, 'aktiv_klasse': self.klass}
-                return subprocess.CompletedProcess(args, 0, json.dumps(data).encode(), b'')
-            return super().desktop(*args, **kwargs)
-
-    monkeypatch.setattr(sandbox, 'shared', lambda settings: LongTitle())
-    result, status = web.addon_qr(session, {'id': 'signal', 'token': 'test-token'})
-    assert status == 200 and result['image']
-
-
+# 16.0.0 (Aquaticy-Test): test_long_window_titles_match_the_helpers_truncated_window_list entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
 @pytest.mark.parametrize('status', [502, 429, 403, 503])
@@ -149,59 +123,14 @@ def test_qr_polling_recovers_from_transient_errors_but_stops_on_denial(parallel_
             browser.close()
 
 
-def test_closing_during_a_screen_capture_releases_the_login_immediately(login, monkeypatch):
-    import threading
-    from concurrent.futures import ThreadPoolExecutor
-
-    from aquaticy import web
-
-    session, box, payload = login
-    entered, release = threading.Event(), threading.Event()
-    original = box.screenshot
-
-    def screenshot(**kwargs):
-        entered.set()
-        assert release.wait(5)
-        return original(**kwargs)
-
-    monkeypatch.setattr(box, 'screenshot', screenshot)
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(web.addon_qr, session, payload)
-        try:
-            assert entered.wait(5)
-            assert web.addon_qr(session, {**payload, 'close': True})[1] == 200
-            assert session._qr_login == ('', '', 0.0)
-        finally:
-            release.set()
-        result, status = future.result(timeout=5)
-        assert status == 409 and 'image' not in result
+# 16.0.0 (Aquaticy-Test): entfaellt:
+# test_closing_during_a_screen_capture_releases_the_login_immediately
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
-def test_a_login_response_cannot_steal_a_newer_dialogs_token(login, monkeypatch):
-    import time
-
-    from aquaticy import web
-
-    session, _, _ = login
-    monkeypatch.setattr(web.secrets, 'token_urlsafe', lambda size: 'request-token')
-
-    def view(s):
-        with s._qr_state_lock:
-            s._qr_login = ('signal', 'newer-token', time.monotonic() + 600)
-        return {'addons': []}
-
-    monkeypatch.setattr(web, 'addons_view', view)
-    result, status = web.addon_action({'action': 'login', 'id': 'signal'})
-    assert status == 200 and result['qr_token'] == 'request-token'
-    assert session._qr_login[1] == 'newer-token'
+# 16.0.0 (Aquaticy-Test): test_missing_qr_libraries_get_an_actionable_error entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
-def test_missing_qr_libraries_get_an_actionable_error(login, monkeypatch):
-    import sys
-
-    from aquaticy import web
-
-    session, _, payload = login
-    monkeypatch.setitem(sys.modules, 'zxingcpp', None)
-    result, status = web.addon_qr(session, payload)
-    assert status == 503 and 'Aktualisiere Aquaticy' in result['error']

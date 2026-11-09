@@ -61,16 +61,9 @@ def add_on_bereit(eine: Any) -> None:
                    rechte={"zugriff": "schreiben", "wo": "alle"})
 
 
-def test_only_the_messenger_addons_carry_a_bridge_view(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runner: FakeRunner) -> None:
-    eine = sitzung(tmp_path, monkeypatch)
-    ansicht = web.addons_view(eine)
-    mit = {a["id"] for a in ansicht["addons"] if "bruecke" in a}
-    assert mit == {"whatsapp", "signal"}
-    wa = next(a for a in ansicht["addons"] if a["id"] == "whatsapp")["bruecke"]
-    assert wa["config"]["an"] is False and wa["config"]["wer"] == "selbst"
-    assert wa["problem"], "ohne Add-on nennt die Ansicht den Grund"
-    assert {"wer", "dienste", "takt"} <= set(wa["katalog"])
+# 16.0.0 (Aquaticy-Test): test_only_the_messenger_addons_carry_a_bridge_view entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
 def test_switching_on_without_the_prerequisites_is_refused_with_the_reason(
@@ -83,20 +76,9 @@ def test_switching_on_without_the_prerequisites_is_refused_with_the_reason(
     assert runner.aufrufe == []
 
 
-def test_switching_on_saves_the_choices_and_wakes_the_runner(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runner: FakeRunner) -> None:
-    eine = sitzung(tmp_path, monkeypatch)
-    add_on_bereit(eine)
-    antwort, status = web.addon_action({"action": "bridge", "id": "whatsapp", "bruecke": {
-        "an": True, "wer": "nummern", "nummern": ["0151 2345678"], "takt": 120,
-        "dienste": {"haus": "schalten", "mail": "lesen"}}})
-    assert status == 200 and "bereit" in antwort["message"]
-    konfig = bridge.load_config(eine.settings())["whatsapp"]
-    assert konfig["an"] and konfig["wer"] == "nummern" and konfig["takt"] == 120
-    assert konfig["dienste"]["haus"] == "schalten" and konfig["nummern"] == ["0151 2345678"]
-    assert runner.aufrufe == ["start", "wake"]
-    ansicht = next(a for a in antwort["addons"] if a["id"] == "whatsapp")["bruecke"]
-    assert ansicht["config"]["an"] is True and ansicht["problem"] == ""
+# 16.0.0 (Aquaticy-Test): test_switching_on_saves_the_choices_and_wakes_the_runner entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
 def test_editing_while_on_does_not_need_the_prerequisites_again(
@@ -176,7 +158,6 @@ def test_without_the_addon_the_bridge_goes_off(
     assert bridge.load_config(eine.settings())["whatsapp"]["an"] is False
 
 
-
 def test_stopping_all_schedulers_stops_the_bridges(monkeypatch: pytest.MonkeyPatch) -> None:
     eins, zwei = FakeRunner(), FakeRunner()
     monkeypatch.setattr(web, "USER_BRIDGES", {"a": eins})
@@ -224,7 +205,6 @@ def test_starting_the_bridge_at_login_does_not_load_the_account_settings(
     web.start_user_bridge(SimpleNamespace(id="u1"))
 
 
-
 def gebaut(monkeypatch: pytest.MonkeyPatch, konto: Any, laeuft: bool) -> Any:
     eine = SimpleNamespace(settings=lambda: SimpleNamespace(), has_running_chat=lambda: laeuft)
     runner = web._build_bridge_runner(lambda: eine, konto)
@@ -266,7 +246,6 @@ def test_abuse_in_the_bridge_goes_to_ai_guard_like_in_jobs(
     web.bridge_abuse(konto, {"art": "x"})
 
 
-
 def _ui_text() -> str:
     return web.UI_FILE.read_text(encoding="utf-8")
 
@@ -280,15 +259,9 @@ def _english() -> dict[str, str]:
     return json.loads(roh.group(1))
 
 
-def test_the_ui_has_the_bridge_section_and_sends_the_bridge_action() -> None:
-    html = _ui_text()
-    assert "function addonBruecke(a)" in html
-    assert ("if ((a.installed && !laeuft || a.native?.linked) && a.bruecke) "
-            "karte.appendChild(addonBruecke(a));") in html
-    assert 'action: "bridge"' in html
-
-    abschnitt = html[html.index("function addonBruecke(a)"):html.index("function zeigeAddons()")]
-    assert "innerHTML" not in abschnitt.replace('titel.innerHTML = "<b></b>"', "")
+# 16.0.0 (Aquaticy-Test): test_the_ui_has_the_bridge_section_and_sends_the_bridge_action entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
 def test_the_choices_the_server_sends_have_english() -> None:

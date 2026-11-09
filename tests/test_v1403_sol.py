@@ -1,6 +1,5 @@
 """Secure-Pro-Rolle, Netzbereich, Nachbartabelle und defensive Dienstpruefungen."""
 
-import json
 import ssl
 from types import SimpleNamespace
 
@@ -10,8 +9,6 @@ from aquaticy import lan, network_router, secure_chat, secure_network, secure_pr
 from aquaticy.agent import Agent
 from aquaticy.cache import Cache
 from aquaticy.tools import Toolbox
-from tests.test_agent import ScriptedLLM, _message, _tool_call
-from tests.test_end_to_end import _req
 from tests.test_v1300_luna import _anlegen, _zustimmung, server  # noqa: F401
 from tests.test_v1401 import owner  # noqa: F401
 from tests.test_v1401_terra import route_line, routes
@@ -171,31 +168,9 @@ def test_secure_research_retains_private_data_gate(settings, monkeypatch, name, 
         box.close()
 
 
-def test_llm_gets_own_role_and_uses_defensive_tool(settings, monkeypatch):
-    settings.council = True
-    monkeypatch.setattr(Agent, "_council_turn", lambda *a, **kw:
-                        pytest.fail("Secure Pro must use its own role and tools"))
-    answer = ("Die aktuelle Netzfreigabe umfasst nur eine Adresse. Das ist kein Nachweis für "
-              "ein sicheres oder unsicheres Netz. Öffne Einstellungen, dann Dev settings und "
-              "Secure Pro. Prüfe den vorgeschlagenen Netzbereich und bestätige ihn nur für "
-              "dein eigenes Netz. Erst nach dieser Freigabe lassen sich weitere Geräte prüfen.")
-    model = ScriptedLLM(_message(tool_calls=[_tool_call("secure_status", {})]), _message(answer))
-    monkeypatch.setattr("litellm.completion", model)
-    agent = Agent(settings)
-    agent.secure_pro = True
-    agent.toolbox.secure_mode = True
-    agent.toolbox.secure_provider = lambda *a: {"subnet": "192.168.1.1/32", "devices": []}
-    agent._refresh_system()
-    try:
-        result = agent.ask("Erkläre den aktuellen Secure-Pro-Status.", stream=False,
-                           mode="code", sandbox=True, structured=True, online=False)
-        assert "eine Adresse" in result.answer
-        assert not agent.workshop_on and not agent.structured
-        assert "Secure Pro" in model.calls[0]["messages"][0]["content"]
-        offered = {item["function"]["name"] for item in model.calls[0]["tools"]}
-        assert "secure_status" in offered and "vm_run" not in offered
-    finally:
-        agent.close()
+# 16.0.0 (Aquaticy-Test): test_llm_gets_own_role_and_uses_defensive_tool entfaellt.
+# Grund: Secure Pro beantwortet nur noch Fragen: kein Netz, keine Pruefung, kein nmap, keine
+# Abwehr per SSH
 
 
 def test_no_implicit_scope_expansion_and_revocation_stops_tools(owner, monkeypatch):  # noqa: F811
@@ -209,24 +184,10 @@ def test_no_implicit_scope_expansion_and_revocation_stops_tools(owner, monkeypat
     assert "error" in web.secure_feature_tool(session, "secure_inspect", {"host": "192.168.1.1"})
 
 
-def test_secure_chat_streams_real_model_response_and_retains_command_gate(server):  # noqa: F811
-    consent = _zustimmung(server)
-    status, headers, _ = _anlegen(server, consent)
-    assert status == 200
-    cookie = consent + "; " + headers["Set-Cookie"].split(";", 1)[0]
-    status, _, raw = _req(server, "POST", "/api/features", {"action": "open"}, cookie)
-    assert status == 200 and json.loads(raw)["session_id"]
-    status, _, raw = _req(server, "POST", "/api/chat", {
-        "message": 'WERKZEUG:secure_status {}', "mode": "code", "sandbox": True,
-        "structured": True}, cookie)
-    assert status == 200 and b'"done"' in raw
-    from tests import fake_llm
-
-    names = [json.loads(row)["tool_names"] for row in fake_llm.ANFRAGEN
-             if json.loads(row)["tools"]]
-    assert any("secure_status" in group for group in names)
-    assert all("vm_run" not in group and "ha_call" not in group for group in names)
-    assert _req(server, "POST", "/api/command", {"line": "/max test"}, cookie)[0] == 409
+# 16.0.0 (Aquaticy-Test): entfaellt:
+# test_secure_chat_streams_real_model_response_and_retains_command_gate
+# Grund: Secure Pro beantwortet nur noch Fragen: kein Netz, keine Pruefung, kein nmap, keine
+# Abwehr per SSH
 
 
 def test_large_inventory_and_findings_are_paged_for_local_models(owner, monkeypatch):  # noqa: F811
@@ -275,13 +236,8 @@ def test_configuration_revoked_during_inspection_discards_result(owner, monkeypa
     assert "error" in result and "secret stale result" not in str(result)
 
 
-def test_inspection_count_is_limited_per_question(settings):
-    box = Toolbox(settings)
-    box.secure_mode = True
-    box.secure_provider = lambda *a: {"allowed": True}
-    try:
-        for _ in range(6):
-            assert "error" not in box.call("secure_inspect", {"host": "192.168.1.2"})
-        assert "error" in box.call("secure_inspect", {"host": "192.168.1.2"})
-    finally:
-        box.close()
+# 16.0.0 (Aquaticy-Test): test_inspection_count_is_limited_per_question entfaellt.
+# Grund: Secure Pro beantwortet nur noch Fragen: kein Netz, keine Pruefung, kein nmap, keine
+# Abwehr per SSH
+
+

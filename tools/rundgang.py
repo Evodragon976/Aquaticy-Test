@@ -480,7 +480,7 @@ def normales_konto(browser: Any, port: int, log: Protokoll, fehler: list[str]) -
                "Tokenzahlen sieht ein normales Konto nicht")
 
 
-    log.pruefe(pg.is_hidden("#pro-system"), "die Auslastung ist für Normal nicht zu sehen")
+    log.pruefe(pg.locator("#pro-system").count() == 0, "es gibt keine Auslastung mehr")
 
     log.pruefe(pg.is_hidden("#ban-info"), "ohne Sperre steht unter der Version kein „Info“")
     pg.evaluate("zeigeSperre({banned: true, reason: 'Test', duration: 'noch 2 Tag(e)', "
@@ -497,6 +497,7 @@ def normales_konto(browser: Any, port: int, log: Protokoll, fehler: list[str]) -
     pg.evaluate("zeigeSperre({banned: false})")
     status = pg.evaluate("async () => (await fetch('/api/system')).status")
     log.pruefe(status == 403, f"und am Fenster vorbei gibt der Server sie nicht her ({status})")
+    # 16.0.0 (Aquaticy-Test): die Route bleibt fuer Normal gesperrt, auch wenn die Anzeige fehlt.
 
     log.pruefe(pg.is_hidden("#sec-schluessel"),
                "Eigene Modelle ist nicht da, solange nichts Eigenes eingetragen ist")
@@ -526,8 +527,12 @@ def normales_konto(browser: Any, port: int, log: Protokoll, fehler: list[str]) -
                          timeout=10_000)
     karte = pg.locator('.addon[data-id="mistral"]')
     wege = karte.locator(".anmelden a").all_inner_texts()
-    log.pruefe({"Mit Google", "Mit Apple", "Mit E-Mail"} <= set(wege),
-               f"nach dem Installieren: anmelden beim Anbieter ({wege})")
+    # 16.0.0 (Aquaticy-Test): kein "Mit Google" mehr -- ein Link zur Schluessel-Seite.
+    log.pruefe(wege == ["Schlüssel bei Mistral AI holen"]
+               and not any("Google" in w for w in wege),
+               f"nach dem Installieren: Link zur Schlüssel-Seite des Anbieters ({wege})")
+    ziel = karte.locator(".anmelden a").first.get_attribute("href") or ""
+    log.pruefe(ziel == "https://console.mistral.ai/api-keys", f"der Link führt zu Mistral: {ziel}")
     log.pruefe(karte.locator(".schalter").count() == 0, "kein Schalter: installiert heißt an")
     karte.locator("input[type=password]").fill("rundgang" + "x" * 24)
     karte.locator("button", has_text="Verknüpfen").click()
@@ -607,17 +612,7 @@ def normales_konto(browser: Any, port: int, log: Protokoll, fehler: list[str]) -
     pg.click("#btn-settings")
     pg.wait_for_selector("#overlay.open", state="visible")
     pg.wait_for_timeout(700)
-    pg.click('#secnav button:has-text("virtual machine")')
-    pg.wait_for_timeout(700)
-    log.pruefe(pg.is_enabled("#usermode") and not pg.is_checked("#usermode"),
-               "User mode: der Schalter ist aus und nicht ausgegraut")
-    pg.click("#usermode")
-    pg.wait_for_selector("#guardbox.open", state="visible")
-    log.pruefe("nur mit einem Ultra-Konto" in pg.inner_text("#guard-title"),
-               "beim Draufdruecken kommt der Pro-Hinweis")
-    pg.click("#guard-ok")
-    pg.wait_for_selector("#guardbox", state="hidden")
-    log.pruefe(not pg.is_checked("#usermode"), "und der User mode bleibt aus")
+    log.pruefe(pg.locator("#usermode").count() == 0, "16.0.0 (Aquaticy-Test): kein User mode mehr")
 
     log.pruefe(pg.eval_on_selector('[name="AQUATICY_API_BASE"]', "e => e.readOnly")
                and pg.eval_on_selector('[name="AQUATICY_SEARXNG_URL"]', "e => e.readOnly"),
@@ -645,12 +640,8 @@ def normales_konto(browser: Any, port: int, log: Protokoll, fehler: list[str]) -
     pg.click("#btn-addons")
     pg.wait_for_selector("#addon-list .addon", timeout=10_000)
     pg.wait_for_timeout(400)
-    pg.locator('.addon[data-id="whatsapp"] button', has_text="Installieren").click()
-    pg.wait_for_selector("#guardbox.open", state="visible")
-    log.pruefe("nur mit einem Ultra-Konto" in pg.inner_text("#guard-title"),
-               "WhatsApp installieren: Hinweis statt Installation")
-    pg.click("#guard-ok")
-    pg.wait_for_selector("#guardbox", state="hidden")
+    log.pruefe(pg.locator('.addon[data-id="whatsapp"]').count() == 0,
+               "16.0.0 (Aquaticy-Test): WhatsApp steht nicht mehr bei den Add-ons")
     antwort = pg.evaluate(
         """async () => {
           const r = await fetch("/api/addons", {method: "POST",
@@ -659,7 +650,7 @@ def normales_konto(browser: Any, port: int, log: Protokoll, fehler: list[str]) -
           return await r.json();
         }"""
     )
-    log.pruefe(not antwort.get("ok") and "Ultra" in str(antwort.get("error", "")),
+    log.pruefe(not antwort.get("ok") and "nicht mehr" in str(antwort.get("error", "")),
                "am Fenster vorbei lehnt der Server virtual-machine-Add-ons ab")
     pg.locator('.addon[data-id="feeds"] button', has_text="Installieren").click()
     pg.wait_for_selector('.addon[data-id="feeds"] textarea', timeout=10_000)
@@ -1170,43 +1161,7 @@ def rundgang(pg: Any, log: Protokoll, agent: FakeAgent, bilder: Path | None,
             "und der Punkt am Knopf ist weg",
         )
 
-    if dran("werkstatt"):
-        log.abschnitt("4a. virtual machine im Code-Modus")
-        pg.click('#modes .mode[data-mode="code"]')
-        pg.wait_for_timeout(300)
-        menue(pg, "weitere")
-        pg.wait_for_timeout(300)
-        log.pruefe(pg.is_visible("#werkstatt"), "der Schalter steht im Code-Modus bereit")
-        log.pruefe(not pg.is_visible("#online"), "Im Web suchen ist hier verschwunden")
-        log.pruefe(not pg.is_visible("#recheck"), "Gegenprüfen ebenso")
-        pg.check("#werkstatt")
-        pg.keyboard.press("Escape")
-        pg.wait_for_timeout(300)
-        menue(pg, "aufwand")
-        log.pruefe(pg.is_visible("#efforts"), "die Denktiefe bleibt")
-        pg.keyboard.press("Escape")
-        pg.wait_for_timeout(400)
-        log.pruefe("virtual machine" in pg.inner_text("#status"), "die Kopfzeile sagt es")
-        pg.fill("#input", "Schreib ein Skript und führ es aus")
-        pg.click("#send")
-        pg.wait_for_timeout(1200)
-        letzte = agent.gesehen[-1]
-        log.pruefe(letzte["werkstatt"] is True, f"der Schalter kommt an ({letzte['werkstatt']})")
-        log.pruefe(letzte["web"] is True,
-                   "und nachschlagen darf er weiterhin — nur die Maschine hat kein Netz")
-        schritte = schritte_lesen(pg)
-        log.pruefe("[virtual machine]" in schritte, "die virtual machine meldet sich")
-        log.pruefe("lief durch" in schritte, "und sagt, was herauskam")
-        foto("04a-werkstatt")
-        pg.click('#modes .mode[data-mode="normal"]')
-        pg.wait_for_timeout(300)
-        menue(pg, "weitere")
-        pg.wait_for_timeout(400)
-        log.pruefe(not pg.is_visible("#werkstatt"), "im Standardmodus ist sie wieder weg")
-        log.pruefe(pg.is_visible("#online") and pg.is_visible("#recheck"),
-                   "dafür sind Web und Gegenprüfen zurück")
-        pg.keyboard.press("Escape")
-        pg.wait_for_timeout(400)
+    # 16.0.0 (Aquaticy-Test): Abschnitt "werkstatt" entfaellt -- keine virtual machine.
 
     if dran("web"):
         log.abschnitt("4b. Ohne Web")
@@ -1519,84 +1474,17 @@ def rundgang(pg: Any, log: Protokoll, agent: FakeAgent, bilder: Path | None,
         pg.click("#btn-new")
         pg.wait_for_timeout(700)
 
-    if dran("usermode"):
-        log.abschnitt("6b. User mode")
-
-
-        from aquaticy.media import save_snapshot
-
-        foto_bytes = pg.screenshot(type="jpeg", quality=60,
-                                   clip={"x": 0, "y": 0, "width": 320, "height": 200})
-        agent.bildschirm = save_snapshot(konto_einstellungen().data_dir, foto_bytes,
-                                         "image/jpeg")
-        pg.click("#btn-new")
-        pg.wait_for_timeout(700)
-        pg.fill("#input", "usermode-probe: oeffne die Seite")
-        pg.click("#send")
-        pg.wait_for_selector("#stop", state="hidden", timeout=25000)
-        pg.wait_for_timeout(900)
-        schritte = schritte_lesen(pg)
-        log.pruefe("Internet an, Heimnetz gesperrt" in schritte,
-                   "die Netzsperre steht in den Schritten")
-        log.pruefe("Desktop bereit" in schritte, "der Desktop meldet sich")
-        log.pruefe("[Desktop]" in schritte and "klickt: Link Impressum" in schritte,
-                   f"die Handgriffe stehen da: {schritte[-120:]!r}")
-        log.pruefe(
-            pg.locator(".steps >> nth=-1").locator(".step.warn").filter(
-                has_text="abgelehnt").count() == 1,
-            "eine Ablehnung ist als Warnung markiert",
-        )
-        log.pruefe(
-            pg.locator(".steps >> nth=-1").locator("img.shot").count() == 1,
-            "das Bildschirmfoto steht klein beim Schritt",
-        )
-        karte = pg.locator(".result-card.visual").filter(has_text="Bildschirm der virtual machine")
-        log.pruefe(karte.count() == 1, "und gross unter der Antwort")
-        log.pruefe(
-            karte.locator("img").count() == 1
-            and pg.eval_on_selector(".result-card.visual img", "e => e.naturalWidth") > 0,
-            "das Bild laedt wirklich",
-        )
-        log.pruefe(
-            karte.locator("a.source").count() == 0,
-            "ohne 'Bildquelle' -- ein Bildschirmfoto hat keine Webadresse",
-        )
-        pg.click("#btn-new")
-        pg.wait_for_timeout(700)
-        log.abschnitt("6d. Automatische Modellwahl und historische Bilder")
-        pg.fill("#input", "altbild-probe: Zeige mein früher gespeichertes Bild")
-        pg.click("#send")
-        pg.wait_for_selector("#stop", state="hidden", timeout=25000)
-        pg.wait_for_timeout(900)
-        schritte = schritte_lesen(pg)
-        log.pruefe("[Modell]" in schritte and "Recherche und Fragen" in schritte,
-                   f"die Wahl steht im Verlauf: {schritte[-140:]!r}")
-        log.pruefe("erstellt mit" not in schritte, "keine neue Bilderstellung im Verlauf")
-        karte = pg.locator(".result-card.visual").filter(has_text="KI-Bild")
-        log.pruefe(karte.count() == 1, "das Bild steht als Karte unter der Antwort")
-        log.pruefe("KI-erstellt" in karte.inner_text(), "beschriftet als KI-erstellt")
-        log.pruefe(karte.locator("a", has_text="Herunterladen").count() == 1,
-                   "mit Herunterladen statt einer Bildquelle")
-        log.pruefe(pg.eval_on_selector(".result-card.visual img", "e => e.naturalWidth") > 0,
-                   "das Bild laedt wirklich")
-        pg.click("#btn-new")
-        pg.wait_for_timeout(700)
+    # 16.0.0 (Aquaticy-Test): Abschnitt "usermode" entfaellt -- keine virtual machine.
 
     if dran("addons"):
         log.abschnitt("6c. Add-ons und Login-Apps")
         pg.click("#btn-settings")
         pg.wait_for_selector("#overlay.open", state="visible")
         pg.wait_for_timeout(700)
-        pg.click('#secnav button:has-text("virtual machine")')
+        pg.click('#secnav button:has-text("Add-ons")')
         pg.wait_for_timeout(700)
-        neben = pg.evaluate("""() => {
-          const s = document.querySelector('#usermode').getBoundingClientRect();
-          const k = document.querySelector('#btn-addons').getBoundingClientRect();
-          const l = document.querySelector('#btn-loginapps').getBoundingClientRect();
-          return {gleicheZeile: Math.abs(s.top - k.top) < 30, darunter: l.top > s.top};
-        }""")
-        log.pruefe(neben["gleicheZeile"], "der Add-ons-Knopf steht beim User-mode-Schalter")
-        log.pruefe(neben["darunter"], "die Login-Apps stehen darunter")
+        log.pruefe(pg.locator("#btn-loginapps").count() == 0,
+                   "16.0.0 (Aquaticy-Test): keine Login-Apps mehr")
         pg.click("#btn-addons")
         pg.wait_for_selector("#addonbox.open", state="visible")
         pg.wait_for_selector("#addon-list .addon", timeout=10_000)
@@ -1604,19 +1492,17 @@ def rundgang(pg: Any, log: Protokoll, agent: FakeAgent, bilder: Path | None,
         karten = pg.locator("#addon-list .addon")
         namen = [karten.nth(i).locator(".addon-name").inner_text() for i in range(karten.count())]
         log.pruefe(
-            {"GitHub", "WhatsApp Web", "Signal", "Blender"} <= set(namen),
-            f"die gewuenschten Add-ons sind da: {namen}",
+            {"GitHub", "Wetter"} <= set(namen)
+            and not {"WhatsApp Web", "Signal", "Blender"} & set(namen),
+            f"die gewuenschten Add-ons sind da, ohne die der VM: {namen}",
         )
         log.pruefe(pg.locator(".addon-badge", has_text="Vorschlag").count() >= 2,
                    "und Vorschlaege dazu")
         log.pruefe(
             all(karten.nth(i).locator("button", has_text="Installieren").count() == 1
                 for i in range(karten.count())),
-            "jedes Add-on hat einen Installieren-Knopf -- auch WhatsApp Web",
+            "jedes Add-on hat einen Installieren-Knopf",
         )
-        whatsapp = pg.locator('.addon[data-id="whatsapp"]')
-        log.pruefe("User mode" in whatsapp.inner_text(),
-                   "WhatsApp sagt, dass es den User mode braucht")
         wetter = pg.locator('.addon[data-id="wetter"]')
         wetter.locator("button", has_text="Installieren").click()
         pg.wait_for_selector('.addon[data-id="wetter"] .schalter', timeout=10_000)
@@ -1657,16 +1543,6 @@ def rundgang(pg: Any, log: Protokoll, agent: FakeAgent, bilder: Path | None,
         foto("addons")
         pg.click("#addon-close")
         pg.wait_for_selector("#addonbox", state="hidden")
-        pg.click("#btn-loginapps")
-        pg.wait_for_selector("#screenbox.open", state="visible")
-        pg.wait_for_timeout(900)
-        log.pruefe("läuft gerade nicht" in pg.inner_text("#screen-leer"),
-                   "Login-Apps: ohne virtual machine ein ehrlicher Hinweis statt eines "
-                   "kaputten Bildes")
-        log.pruefe(pg.get_attribute("#screen-text", "type") == "password",
-                   "das Tippfeld zeigt Passwoerter nicht")
-        pg.click("#screen-close")
-        pg.wait_for_selector("#screenbox", state="hidden")
         pg.click('#secnav button:has-text("Dev settings")')
         pg.wait_for_timeout(700)
         log.pruefe(pg.locator('#dev-settings [name="AQUATICY_AUTO_MODEL"]').count() == 1,
@@ -1695,9 +1571,11 @@ def rundgang(pg: Any, log: Protokoll, agent: FakeAgent, bilder: Path | None,
         marken = pg.locator("#secnav button").count()
         abschnitte = pg.locator("#settings fieldset").count()
         log.pruefe(marken == abschnitte, f"{marken} Sprungmarken zu {abschnitte} Abschnitten")
-        for feld in ("AQUATICY_MODEL", "AQUATICY_CODE_MODEL", "AQUATICY_LOCATION",
-                     "AQUATICY_LAN_SUBNET", "AQUATICY_STORAGE_URL"):
+        for feld in ("AQUATICY_MODEL", "AQUATICY_CODE_MODEL", "AQUATICY_LOCATION"):
             log.pruefe(pg.locator(f'[name="{feld}"]').count() == 1, f"{feld} im Formular")
+        # 16.0.0 (Aquaticy-Test): kein Heimnetz und kein Lager mehr.
+        for feld in ("AQUATICY_LAN_SUBNET", "AQUATICY_STORAGE_URL"):
+            log.pruefe(pg.locator(f'[name="{feld}"]').count() == 0, f"{feld} ist weg")
         pg.click('#secnav button:has-text("Suche")')
         # Seit 14.1.3 Luna steht "Suche" weiter oben: Von weit unten dauert das sanfte
         # Scrollen laenger. Warten, bis die Seite stillsteht (hoechstens 4 Sekunden).
@@ -1717,32 +1595,15 @@ def rundgang(pg: Any, log: Protokoll, agent: FakeAgent, bilder: Path | None,
                    f"der Sprung landet unter dem stehenden Kopf ({ziel:.0f} / {kopf:.0f})")
         for knopf, notiz in (
             ("#probe", "#probe-note"),
-            ("#storage-test", "#lager-note"),
-            ("#storage-find", "#lager-note"),
-            ("#ha-test", "#ha-note"),
         ):
             pg.click(knopf)
             pg.wait_for_timeout(1400)
             gesagt = pg.inner_text(notiz).strip()
             log.pruefe(bool(gesagt), f"{knopf} meldet etwas: {gesagt[:50]!r}")
-        pg.check("#showload")
-        pg.wait_for_timeout(1600)
-        log.pruefe(bool(pg.inner_text("#usage-note").strip()), "die Auslastung zeigt Zahlen")
-        pg.check("#showtrace")
-        pg.wait_for_timeout(200)
-        log.pruefe(
-            pg.eval_on_selector("body", "e => e.classList.contains('tracing')"),
-            "Mitlesen schaltet sich ein",
-        )
-        pg.uncheck("#showtrace")
-
-        log.pruefe(
-            pg.locator('#workshop-settings [name="AQUATICY_VM_USER_MODE"]').count() == 1,
-            "der User mode steht bei der virtual machine",
-        )
-        log.pruefe(not pg.is_checked("#usermode"), "und ist ab Werk aus")
-        log.pruefe("Bilder" in pg.inner_text("#usermode-note"),
-                   "der Hinweis nennt, was er braucht (ein Modell, das Bilder versteht)")
+        # 16.0.0 (Aquaticy-Test): keine Auslastung, kein Mitlesen, keine virtual machine.
+        log.pruefe(all(pg.locator(i).count() == 0 for i in ("#showload", "#showtrace",
+                                                             "#usermode")),
+                   "Auslastung, Mitlesen und User mode sind weg")
 
         log.pruefe(
             pg.locator('#secnav button:has-text("Dev settings")').count() == 1,
@@ -2427,33 +2288,7 @@ def rundgang(pg: Any, log: Protokoll, agent: FakeAgent, bilder: Path | None,
         pg.click("#cancel")
         pg.wait_for_timeout(500)
 
-    if dran("werkstatt2"):
-        log.abschnitt("17. virtual machine: Dateien")
-
-
-
-        pg.click('#modes .mode[data-mode="code"]')
-        pg.wait_for_timeout(300)
-        menue(pg, "weitere")
-        pg.wait_for_timeout(500)
-        if not pg.is_checked("#werkstatt"):
-            pg.check("#werkstatt")
-        pg.wait_for_timeout(300)
-        pg.keyboard.press("Escape")
-        pg.wait_for_timeout(400)
-        log.pruefe(pg.is_visible("#btn-vmfiles"), "im Code-Modus gibt es den Dateiknopf")
-        pg.click("#btn-vmfiles")
-        pg.wait_for_selector("#vmbox.open", state="visible")
-        pg.wait_for_timeout(800)
-        log.pruefe(
-            pg.locator("#vmliste .merk-leer").count() == 1,
-            "ohne laufende virtual machine wird das gesagt, statt eine leere Liste zu zeigen",
-        )
-        pg.keyboard.press("Escape")
-        pg.wait_for_timeout(500)
-        pg.click('#modes .mode[data-mode="normal"]')
-        pg.wait_for_timeout(400)
-        log.pruefe(not pg.is_visible("#btn-vmfiles"), "im Standardmodus verschwindet er wieder")
+    # 16.0.0 (Aquaticy-Test): Abschnitt "werkstatt2" entfaellt -- keine virtual machine.
 
     if dran("bewegung"):
         log.abschnitt("18. Bewegung")

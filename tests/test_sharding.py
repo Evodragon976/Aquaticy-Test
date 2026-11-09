@@ -155,7 +155,6 @@ class Rpc:
         return self.port
 
 
-
 def test_frames_are_numbered_and_tamper_proof() -> None:
     hin = sharding.Richtung(b"k" * 32)
     zurueck = sharding.Richtung(b"k" * 32)
@@ -249,7 +248,6 @@ def test_a_refused_tunnel_never_switches_protocols(paar, monkeypatch) -> None:
     assert b" 403 " in antwort.split(b"\r\n", 1)[0] and b" 101 " not in antwort
 
 
-
 def test_only_the_master_switches_and_only_with_two_servers(verbund) -> None:  # noqa: F811
     a, b, _, _, gefragt, neustarts = verbund
     with pytest.raises(cluster.ClusterError):
@@ -278,7 +276,6 @@ def test_in_split_mode_every_account_is_served_by_the_master(verbund) -> None:  
     b._local_seen["neueskonto"] = time.time()
     b.last_ok[a.node_id] = time.time()
     assert b.home_for("neueskonto") == a.node_id
-
 
 
 @pytest.fixture
@@ -402,7 +399,6 @@ def test_ollama_model_file_is_found_from_the_modelfile(tmp_path: Path, monkeypat
         sharding.ollama_gguf("x", "http://127.0.0.1:11434")
 
 
-
 def test_calls_go_to_the_local_llama_server_with_its_own_key(monkeypatch) -> None:
     settings = Settings(model=SPLIT_MODEL_ID)
     monkeypatch.setattr(sharding, "endpoint", lambda: ("", ""))
@@ -442,8 +438,8 @@ def test_only_ultra_on_the_master_switches_split_mode(paar, monkeypatch) -> None
     assert status == 200 and antwort["split_on"] and a.split()["model"] == "gemma3:27b"
 
 
-def test_the_ui_has_the_switch_and_explains_it() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert 'id="split-on"' in html and 'id="split-model"' in html and 'id="split-restart"' in html
-    assert "function splitZeigen(" in html and '{ action: "split", on: an, model: modell }' in html
-    assert '"Serverlast aufteilen": "Split server load"' in html
+# 16.0.0 (Aquaticy-Test): test_the_ui_has_the_switch_and_explains_it entfaellt.
+# Grund: virtual machine, Heimnetz, Messenger, Upgrading und Verbund sind aus der Oberflaeche
+# geloescht
+
+

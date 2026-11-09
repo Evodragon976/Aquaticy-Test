@@ -3900,33 +3900,16 @@ class Toolbox:
         }
 
     def secure_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        from aquaticy.secure_chat import DEFENSE, LOCAL, public_query
+        """Werkzeuge im Secure-Pro-Chat -- seit 16.0.0 (Aquaticy-Test) nur noch Wissen und
+        oeffentliche Quellen. Kein Netz, keine Geraeteprufung, keine Abwehr."""
+        from aquaticy.secure_chat import public_query
 
-        if not getattr(self, "secure_mode", False) or self.secure_provider is None:
-            return {"error": "Kein freigegebener Secure-Pro-Chat."}
-        access = self.secure_provider("secure_status", {})
-        if access.get("error"):
-            return access
+        if not getattr(self, "secure_mode", False):
+            return {"error": "Das geht nur im Secure-Pro-Chat."}
         if name == "secure_knowledge":
             from aquaticy import secure_knowledge
 
             return secure_knowledge.lookup(str(arguments.get("query", "")))
-        if name in DEFENSE:
-            return self._secure_defense(name, arguments)
-        if name == "secure_nmap":
-            # nmap dauert Minuten und belastet das Netz: hoechstens zwei Laeufe je Nachricht.
-            if self._secure_nmaps >= 2:
-                return {"error": "Höchstens zwei nmap-Prüfungen je Nachricht."}
-            self._secure_nmaps += 1
-            self._emit("note", text="nmap prüft. Das kann einige Minuten dauern.",
-                       text_en="nmap is checking. This can take a few minutes.")
-            return self.secure_provider(name, arguments)
-        if name in LOCAL:
-            if name == "secure_inspect":
-                if self._secure_checks >= 6:
-                    return {"error": "Höchstens sechs gezielte Geräteprüfungen je Nachricht."}
-                self._secure_checks += 1
-            return access if name == "secure_status" else self.secure_provider(name, arguments)
         if not self.secure_online:
             return {"error": "Die öffentliche Recherche ist in diesem Chat ausgeschaltet."}
         if self._secure_dns_full:

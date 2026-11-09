@@ -26,7 +26,6 @@ from aquaticy import (
     secure_tasks,
     web,
 )
-from aquaticy.agent import Agent
 from aquaticy.cache import Cache
 from aquaticy.tools import Toolbox
 from tests.test_v1300_luna import server  # noqa: F401
@@ -402,59 +401,21 @@ def _box(settings, vm: dict[str, Any]) -> tuple[Toolbox, list[dict[str, Any]]]:
     return box, aufrufe
 
 
-def test_defense_needs_the_vm_switch(settings) -> None:
-    box, aufrufe = _box(settings, {"ok": False, "error": "Secure Pro darf die VM nicht nutzen."})
-    try:
-        ergebnis = box.call("secure_defend", {"action": "block_port", "host": "192.168.1.20",
-                                              "user": "pi", "server_key": "x", "port": 4444})
-        assert "VM nicht nutzen" in ergebnis["error"] and aufrufe == []
-    finally:
-        box.close()
+# 16.0.0 (Aquaticy-Test): test_defense_needs_the_vm_switch entfaellt.
+# Grund: Secure Pro beantwortet nur noch Fragen: kein Netz, keine Pruefung, kein nmap, keine
+# Abwehr per SSH
 
 
-def test_defense_runs_the_built_command_through_ssh(settings, monkeypatch) -> None:
-    monkeypatch.setattr(secure_pro, "own_addresses", lambda router="": frozenset())
-    box, aufrufe = _box(settings, {"ok": True, "subnet": NETZ, "router": "192.168.1.1"})
-    try:
-        ergebnis = box.call("secure_defend", {
-            "action": "block_port", "host": "192.168.1.20", "user": "pi",
-            "server_key": "ssh-ed25519 AAAA", "port": 4444, "command": "rm -rf /"})
-        assert ergebnis["measure"].startswith("Eingehende Verbindungen")
-        assert aufrufe[0]["action"] == "run"
-        assert "ufw insert 1 deny 4444/tcp" in aufrufe[0]["command"]
-        assert "rm -rf" not in aufrufe[0]["command"], "eigene Befehle gibt es nicht"
-        assert box.call("secure_ssh", {"action": "inspect", "host": "10.0.0.5"})["error"]
-        box.call("secure_ssh", {"action": "key"})
-        assert aufrufe[-1] == {"action": "key", "_secure_scope": (NETZ, "192.168.1.1")}
-    finally:
-        box.close()
+# 16.0.0 (Aquaticy-Test): test_defense_runs_the_built_command_through_ssh entfaellt.
+# Grund: Secure Pro beantwortet nur noch Fragen: kein Netz, keine Pruefung, kein nmap, keine
+# Abwehr per SSH
 
 
-def test_defense_tools_are_offered_only_when_allowed(settings, monkeypatch) -> None:
-    agent = Agent(settings)
-    try:
-        agent.secure_pro = True
-        agent.toolbox.secure_mode = True
-        agent.toolbox.ask_handler = lambda question, options: "ja"
-        monkeypatch.setattr(agent, "_model_can_use_tools", lambda: True)
-        monkeypatch.setattr(agent, "_vm_can_start", lambda: True)
-        vm = {"ok": True}
-        agent.toolbox.secure_provider = lambda name, args: vm if name == "secure_vm" else {}
-        settings.lan_enabled, settings.vm_lan = True, True
-        namen = {s["function"]["name"] for s in agent.tools}
-        assert {"secure_defend", "secure_ssh", "secure_knowledge"} <= namen
-        assert "vm_run" not in namen and "lan_ssh" not in namen
-        vm["ok"] = False
-        assert "secure_defend" not in {s["function"]["name"] for s in agent.tools}
-        vm["ok"] = True
-        agent.toolbox.ask_handler = None
-        assert "secure_defend" not in {s["function"]["name"] for s in agent.tools}
-        assert not agent._ssh_ready(), "ohne Rueckfrage kein SSH"
-    finally:
-        agent.close()
+# 16.0.0 (Aquaticy-Test): test_defense_tools_are_offered_only_when_allowed entfaellt.
+# Grund: Secure Pro beantwortet nur noch Fragen: kein Netz, keine Pruefung, kein nmap, keine
+# Abwehr per SSH
 
 
-# -- Server ---------------------------------------------------------------------------------------
 def test_owner_sets_schedule_and_tasks(owner) -> None:  # noqa: F811
     session, settings = owner
     secure_pro.configure(settings.data_dir, NETZ)
@@ -529,27 +490,24 @@ def test_settings_are_grouped() -> None:
     html = _ui()
     formular = html[html.index('<form id="settings">'):html.index('id="savenote"')]
     legenden = re.findall(r"<legend>(.*?)</legend>", formular)
-    assert legenden == ["Konto", "Nutzung", "Speicher", "Gemeinsames Lernen", "Mitlesen",
-                        "Auslastung · Ultra", "Ort &amp; Sprache", "Suche",
-                        "Helfer &amp; Grenzen", "Gmail &amp; Kalender", "Zuhause &amp; Netz",
-                        "virtual machine", "Messenger", "Dev settings"]
+    # 16.0.0 (Aquaticy-Test): ohne Mitlesen, Auslastung, Zuhause & Netz, VM und Messenger;
+    # Add-ons und Secure Pro (nur Fragen) haben eigene Abschnitte.
+    assert legenden == ["Konto", "Nutzung", "Speicher", "Gemeinsames Lernen",
+                        "Ort &amp; Sprache", "Suche", "Helfer &amp; Grenzen",
+                        "Gmail &amp; Kalender", "Add-ons", "Secure Pro", "Dev settings"]
 
     def abschnitt(legende: str) -> str:
         start = formular.index(f"<legend>{legende}</legend>")
         return formular[start:formular.index("</fieldset>", start)]
 
-    # 14.1.3 Terra: Secure Pro ist ein Unterpunkt von "Zuhause & Netz".
-    netz = abschnitt("Zuhause &amp; Netz")
-    assert netz.index('id="lanon"') < netz.index('id="secure-section"')
-    for feld in ("secure-setting", "secure-interval", "secure-watch", "secure-packets",
-                 "secure-vm", "secure-nmap", "secure-task-text", "secure-important",
-                 "secure-tips"):
-        assert f'id="{feld}"' in netz, feld
+    # 16.0.0 (Aquaticy-Test): Secure Pro hat einen eigenen Abschnitt und nur noch den Chat.
+    secure = abschnitt("Secure Pro")
+    assert 'id="secure-open"' in secure
+    for weg in ("secure-setting", "secure-interval", "secure-nmap", "secure-vm", "lanon"):
+        assert f'id="{weg}"' not in html, weg
     assert 'id="secure-status"' not in html, "Status zeigt die Seite ohnehin laufend"
-    assert 'id="voice-setting"' in abschnitt("Messenger")
     assert 'id="pw"' in abschnitt("Suche")
-    assert "OpenSSH" in abschnitt("virtual machine") and "OpenSSH" not in abschnitt(
-        "Zuhause &amp; Netz")
+    assert "OpenSSH" not in formular
     dev = abschnitt("Dev settings")
     assert 'id="secure-setting"' not in dev and 'id="voice-setting"' not in dev
     assert dev.index('id="legalguard"') < dev.index('id="legal-rules"') < dev.index(

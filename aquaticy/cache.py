@@ -477,7 +477,7 @@ class Cache:
                 innerhalb dieser Art.
 
         Raises:
-            StorageFull: Das Profil hat seine 400 MB erreicht (aquaticy/budget.py).
+            StorageFull: Das Profil hat seine 20 MB erreicht (aquaticy/budget.py).
         """
         from aquaticy.budget import ensure_room, note_written
 

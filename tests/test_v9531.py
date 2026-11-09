@@ -33,7 +33,6 @@ def store(tmp_path: Path) -> AuthStore:
     return AuthStore(tmp_path, "PROCODE12", "Abcdef1234567!")
 
 
-
 def test_the_device_summary_is_readable() -> None:
     geraet = clean_device(PC, user_agent=PC_UA, accept_language="de-DE,de;q=0.9")
     assert geraet.hardware.startswith("Windows · 16 Kerne · 8 GB · 2560x1440")
@@ -97,7 +96,6 @@ def test_similar_emails(a: str, b: str, gleich: bool) -> None:
     assert emails_similar(a, b) is gleich
 
 
-
 def _punkte(**mehr: Any) -> float:
     werte: dict[str, Any] = {"email": "neu@x.de", "ip": "", "device": clean_device({}),
                              "other_email": "alt@y.de", "other_ips": set(), "other_devices": []}
@@ -141,7 +139,6 @@ def test_only_the_strongest_device_match_counts() -> None:
     handy = clean_device(HANDY, user_agent=HANDY_UA)
     zeile = ("", handy.hardware_hash, handy.browser_hash)
     assert _punkte(device=handy, other_devices=[zeile] * 5) == 1.5
-
 
 
 def _reg(store: AuthStore, mail: str, name: str, ip: str = "", device: Any = None) -> Any:
@@ -217,7 +214,6 @@ def test_note_device_ignores_nonsense(store: AuthStore) -> None:
     assert store.last_device(konto.id) == ("", "")
 
 
-
 def test_the_list_shows_only_how_many_devices(tmp_path: Path,
                                            monkeypatch: pytest.MonkeyPatch) -> None:
     from typer.testing import CliRunner
@@ -245,7 +241,6 @@ def test_the_list_shows_only_how_many_devices(tmp_path: Path,
         assert " 1 " in zeile
     finally:
         config.reset_settings_cache()
-
 
 
 def _sitzung(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plan: str) -> Path:
@@ -310,15 +305,9 @@ def test_the_model_cannot_switch_vm_internet() -> None:
         assert "error" in werkzeuge.change_setting(name, "an"), name
 
 
-def test_the_form_carries_the_ultra_switch() -> None:
-    from aquaticy import web
-
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert 'id="vminternet"' in html and 'name="AQUATICY_VM_INTERNET"' in html
-    stelle = html.index('id="vminternet"')
-    assert "Ultra" in html[stelle:stelle + 400]
-    assert '$("#vminternet").addEventListener' in html
-    assert '"Internet für die virtual machine": "Internet for the virtual machine"' in html
+# 16.0.0 (Aquaticy-Test): test_the_form_carries_the_ultra_switch entfaellt.
+# Grund: virtual machine, Heimnetz, Messenger, Upgrading und Verbund sind aus der Oberflaeche
+# geloescht
 
 
 def _flags(box: Any) -> list[str]:
@@ -402,7 +391,6 @@ def test_the_model_is_told_about_the_internet() -> None:
     assert VM_NET_OFF in text()
     assert VM_NET_INTERNET in text(vm_internet=True)
     assert "Heimnetz" in VM_NET_INTERNET
-
 
 
 def _registrieren(port: int, mail: str, name: str, cookie: str = "",

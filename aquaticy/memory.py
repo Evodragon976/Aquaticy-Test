@@ -10,7 +10,7 @@ Drei Regeln bestimmen den Aufbau:
   Bilder, keine Binaerdateien. Bilder kommen ausschliesslich vom Nutzer und
   liegen getrennt im Upload-Ordner.
 * **Eine harte Obergrenze.** Alles zusammen -- Notizen, Verlauf, Uploads --
-  bleibt unter 400 MB. Wird es eng, fliegen die aeltesten Uploads raus, denn
+  bleibt unter 20 MB. Wird es eng, fliegen die aeltesten Uploads raus, denn
   die sind am leichtesten zu ersetzen.
 * **Abschaltbar.** Wer nicht will, dass etwas haengenbleibt, schaltet den
   Speicher aus. Dann schreibt der Agent nichts mehr und findet auch nichts.
@@ -42,7 +42,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
-MAX_BYTES = 400_000_000
+MAX_BYTES = 20_000_000
 
 
 CLEANUP_AT = 0.9

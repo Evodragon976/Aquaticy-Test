@@ -1,4 +1,4 @@
-"""Ein gemeinsamer Speicherdeckel je Profil: 400 MB fuer alles (seit 9.5.15).
+"""Ein gemeinsamer Speicherdeckel je Profil: 20 MB fuer alles (Aquaticy-Test 16.0.0).
 
 Bis 9.5.14 pruefte nur der Speicher (aquaticy/memory.py) die 400-MB-Grenze --
 Zwischenspeicher, Chatverlauf und Bilder wuchsen daran vorbei, und die
@@ -33,7 +33,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-MAX_BYTES = 400_000_000
+# Aquaticy-Test 16.0.0: 20 MB statt 400 MB -- jedes Konto liegt in der Blob-Sicherung.
+MAX_BYTES = 20_000_000
 
 
 CLEANUP_AT = 0.9
@@ -64,7 +65,7 @@ def writing(data_dir: Path | str) -> Iterator[None]:
 
 
 class StorageFull(OSError):
-    """Das Profil hat seine 400 MB erreicht -- auch nach dem Aufraeumen."""
+    """Das Profil hat seine 20 MB erreicht -- auch nach dem Aufraeumen."""
 
 
 def _dateien(data_dir: Path) -> list[Path]:

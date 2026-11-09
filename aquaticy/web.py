@@ -733,11 +733,37 @@ def header_for(settings: Settings) -> dict[str, Any]:
             if schoen:
                 kopf["model_label"] = kopf["model_label"].replace(
                     kopf["model"].split("/")[-1], schoen)
+    from aquaticy import standard
+
+    if kopf.get("model") == standard.MODEL_ID:
+        # 16.0.0 (Aquaticy-Test): Hinweis auf eigene API-Schluessel, solange nur Standard da ist.
+        kopf["model_label"] = standard.LABEL
+        kopf["key_hint"] = not (getattr(settings, "own_key_names", None) or ())
     return kopf
 
 
+KEY_HINT_FILE = "schluessel-hinweis.txt"
+
+
+def key_hint_due(data_dir: Path) -> bool:
+    """16.0.0 (Aquaticy-Test): Hinweis beim ersten Start und danach bei jedem 5. -- je Konto.
+
+    Der Zaehler liegt im Datenordner des Kontos (nicht im Browser) und wandert so mit in die
+    verschluesselte Sicherung.
+    """
+    datei = data_dir / KEY_HINT_FILE
+    try:
+        starts = int(datei.read_text(encoding="utf-8").strip() or 0)
+    except (OSError, ValueError):
+        starts = 0
+    with contextlib.suppress(OSError):
+        data_dir.mkdir(parents=True, exist_ok=True)
+        datei.write_text(str(starts + 1), encoding="utf-8")
+    return starts == 0 or starts % 5 == 0
+
+
 def storage_view(usage: dict[str, Any]) -> dict[str, Any]:
-    """Der Speicherstand mit fertigem Satz ("3,1 von 400 MB belegt · 12 Notizen")."""
+    """Der Speicherstand mit fertigem Satz ("3,1 von 20 MB belegt · 12 Notizen")."""
     anzahl = int(usage.get("entries") or 0)
     text = (f"{usage.get('used_mb')} von {usage.get('limit_mb')} MB belegt · {anzahl} "
             f"{'Notiz' if anzahl == 1 else 'Notizen'}")
@@ -1635,10 +1661,8 @@ class ChatSession:
                 agent.secure_pro = secure
                 agent.toolbox.secure_mode = secure
                 if secure:
-                    if not host_feature_owner(self):
-                        raise BadRequest("Nur der Besitzer kann den Secure-Pro-Chat nutzen.")
-                    agent.toolbox.secure_provider = lambda name, args: secure_feature_tool(
-                        self, name, args)
+                    # 16.0.0 (Aquaticy-Test): Secure Pro beantwortet nur Fragen -- jedes Konto.
+                    agent.toolbox.secure_provider = None
                     mode, structured, recheck, sandbox = "normal", False, False, False
                     visual_sources = False
                     agent._refresh_system()
@@ -3706,8 +3730,6 @@ def linked_view(session: Any) -> dict[str, Any]:
 
             "provided": (not verknuepft and session.profile is not None
                          and bool(os.environ.get(d["key"], "").strip())),
-            "sign_in": [{"id": art, "label": linked.SIGN_IN_LABELS[art]}
-                        for art in linked.SIGN_IN.get(provider, ())],
             "tier": info.get("tier", "") if verknuepft else "",
             "tokens": info.get("tokens") if verknuepft else None,
             "models": [m.get("label") or m.get("id") for m in info.get("models", [])]
@@ -5892,6 +5914,13 @@ class Handler(BaseHTTPRequestHandler):
                 verknuepft = picker_models(SESSION.settings())
             gesehen = {m.get("id") for m in alle}
             alle = alle + [m for m in verknuepft if m["id"] not in gesehen]
+            # 16.0.0 (Aquaticy-Test): Aquaticy Standard antwortet ohne Sprachmodell -- immer da.
+            from aquaticy import standard as standard_mod
+
+            alle = [{"id": standard_mod.MODEL_ID, "label": standard_mod.LABEL, "kind": "Standard",
+                     "note": "Ohne Sprachmodell und ohne Schlüssel", "source": "operator",
+                     "source_label": ""}] + [m for m in alle
+                                            if m.get("id") != standard_mod.MODEL_ID]
             if SHARDING is not None and SHARDING.ready():
                 alle = [{"id": SPLIT_MODEL_ID, "label": SHARDING.label(), "kind": "Verbund",
                          "note": f"Verteilt auf {SHARDING.servers()} Server",
@@ -6162,22 +6191,20 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, **state})
         elif route == "/api/chat":
             self._chat()
+        elif route == "/api/key-hint":
+            self._json({"ok": True, "show": key_hint_due(SESSION.settings().data_dir)})
         elif route == "/api/features":
             payload = self._read_json(limit=AUTH_BODY_BYTES)
             if payload.get("action") == "open":
-                if not host_feature_owner(SESSION.current()):
-                    self._json({"error": "Nur der Besitzer kann Secure Pro verwalten."}, 403)
-                    return
+                # 16.0.0 (Aquaticy-Test): nur Fragen, kein Netz -- jedes Konto darf den Chat.
                 selected, _ = SESSION.switch_chat()
                 settings = selected.settings()
                 cache = Cache(settings.db_path, settings.cache_ttl_hours)
                 cache.mark_secure_chat(selected.chat_id())
                 cache.add_history(selected.chat_id(), "Secure Pro",
-                                  "Secure Pro: Hier besprichst du Befunde und sichere "
-                                  "Einstellungen mit deinem Modell. Wichtiges meldet Secure "
-                                  "Pro hier von selbst. Netz, Zeitplan und Aufgaben stellst "
-                                  "du unter Einstellungen → Zuhause & Netz → Secure Pro ein. "
-                                  "Ohne Netzfreigabe wird nicht geprüft.",
+                                  "Secure Pro: Frag mich zu Sicherheit – Malware, "
+                                  "Passwörter, sichere Einstellungen und Sicherheitslücken. "
+                                  "Ich suche nicht in deinem Netz.",
                                   mode="normal")
                 cache.rename_chat(selected.chat_id(), "Secure Pro")
                 self._json({"ok": True, "session_id": selected.chat_id()})

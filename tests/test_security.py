@@ -432,9 +432,13 @@ def test_odd_lengths_are_refused_before_reading(server: int, laenge: str) -> Non
 
 def test_the_ui_escapes_server_values() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
-    start = html.index("function gauge(")
-    teil = html[start:html.index("}", html.index("return", start))]
-    assert "${name}" not in teil and "esc(String(name))" in teil
+    # 16.0.0 (Aquaticy-Test): die Auslastung (gauge) ist entfernt -- sie setzte Server-Werte
+    # per innerHTML. Kommt sie zurueck, muss sie wieder escapen.
+    if "function gauge(" in html:
+        start = html.index("function gauge(")
+        teil = html[start:html.index("}", html.index("return", start))]
+        assert "${name}" not in teil and "esc(String(name))" in teil
+    assert "function gauge(" not in html
 
 
 def test_normal_accounts_cannot_blow_up_the_local_model(tmp_path: Path) -> None:

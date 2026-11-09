@@ -532,8 +532,17 @@ def get(addon_id: str) -> AddOn:
     return addon
 
 
+#: 16.0.0 (Aquaticy-Test): keine virtual machine mehr -- damit auch kein WhatsApp, Signal und
+#: Blender. Die Eintraege bleiben im Katalog, damit alte Daten lesbar bleiben; zu sehen, zu
+#: installieren oder zu nutzen sind sie nicht mehr.
+ENTFERNT = frozenset({"whatsapp", "signal", "blender"})
+ENTFERNT_TEXT = "Das gibt es in Aquaticy-Test nicht mehr: Es braucht die virtual machine."
+
+
 def usable(addon: AddOn, settings: Any, pro: bool) -> tuple[bool, str]:
     """Kann dieses Konto das Add-on gerade nutzen? Returns: (ja, warum nicht)."""
+    if addon.id in ENTFERNT:
+        return False, ENTFERNT_TEXT
     if not addon.werkstatt:
         return True, ""
     if not pro:
@@ -653,6 +662,8 @@ def public_view(settings: Any, pro: bool) -> dict[str, Any]:
     state = load_state(settings)
     liste = []
     for addon in CATALOG.values():
+        if addon.id in ENTFERNT:
+            continue
         eintrag = state.get(addon.id) or {}
         ok, warum = usable(addon, settings, pro)
         roh = eintrag.get("login")
@@ -717,6 +728,8 @@ def installing(settings: Any, addon_id: str) -> bool:
 
 
 def _check_allowed(addon: AddOn, settings: Any, pro: bool) -> None:
+    if addon.id in ENTFERNT:
+        raise AddOnError(ENTFERNT_TEXT)
     if addon.werkstatt and not pro:
         raise AddOnError(
             f"{addon.name} läuft in der virtual machine im User mode — das gehört zu Ultra."

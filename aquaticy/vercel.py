@@ -17,8 +17,13 @@ Anders als am eigenen Rechner:
 * **Aus:** virtual machine, WhatsApp/Signal, Secure Pro, Coworker-Zeitplan, Werkstatt,
   Plugins, Heimnetz-Dienste, Server-Verbund, lokale Modelle und deren Upgrades. Das braucht
   einen Rechner, der dauerhaft laeuft.
-* **Modelle:** Wie in der App unter Einstellungen frei waehlbar (Mistral, NVIDIA NIM). Ist
-  noch keins gewaehlt und nur ein NVIDIA-Schluessel da, gilt Gemma 4 (``PRESET_MODEL``).
+* **Modelle:** Voreingestellt ist Aquaticy Standard (aquaticy/standard.py): antwortet ohne
+  Sprachmodell und ohne Schluessel. Mit eigenem Schluessel waehlt jedes Konto Mistral oder
+  NVIDIA NIM (zum Beispiel Gemma 4) in der Modellauswahl.
+* **Schluessel nur im eigenen Konto (16.0.0):** Jedes Konto traegt seine API-Schluessel selbst
+  ein; sie liegen verschluesselt nur in diesem Konto. Schluessel aus der Umgebung von Vercel oder
+  aus der gemeinsamen .env nimmt Aquaticy beim Start heraus -- sonst naehme LiteLLM sie fuer jedes
+  Konto als Rueckfall.
 * **Adresse des Besuchers:** aus ``x-real-ip``, das Vercel am Rand selbst setzt. Niemand gilt
   hier als Heimnetz oder als 127.0.0.1.
 """
@@ -36,11 +41,13 @@ from pathlib import Path
 from typing import Any
 
 HOME = Path(os.environ.get("AQUATICY_VERCEL_HOME") or tempfile.gettempdir()) / "aquaticy-home"
-PRESET_MODEL = "nvidia_nim/google/gemma-4-31b-it"
+PRESET_MODEL = "aquaticy/standard"
 MAX_BODY = 64 * 1024 * 1024
 BLOCKED = ("/api/cluster", "/api/messenger/", "/api/addons/qr", "/api/werkstatt", "/api/vm",
-           "/api/features", "/api/coworkers", "/api/upgrades", "/api/plugins", "/api/ha",
-           "/api/storage", "/cluster/")
+           "/api/coworkers", "/api/upgrades", "/api/plugins", "/api/ha", "/api/storage",
+           "/api/system", "/cluster/")
+#: /api/features: nur "Secure-Pro-Chat oeffnen" -- Netz, Pruefung und Abwehr gibt es nicht.
+FEATURES_ALLOWED = frozenset({"open"})
 BLOCKED_TEXT = "Das gibt es auf Vercel nicht. Dafür brauchst du Aquaticy auf deinem Rechner."
 HOP_BY_HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade",
               "proxy-connection", "expect"}
@@ -67,16 +74,14 @@ def _env_file() -> Path:
 
 
 def preset_model() -> str:
-    """Das Modell fuer den ersten Start -- "" heisst: Aquaticy-Standard (Mistral)."""
+    """Das Modell fuer den ersten Start: Aquaticy Standard -- "" heisst, schon gewaehlt."""
     if os.environ.get("AQUATICY_MODEL", "").strip():
         return ""
     datei = _env_file()
     if datei.is_file() and any(zeile.strip().startswith("AQUATICY_MODEL=")
                                for zeile in datei.read_text(encoding="utf-8").splitlines()):
         return ""
-    if os.environ.get("NVIDIA_NIM_API_KEY") and not os.environ.get("MISTRAL_API_KEY"):
-        return PRESET_MODEL
-    return ""
+    return PRESET_MODEL
 
 
 def _fingerprint() -> tuple[tuple[str, int, int], ...]:
@@ -105,10 +110,15 @@ def start() -> str:
             _STATE["error"] = f"Die Sicherung ließ sich nicht laden: {exc}"
             return str(_STATE["error"])
         modell = preset_model()
-        if modell:
-            from aquaticy.config import write_env_file
+        from aquaticy.config import write_env_file
 
+        if modell:
             write_env_file({"AQUATICY_MODEL": modell}, _env_file())
+        namen = shared_key_names()
+        for name in namen:
+            os.environ.pop(name, None)
+        if _env_file().is_file():
+            write_env_file({}, _env_file(), remove=set(namen))
         from aquaticy import web
         from aquaticy.aiguard import guard_for
         from aquaticy.auth import AuthStore, pro_code_for, ultra_code_for
@@ -120,12 +130,36 @@ def start() -> str:
             upgrade_code(ultra_code_for, "AQUATICY_ULTRA_CODE", data_dir), single=False)
         # Pro ohne Token-Grenze: ohne Kontingent rechnet die App wie bei Ultra.
         web.account_quota = lambda profile, account=None: None
+        web._profile_settings = _only_own_keys(web._profile_settings)
         web.AIGUARD = guard_for(data_dir)
         web.TOKEN = ""
         _STATE["web"] = web
         _STATE["handler"] = _handler_class(web)
         _STATE["stand"] = _fingerprint()
         return ""
+
+
+def shared_key_names() -> set[str]:
+    """Alle Namen, unter denen ein Schluessel fuer Modell oder Suche fuer alle gelten koennte."""
+    from aquaticy.config import GENERIC_KEY_NAME, PROVIDER_KEYS, SEARCH_BACKEND_KEYS
+    from aquaticy.keyvault import SLOTS
+
+    namen = {*PROVIDER_KEYS.values(), *SEARCH_BACKEND_KEYS.values(), GENERIC_KEY_NAME}
+    namen |= {slot.name for slot in SLOTS}
+    return {name for name in namen if name}
+
+
+def _only_own_keys(original: Callable[..., Any]) -> Callable[..., Any]:
+    """Ein Konto sieht nur die Schluessel aus seinem eigenen Schluesselbund."""
+
+    def einstellungen(*args: Any, **kwargs: Any) -> Any:
+        settings = original(*args, **kwargs)
+        eigene = set(getattr(settings, "own_key_names", ()) or ())
+        settings.api_keys = {k: v for k, v in settings.api_keys.items() if k in eigene}
+        settings.search_keys = {k: v for k, v in settings.search_keys.items() if k in eigene}
+        return settings
+
+    return einstellungen
 
 
 _FIRST_ACCOUNT = threading.Lock()
@@ -171,11 +205,32 @@ def _handler_class(web: Any) -> type:
             return str(self.client_address[0])
 
         def _blocked(self) -> bool:
-            if not self._route().startswith(BLOCKED):
+            route = self._route()
+            gesperrt = route.startswith(BLOCKED)
+            if route == "/api/features":
+                gesperrt = self.command != "POST" or self._feature_action() not in FEATURES_ALLOWED
+            if not gesperrt:
                 return False
             self.responded = False
             self._json({"ok": False, "error": BLOCKED_TEXT}, 404)
             return True
+
+        def _feature_action(self) -> str:
+            """Liest die Aktion aus dem Koerper -- und legt ihn fuer web.Handler zurueck."""
+            import io
+            import json
+
+            try:
+                laenge = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return ""
+            roh = self.rfile.read(max(0, min(laenge, 65536)))
+            setattr(self, "rfile", io.BytesIO(roh))  # noqa: B010 -- mypy kennt rfile hier nicht
+            try:
+                daten = json.loads(roh or b"{}")
+            except ValueError:
+                return ""
+            return str(daten.get("action", "")) if isinstance(daten, dict) else ""
 
         def do_GET(self) -> None:
             if not self._blocked():

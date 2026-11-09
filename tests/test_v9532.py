@@ -41,7 +41,6 @@ def _roh(pfad: Path) -> str:
         return "\n".join(str(zeile) for zeile in conn.iterdump())
 
 
-
 def test_sealing_is_authenticated_and_bound(tmp_path: Path) -> None:
     sealer = privacy.profile_sealer(tmp_path / "users" / ("a" * 32))
     text = sealer.seal_text("geheimer Chat", "history.question")
@@ -92,7 +91,6 @@ def test_private_files(tmp_path: Path) -> None:
     alt = profil / "uploads" / "alt.png"
     alt.write_bytes(b"alt")
     assert privacy.read_private(alt) == b"alt"
-
 
 
 def test_chats_are_encrypted_on_disk(tmp_path: Path) -> None:
@@ -165,7 +163,6 @@ def test_uploads_are_encrypted_and_the_vision_model_can_read_them(
     assert privacy.read_private(pfad) == b"\x89PNG privates Foto"
 
 
-
 def test_passwords_use_argon2id_with_pepper(store: AuthStore) -> None:
     konto = store.register("a@example.org", "ein langes Passwort", "normal", username="aa",
                            **TERMS)
@@ -204,7 +201,6 @@ def test_a_forged_hash_cannot_make_the_server_work_forever(store: AuthStore) -> 
     riesig = ARGON_PREFIX + b"m=99999999,t=99,p=99$" + b"00" * 32
     assert _argon_verify("x", b"s" * 16, b"p" * 32, riesig) is False
     assert _argon_verify("x", b"s" * 16, b"p" * 32, ARGON_PREFIX + b"kaputt") is False
-
 
 
 def test_emails_ips_and_devices_are_not_readable_on_disk(store: AuthStore) -> None:
@@ -306,7 +302,6 @@ def test_the_operator_sees_only_a_tag_and_can_ban_by_it(
         config.reset_settings_cache()
 
 
-
 def test_change_password_ends_other_sessions(store: AuthStore) -> None:
     konto = store.register("pw@example.org", "ein langes Passwort", "normal", username="pw",
                            **TERMS)
@@ -352,7 +347,6 @@ def test_wipe_keeps_the_account_but_removes_the_data(store: AuthStore) -> None:
     assert not (profil / "aquaticy.sqlite3").exists() and profil.is_dir()
     assert store.vault(konto).count() == 0
     assert store.device_count(konto.id) == 0
-
 
 
 def _registrieren(port: int, name: str, geraet: str = "") -> str:
@@ -449,7 +443,6 @@ def test_wrong_passwords_are_limited(server: tuple[int, Path]) -> None:  # noqa:
     assert codes[-1] == 429 and 403 in codes
 
 
-
 def _seite() -> str:
     from aquaticy import web
 
@@ -509,11 +502,9 @@ def test_no_browser_alert_or_confirm_is_left() -> None:
     assert "function hinweis(" in skript and "function frage(" in skript
 
 
-def test_ultra_only_switches_show_a_lock() -> None:
-    html = _seite()
-    assert html.count('<span class="lock-tag" data-lock hidden>Mit Ultra verfügbar</span>') == 3
-    assert "kontoPro" not in html and "pro-tag" not in html
-    assert ".schalter.gesperrt" in html
+# 16.0.0 (Aquaticy-Test): test_ultra_only_switches_show_a_lock entfaellt.
+# Grund: virtual machine, Heimnetz, Messenger, Upgrading und Verbund sind aus der Oberflaeche
+# geloescht
 
 
 def test_switches_do_not_rely_on_colour_alone() -> None:
@@ -539,7 +530,6 @@ def test_retry_capabilities_and_account_controls_are_there() -> None:
 
 
     assert ".send{width:34px;height:34px" in html and ".send::after{inset:-5px 0 -5px -5px}" in html
-
 
 
 @pytest.mark.parametrize("text", [
@@ -605,7 +595,6 @@ def test_at_least_99_percent_of_disguised_insults_are_found() -> None:
     quote = gefunden / len(varianten)
     assert len(varianten) > 1500
     assert quote >= 0.99, f"{quote:.2%}"
-
 
 
 def test_parallel_searches_keep_the_call_order() -> None:

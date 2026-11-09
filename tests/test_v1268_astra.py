@@ -1,7 +1,6 @@
 """12.6.8 Astra: Firefox stürzt in der virtual machine nicht mehr ab."""
 
 import json
-import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -116,72 +115,19 @@ def crash(login, monkeypatch):
     return session, box, payload
 
 
-def test_a_crashed_browser_is_restarted_once_and_then_the_code_comes(crash) -> None:
-    session, box, payload = crash
-    result = web.addon_qr(session, payload)[0]
-    assert result == {"ok": True, "image": None, "reason": "neustart"}
-    assert box.calls == [("focus", "0x123"), ("key", "ctrl+q"), ("open", "signal")]
-    result = web.addon_qr(session, payload)[0]
-    assert result["image"] and "reason" not in result
-    assert [c[0] for c in box.calls].count("key") == 1, "kein weiterer Neustart"
-    assert [c[0] for c in box.calls].count("open") == 1
+# 16.0.0 (Aquaticy-Test): entfaellt:
+# test_a_crashed_browser_is_restarted_once_and_then_the_code_comes
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
-def test_a_browser_that_keeps_crashing_is_not_restarted_forever(crash) -> None:
-    session, box, payload = crash
-    web.addon_qr(session, payload)
-    box.crashed = True
-    result = web.addon_qr(session, payload)[0]
-    assert result == {"ok": True, "image": None, "reason": "abgestuerzt"}
-    web.addon_qr(session, payload)
-    assert sum(1 for c in box.calls if c[0] == "open") == web.MAX_BROWSER_RESTARTS == 1
+# 16.0.0 (Aquaticy-Test): test_a_new_login_gets_a_new_restart entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
-def test_a_new_login_gets_a_new_restart(crash) -> None:
-    session, box, payload = crash
-    web.addon_qr(session, payload)
-    result, status = web.addon_action({"action": "login", "id": "signal"})
-    assert status == 200
-    box.crashed = True
-    fresh = {"id": "signal", "token": result["qr_token"]}
-    assert web.addon_qr(session, fresh)[0]["reason"] == "neustart"
+# 16.0.0 (Aquaticy-Test): test_the_restart_counter_does_not_grow_without_end entfaellt.
+# Grund: Anmeldung von WhatsApp/Signal ueber QR-Code, Bildschirm oder Bruecke in der virtual
+# machine ist geloescht
 
 
-def test_the_restart_counter_does_not_grow_without_end(crash) -> None:
-    session, _, payload = crash
-    web.addon_qr(session, payload)
-    owner = session._owner
-    assert len(owner._qr_restarts) == 1
-    web.addon_action({"action": "login", "id": "signal"})
-    assert owner._qr_restarts == {}
-
-
-def test_the_dialog_knows_both_crash_reasons_in_both_languages() -> None:
-    html = (WEB / "webui.html").read_text(encoding="utf-8")
-    start = html.index("const QR_GRUENDE = {")
-    block = html[start:html.index("};", start)]
-    texts = dict(re.findall(r'(\w+): "([^"]+)"', block))
-    assert {"neustart", "abgestuerzt"} <= set(texts)
-    english = json.loads(re.search(r"const EN = (\{.*?\n\});", html, re.S).group(1))
-    assert texts["neustart"] in english and texts["abgestuerzt"] in english
-    assert 'data.reason === "abgestuerzt"' in html, "der Ausweg kommt sofort"
-
-
-def test_the_quit_key_never_goes_to_another_program(crash) -> None:
-    """Strg+Q ginge sonst an das vordere Fenster -- etwa ein Dokument mit ungespeicherter Arbeit."""
-    session, box, payload = crash
-    original = box.desktop
-
-    def other_in_front(*args: str, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
-        if args[0] == "windows":
-            data = {"fenster": [{"id": "0x123", "klasse": box.klass, "titel": box.window_title}],
-                    "aktiv": "Dokument 1 - LibreOffice Writer",
-                    "aktiv_klasse": "libreoffice.Soffice"}
-            return subprocess.CompletedProcess(args, 0, json.dumps(data).encode(), b"")
-        return original(*args, **kwargs)
-
-    box.desktop = other_in_front
-    result = web.addon_qr(session, payload)[0]
-    assert result["reason"] == "nicht_vorn"
-    assert not any(c[0] == "key" for c in box.calls)
-    assert session._owner._qr_restarts == {}, "ein abgelehnter Versuch zaehlt nicht"

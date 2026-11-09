@@ -537,23 +537,13 @@ def test_the_command_clears_an_earlier_no(befehl: dict[str, Any], tmp_path: Path
 
 
 # -- Paket, Abbild, Doku ---------------------------------------------------------------------------
-def test_neonize_is_installed_with_aquaticy_on_every_platform_that_has_wheels() -> None:
-    from packaging.requirements import Requirement
-
+def test_neonize_is_not_installed_without_the_virtual_machine() -> None:
+    """16.0.0 (Aquaticy-Test): kein WhatsApp/Signal mehr -- neonize ist keine Abhaengigkeit."""
     daten = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    neonize = [Requirement(z) for z in daten["dependencies"] if z.startswith("neonize")]
-    assert len(neonize) == 1 and neonize[0].marker is not None
-    for umgebung, erwartet in [
-            ({"sys_platform": "linux", "platform_machine": "x86_64"}, True),
-            ({"sys_platform": "linux", "platform_machine": "aarch64"}, True),
-            ({"sys_platform": "darwin", "platform_machine": "arm64"}, True),
-            ({"sys_platform": "win32", "platform_machine": "AMD64"}, True),
-            ({"sys_platform": "linux", "platform_machine": "riscv64"}, False),
-            ({"sys_platform": "freebsd13", "platform_machine": "amd64"}, False)]:
-        assert neonize[0].marker.evaluate(umgebung) is erwartet, umgebung
+    assert not [z for z in daten["dependencies"] if z.startswith("neonize")]
     assert daten["optional-dependencies"]["messenger"] == [], "alter Name bleibt gueltig"
     constraints = (ROOT / "constraints.txt").read_text(encoding="utf-8")
-    assert re.search(r"^neonize==", constraints, re.M)
+    assert not re.search(r"^neonize==", constraints, re.M)
 
 
 def test_the_image_ships_libmagic_and_signal_cli() -> None:
