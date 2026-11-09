@@ -237,6 +237,16 @@ def test_without_setup_code_nothing_starts(vercel_app, monkeypatch):
     assert "AQUATICY_ULTRA_CODE" in inhalt.decode()
 
 
+def test_setup_code_hint_names_the_problem_without_the_code(vercel_app):
+    hinweis = vercel_app.ultra_code_hint
+    assert "fehlt" in hinweis("")
+    assert "13 statt 14" in hinweis("Ab3-defghijkl")
+    assert "nicht erlaubt" in hinweis("Ab3_defghijklm")
+    assert "mindestens einen Buchstaben" in hinweis("Ab3defghijklmn")
+    assert "Ab3_defghijklm" not in hinweis("Ab3_defghijklm")
+    assert "! @ # $ % & * + - = ?" in hinweis("")
+
+
 def test_full_app_runs_with_setup_code(vercel_app, monkeypatch):
     from aquaticy import web
 

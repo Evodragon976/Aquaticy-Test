@@ -99,9 +99,7 @@ def start() -> str:
 
         code = os.environ.get("AQUATICY_ULTRA_CODE", "").strip()
         if not valid_ultra_code(code):
-            _STATE["error"] = ("AQUATICY_ULTRA_CODE fehlt oder passt nicht (14 Zeichen, mit "
-                               "Buchstabe, Ziffer und Sonderzeichen). Trag ihn bei Vercel unter "
-                               "Settings → Environment Variables ein.")
+            _STATE["error"] = ultra_code_hint(code)
             return str(_STATE["error"])
         try:
             vercel_blob.restore(HOME)
@@ -127,6 +125,25 @@ def start() -> str:
         _STATE["handler"] = _handler_class(web)
         _STATE["stand"] = _fingerprint()
         return ""
+
+
+def ultra_code_hint(code: str) -> str:
+    """Warum der Einrichtungscode nicht passt -- ohne den Code selbst zu zeigen."""
+    from aquaticy.auth import ULTRA_CODE_LEN, ULTRA_SPECIALS
+
+    if not code:
+        grund = "AQUATICY_ULTRA_CODE fehlt."
+    elif len(code) != ULTRA_CODE_LEN:
+        grund = f"AQUATICY_ULTRA_CODE hat {len(code)} statt {ULTRA_CODE_LEN} Zeichen."
+    elif any(not (c.isalnum() or c in ULTRA_SPECIALS) for c in code):
+        grund = "AQUATICY_ULTRA_CODE enthält ein Zeichen, das nicht erlaubt ist."
+    else:
+        grund = "AQUATICY_ULTRA_CODE braucht mindestens einen Buchstaben, eine Ziffer und ein "
+        grund += "Sonderzeichen."
+    return (f"{grund} Erlaubt sind genau {ULTRA_CODE_LEN} Zeichen: Buchstaben, Ziffern und "
+            f"{' '.join(ULTRA_SPECIALS)} (mindestens je eins). Kein Leerzeichen, keine "
+            "Anführungszeichen. Ändere ihn bei Vercel unter Settings → Environment Variables "
+            "und starte ein neues Deployment.")
 
 
 def _handler_class(web: Any) -> type:
