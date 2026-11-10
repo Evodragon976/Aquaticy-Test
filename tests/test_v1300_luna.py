@@ -347,23 +347,9 @@ def test_code_chats_and_chats_live_in_their_own_lists(server: int) -> None:
     assert status == 200 and geoeffnet["kind"] == "code" and geoeffnet["mode"] == "code"
 
 
-# -- Setup und Befehl -----------------------------------------------------------------------------
-def test_setup_writes_accounts_off_by_default(monkeypatch: pytest.MonkeyPatch,
-                                              tmp_path: Path) -> None:
-    monkeypatch.setattr(cli, "_ensure_ollama", lambda **kw: True)
-    monkeypatch.setattr(cli, "_ask_website", lambda **kw: {})
-    monkeypatch.setattr(cli, "_vm_beim_start", lambda settings: None)
-    monkeypatch.setattr(cli, "_messenger_beim_start", lambda settings: None)
-    eingerichtet: list[Any] = []
-    monkeypatch.setattr(cli, "_einzelkonto_einrichten", eingerichtet.append)
-    ziel = tmp_path / ".env"
-    ergebnis = CliRunner().invoke(cli.app, ["setup", "--yes", "--no-probe", "--env-file",
-                                            str(ziel)], input="1\n1\n\n\n\n\n")
-    assert ergebnis.exit_code == 0, ergebnis.output
-    assert "AQUATICY_ACCOUNTS=false" in ziel.read_text() and len(eingerichtet) == 1
-    ergebnis = CliRunner().invoke(cli.app, ["setup", "--yes", "--no-probe", "--accounts",
-                                            "--env-file", str(ziel)], input="1\n1\n\n\n\n\n")
-    assert "AQUATICY_ACCOUNTS=true" in ziel.read_text() and len(eingerichtet) == 1
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_the_account_command_creates_and_resets_the_one_account(

@@ -138,7 +138,7 @@ def model_allowed(model: str, api_base: str = "") -> bool:
     modell = str(model or "").strip()
     if not modell:
         return True
-    if modell in (SPLIT_MODEL_ID, STANDARD_MODEL_ID):
+    if modell == STANDARD_MODEL_ID:
         return True
     if "/" not in modell:
         return False
@@ -250,7 +250,6 @@ def selected_vision_model(settings: Settings) -> str:
 NO_KEY = "kein-schluessel"
 
 
-SPLIT_MODEL_ID = "hosted_vllm/aquaticy-verbund"
 #: 16.0.0 (Aquaticy-Test): antwortet ohne Sprachmodell (aquaticy/standard.py).
 STANDARD_MODEL_ID = "aquaticy/standard"
 
@@ -432,21 +431,6 @@ class Settings:
 
     code_model: str = ""
 
-    vm_size: str = "normal"
-    vm_image: str = ""
-    vm_idle_minutes: int = 20
-    vm_memory_mb: int = 3072  # wie sandbox.MEMORY_MB (ein Test prueft das)
-    vm_disk_gb: int = 4
-    vm_cpus: int = 2  # wie sandbox.CPUS (ein Test prueft das)
-
-    vm_user_mode: bool = False
-
-    vm_internet: bool = False
-
-    vm_lan: bool = False
-
-    vm_desktop_image: str = "aquaticy-werkstatt-desktop:local"
-
     subagent_budget: int = 6
 
     subagent_parallel: int = 0
@@ -454,15 +438,7 @@ class Settings:
     rpm: int = 0
     parallel_calls: int = 0
 
-    ha_url: str = ""
-
-    ha_token: str = ""
-
     github_token: str = ""
-
-    ha_control: bool = False
-
-    ha_direct: bool = False
 
     google_direct: bool = False
 
@@ -476,12 +452,6 @@ class Settings:
 
     google_client_id: str = ""
     google_client_secret: str = ""
-
-    storage_url: str = ""
-
-    storage_access: str = "read"
-
-    lan_enabled: bool = True
 
     #: Kontensystem fuer mehrere Nutzer (13.0.0 Luna). Aus (Standard): genau ein Konto, Ultra,
     #: Anmeldung mit Nutzername und Passwort. Wird in ``aquaticy setup`` gewaehlt.
@@ -508,7 +478,6 @@ class Settings:
 
     api_base_for: str = ""
 
-    lan_subnet: str = ""
     fetch_timeout: float = 15.0
     cache_ttl_hours: int = 24
     max_results_default: int = 8
@@ -661,8 +630,6 @@ class Settings:
         sonst liefe es mit dem eigenen Schluessel beim Betreiber und zaehlte
         nicht, oder der Aufruf ginge an den falschen Rechner.
         """
-        if model == SPLIT_MODEL_ID:
-            return "operator"
         name = self.key_name_for(model)
         if not (name and name in self.own_key_names and self.api_keys.get(name)):
             return "operator"
@@ -691,7 +658,7 @@ class Settings:
         werte = {self.api_keys.get(n, "") for n in namen} | {self.search_keys.get(n, "")
                                                              for n in namen}
         werte |= {_env_str(n) for n in namen if n}
-        werte.update((self.ha_token, self.github_token, self.google_client_secret,
+        werte.update((self.github_token, self.google_client_secret,
                       self.memory_key))
         return sorted(w for w in werte if w and len(w) >= 8)
 
@@ -751,14 +718,6 @@ class Settings:
         """
         if self.model_access is not None:
             self.model_access(model)
-        if model == SPLIT_MODEL_ID:
-            from aquaticy.sharding import endpoint
-
-            adresse, schluessel = endpoint()
-            if not adresse:
-                raise ValueError("Das auf den Server-Verbund verteilte Modell läuft gerade "
-                                 "nicht. Wähle bitte ein anderes Modell.")
-            return {"api_base": adresse, "api_key": schluessel or NO_KEY}
         kwargs: dict[str, object] = {}
         gleich = provider_of(model) == provider_of(self.api_base_for or self.model) or (
             provider_of(model) in ("ollama", "ollama_chat")
@@ -878,15 +837,9 @@ class Settings:
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Settings aus der Umgebung lesen (Ergebnis wird gecacht)."""
-    from aquaticy.sandbox import VM_SIZES
-
     env_path = load_env()
 
     data_dir = Path(_env_str("AQUATICY_DATA_DIR") or str(Path.home() / ".aquaticy")).expanduser()
-    vm_size = _env_str("AQUATICY_VM_SIZE", "normal").strip().lower()
-    if vm_size not in VM_SIZES:
-        vm_size = "normal"
-    vm_preset = VM_SIZES[vm_size]
     settings = Settings(
         model=_env_str("AQUATICY_MODEL", DEFAULT_MODEL),
         vision_model=_env_str("AQUATICY_VISION_MODEL"),
@@ -908,42 +861,21 @@ def get_settings() -> Settings:
         context_tokens=_env_int("AQUATICY_CONTEXT_TOKENS", 16384),
         subagent_model=_env_str("AQUATICY_SUBAGENT_MODEL"),
         code_model=_env_str("AQUATICY_CODE_MODEL"),
-        vm_size=vm_size,
-        vm_image=_env_str("AQUATICY_VM_IMAGE"),
-        vm_idle_minutes=_env_int("AQUATICY_VM_IDLE_MINUTES", 20),
-
-        vm_memory_mb=_env_int("AQUATICY_VM_MEMORY_MB", 0) or vm_preset["memory_mb"],
-        vm_disk_gb=_env_int("AQUATICY_VM_DISK_GB", 0) or vm_preset["disk_gb"],
-        vm_cpus=_env_int("AQUATICY_VM_CPUS", 0) or vm_preset["cpus"],
-        vm_user_mode=_env_bool("AQUATICY_VM_USER_MODE", False),
-        vm_internet=_env_bool("AQUATICY_VM_INTERNET", False),
-        vm_lan=_env_bool("AQUATICY_VM_LAN", False),
-        vm_desktop_image=(
-            _env_str("AQUATICY_VM_DESKTOP_IMAGE") or "aquaticy-werkstatt-desktop:local"
-        ),
         subagent_budget=_env_int("AQUATICY_SUBAGENT_BUDGET", 6),
         subagent_parallel=_env_int("AQUATICY_SUBAGENT_PARALLEL", 0),
         rpm=max(0, _env_int("AQUATICY_RPM", 0)),
         parallel_calls=max(0, _env_int("AQUATICY_PARALLEL_CALLS", 0)),
-        ha_url=_env_str("AQUATICY_HA_URL"),
-        ha_token=_env_str("HA_TOKEN") or _env_str("AQUATICY_HA_TOKEN"),
         github_token=_env_str("AQUATICY_GITHUB_TOKEN"),
-        ha_control=_env_bool("AQUATICY_HA_CONTROL", False),
-        ha_direct=_env_bool("AQUATICY_HA_DIRECT", False),
         memory_enabled=_env_bool("AQUATICY_MEMORY", True),
         memory_key=_env_str("AQUATICY_MEMORY_KEY"),
-        lan_enabled=_env_bool("AQUATICY_LAN_ENABLED", True),
         accounts=_env_bool("AQUATICY_ACCOUNTS", False),
         legal_guard=guard_on(_env_str("AQUATICY_LEGAL_GUARD")),
         answer_check=_env_bool("AQUATICY_ANSWER_CHECK", True),
         auto_model=_env_bool("AQUATICY_AUTO_MODEL", False),
         council=_env_bool("AQUATICY_COUNCIL", False),
-        lan_subnet=_env_str("AQUATICY_LAN_SUBNET"),
         fetch_timeout=float(_env_int("AQUATICY_FETCH_TIMEOUT", 15)),
         cache_ttl_hours=_env_int("AQUATICY_CACHE_TTL_HOURS", 24),
         search_variants=_env_int("AQUATICY_SEARCH_VARIANTS", 3),
-        storage_url=_env_str("AQUATICY_STORAGE_URL"),
-        storage_access=_env_str("AQUATICY_STORAGE_ACCESS", "read"),
         google_enabled=_env_bool("AQUATICY_GOOGLE", False),
         google_write=_env_bool("AQUATICY_GOOGLE_WRITE", False),
         google_direct=_env_bool("AQUATICY_GOOGLE_DIRECT", False),

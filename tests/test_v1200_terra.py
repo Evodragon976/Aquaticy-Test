@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from aquaticy import botguard, web
-from tests.anmeldung import AGENT, BROWSER, FETCH, SPRACHE, loese, mensch, wie_die_app
+from tests.anmeldung import AGENT, BROWSER, SPRACHE, loese, mensch, wie_die_app
 from tests.test_security import _anfrage, server  # noqa: F401
 
 PASSWORT = "ein langes Passwort"
@@ -26,7 +26,6 @@ SKRIPT = {"User-Agent": "python-requests/2.32", "Accept": "*/*"}
 
 def _ui() -> str:
     return web.UI_FILE.read_text(encoding="utf-8")
-
 
 
 def test_the_three_examples_give_six_fifty_and_ninety_nine() -> None:
@@ -56,7 +55,6 @@ def test_a_browser_is_never_dropped_only_asked() -> None:
     assert botguard.verdict(botguard.score(True, 1, True)) == botguard.DROPPED
 
 
-
 def test_the_fingerprint_sees_scripts_and_lets_the_app_through() -> None:
     assert botguard.fingerprint(BROWSER, True, False, True) == []
     for agent in ("curl/8.5.0", "python-requests/2.32", "Go-http-client/1.1", "",
@@ -79,7 +77,6 @@ def test_the_fingerprint_sees_scripts_and_lets_the_app_through() -> None:
         "sprache"]
     assert botguard.fingerprint(BROWSER, False, False, True) == ["nachweis"]
     assert botguard.fingerprint(BROWSER, True, True, True) == ["webdriver"]
-
 
 
 def test_a_proof_is_signed_fresh_and_single_use() -> None:
@@ -118,7 +115,6 @@ def test_an_old_proof_no_longer_counts(monkeypatch: pytest.MonkeyPatch) -> None:
     assert botguard.check(menschlich, ("human",))
 
 
-
 def test_the_slider_wants_a_human_movement() -> None:
     gut = mensch(botguard.issue("human"))["track"]
     assert botguard.human_track(gut)
@@ -133,7 +129,6 @@ def test_the_slider_wants_a_human_movement() -> None:
     for kaputt in (None, "x", [], [[0, "a"]] * 8, [[float("nan"), 0]] * 8, [[0, 0]] * 500,
                    [[True, 0]] * 8):
         assert not botguard.human_track(kaputt)
-
 
 
 def test_failures_and_bans_are_kept_per_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -163,7 +158,6 @@ def test_ipv6_is_counted_per_network() -> None:
     assert botguard.address_key("2001:db8:1:3::1") != botguard.address_key("2001:db8:1:2::1")
     assert botguard.address_key("::ffff:198.51.100.4") == "198.51.100.4"
     assert botguard.address_key("unbekannt") == "unbekannt"
-
 
 
 def _zustimmung(port: int) -> str:
@@ -323,7 +317,6 @@ def test_registering_is_not_asked(server: int) -> None:  # noqa: F811
     assert status == 200, daten
 
 
-
 def test_the_page_solves_in_the_background_and_shows_the_slider() -> None:
     html = _ui()
     skript = html[html.index("const SHA_K = new Uint32Array(["):]
@@ -361,9 +354,6 @@ def test_the_javascript_hash_matches_python() -> None:
     assert json.loads(aus) == [hashlib.sha256(t.encode()).hexdigest()[:8] for t in texte]
 
 
-def test_the_login_route_stays_on_this_server_and_needs_no_session() -> None:
-    assert "/api/auth/challenge" in web.CLUSTER_LOCAL
-    quelle = web.Path(web.__file__).read_text(encoding="utf-8")
-    assert quelle.index("if not self._bot_gate(payload, geraet, neue_kennung):") \
-        < quelle.index("account = AUTH.login("), "vor dem Passwort"  # seit 13.0.0 Luna
-    assert FETCH == {"Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors"}
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).

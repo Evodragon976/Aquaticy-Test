@@ -1,17 +1,12 @@
 """15.4.5: Exporte bleiben im Chat, Uploads bleiben eindeutig und im Kontingent."""
 
-import contextlib
 import os
-import threading
-import time
-from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import pytest
 
-from aquaticy import export, metering, privacy, sandbox, web
+from aquaticy import export, privacy, web
 from aquaticy.cache import Cache
-from aquaticy.quota import Quota
 
 
 def _session(settings, *, local=False):
@@ -84,27 +79,6 @@ def test_f045_uploads_with_equal_names_and_timestamps_keep_both_contents(setting
     assert privacy.read_private(second, settings.data_dir) == b'Second image'
 
 
-def test_f046_parallel_vm_uploads_reserve_their_work_budget_before_writing(settings, monkeypatch):
-    session = _session(settings)
-    quota = Quota(settings.data_dir / 'quota.sqlite3', 'account', time.time())
-    settings.quota = quota
-    cost = metering.work_cost('datei')
-    quota.record(quota.session_tokens - cost)
-    barrier = threading.Barrier(2)
-    calls = []
-    lock = threading.Lock()
-
-    class Box:
-        def put_bytes(self, path, data):
-            with lock:
-                calls.append(path)
-            with contextlib.suppress(threading.BrokenBarrierError):
-                barrier.wait(0.3)
-            return {'written': path}
-
-    monkeypatch.setattr(sandbox, 'shared', lambda *args, **kwargs: Box())
-    with ThreadPoolExecutor(2) as pool:
-        results = list(pool.map(lambda name: session._into_workshop(name, b'content'),
-                                ['first.txt', 'second.txt']))
-    assert len(calls) == 1 and sum(bool(result) for result in results) == 1
-    assert quota.remaining() == 0
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).

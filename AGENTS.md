@@ -41,23 +41,19 @@ Vor jedem Commit: `python tools/pruefung.py` muss mit 0 enden.
 - `aquaticy/` – das Paket. Jedes Modul sagt in seiner ersten Zeile, wofür es da ist.
   - `agent.py` Schleife mit Werkzeugaufrufen, `tools.py` die Werkzeuge,
     `subagents.py`/`master.py` parallele Recherche, `ownservices.py` erkennt Fragen an
-    Mails, Kalender, Home Assistant und Lager (dann ohne Websuche).
+    Mails und Kalender (dann ohne Websuche), `standard.py` Aquaticy Standard (ohne Modell).
   - `web.py` Server und API, `webui.html` die ganze Oberfläche (HTML, CSS, JS).
   - `cli.py` Kommandozeile, `config.py` Einstellungen.
   - Sicherheit: `netguard.py` (nur öffentliche Ziele), `injection.py`
     (Prompt-Injection), `aiguard.py` (Missbrauch), `guardrails.py` (Recht),
-    `auth.py` (Konten), `privacy.py`/`keyvault.py` (Verschlüsselung),
-    `sandbox.py` (virtual machine).
-  - Messenger: `bridge.py` (Chat mit Aquaticy per WhatsApp/Signal; Regeln für Absender und
-    Werkzeuge stehen dort im Code), `messenger_native.py` (direkt koppeln ohne virtual machine:
-    neonize und signal-cli), `bridge_native.py` (die Regeln dafür), `messenger_install.py`
-    (richtet libmagic und signal-cli ein; Befehl `aquaticy install-messenger`),
-    `addons.py` (Add-ons, Rechte).
-  - Plugins: `plugins.py`, Vorprüfung für Code- und Security-Review in `review_scan.py`.
-  - Secure Pro: `secure_pro.py` (Überwachung, Zeitplan, Aufgaben), `secure_tasks.py`
-    (Aufgaben fest auswerten), `secure_packets.py` (nur Paket-Kopfdaten),
-    `secure_knowledge.py` (Malware-Wissen), `secure_defense.py` (feste Abwehr-Befehle, laufen
-    über `vm_ssh.py` und brauchen immer ein Ja), `secure_chat.py` (Rolle und Werkzeuge).
+    `auth.py` (Konten), `privacy.py`/`keyvault.py` (Verschlüsselung).
+  - `addons.py` (Add-ons, Rechte), Plugins: `plugins.py`, Vorprüfung für Code- und
+    Security-Review in `review_scan.py`.
+  - Secure Pro (nur Fragen): `secure_knowledge.py` (Malware-Wissen), `secure_chat.py` (Rolle
+    und Werkzeuge).
+  - Seit 16.0.1 gibt es in Aquaticy-Test keine virtual machine, keine Messenger, keinen
+    Server-Verbund, kein Auto-Upgrading, keine Coworker, kein Heimnetz, kein Home Assistant,
+    kein Lager und keine eigene Domain mehr -- auch nicht im Code.
 - `worker/` – die Cloudflare-Fassung (JavaScript, `worker/README.md`). `worker/src/erzeugt.js`
   kommt aus `tools/worker_bauen.py` und wird nie von Hand geändert.
 - Vercel-Modus (nur Aquaticy-Test): `aquaticy/vercel.py` reicht Anfragen an `web.Handler`

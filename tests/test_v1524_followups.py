@@ -2,26 +2,13 @@
 
 import io
 import json
-import os
-import sqlite3
 from types import SimpleNamespace
 
 import httpx
 import pytest
 from rich.console import Console
 
-from aquaticy import (
-    addons,
-    cli,
-    cluster,
-    coworker,
-    coworker_schedule,
-    export,
-    homeassistant,
-    local_model,
-    memory,
-    storage,
-)
+from aquaticy import addons, cli, export, local_model, memory
 
 
 def test_clearing_uploads_cannot_remove_files_outside_the_profile(tmp_path):
@@ -64,28 +51,9 @@ def test_failed_default_export_does_not_leave_an_empty_document(tmp_path, monkey
     assert not list(tmp_path.glob('*.md'))
 
 
-@pytest.mark.parametrize('config', [{}, [], 'HTML page', {'version': ''}])
-def test_home_assistant_connection_test_requires_a_real_config(config, monkeypatch):
-    client = homeassistant.HomeAssistant('http://house.local:8123', 'synthetic-token')
-    monkeypatch.setattr(client, '_request', lambda *args: config)
-    with pytest.raises(homeassistant.HomeAssistantError):
-        client.ping()
-
-
-@pytest.mark.parametrize('method,status', [('GET', 302), ('POST', 307)])
-def test_inventory_same_origin_redirects_preserve_the_request(method, status):
-    requests = []
-    def handle(request):
-        requests.append(request)
-        if request.url.path == '/old':
-            return httpx.Response(status, headers={'Location': '/new'})
-        return httpx.Response(200, json={'id': 1})
-    with httpx.Client(transport=httpx.MockTransport(handle), follow_redirects=True) as http:
-        client = storage.Storage('http://inventory.local:3000', access='write', client=http)
-        assert client._request(method, '/old', json={'quantity': 2}) == {'id': 1}
-    assert len(requests) == 2
-    assert all(request.method == method for request in requests)
-    assert all(json.loads(request.content) == {'quantity': 2} for request in requests)
+# 16.0.1 (Aquaticy-Test): 5 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 @pytest.mark.parametrize('body,success', [
@@ -128,58 +96,3 @@ def test_image_descriptions_are_displayed_as_plain_text(tmp_path, monkeypatch):
     assert description in output.getvalue()
 
 
-def test_parallel_replication_transfers_keep_separate_database_snapshots(tmp_path, monkeypatch):
-    peer = cluster.Cluster(tmp_path)
-    user = 'b' * 32
-    source = tmp_path / 'users' / user / 'data.db'
-    source.parent.mkdir(parents=True)
-    with sqlite3.connect(source) as conn:
-        conn.execute('CREATE TABLE entries (value TEXT)')
-        conn.execute('INSERT INTO entries VALUES ("original")')
-    monkeypatch.setattr(cluster, 'CHUNK', 1024)
-    signature = cluster.manifest(source.parent)['data.db']
-    base = {'user': user, 'rel': 'data.db', 'sig': signature}
-    request_a = dict(base, transfer='a' * 24)
-    request_b = dict(base, transfer='b' * 24)
-    first_a = peer._serve_file(request_a)
-    first_b = peer._serve_file(request_b)
-    assert not first_a['eof'] and not first_b['eof']
-    with sqlite3.connect(source) as conn:
-        conn.execute('INSERT INTO entries VALUES ("later")')
-    stamp = source.stat().st_mtime_ns + 1_000_000
-    os.utime(source, ns=(stamp, stamp))
-    def finish(request, first):
-        data = cluster._unb64(first['data'])
-        while True:
-            part = peer._serve_file(dict(request, offset=len(data)))
-            assert not part.get('changed')
-            data += cluster._unb64(part['data'])
-            if part['eof']:
-                return data
-    body_a = finish(request_a, first_a)
-    body_b = finish(request_b, first_b)
-    assert body_a == body_b
-    replica = tmp_path / 'replica.db'
-    replica.write_bytes(body_a)
-    with sqlite3.connect(replica) as conn:
-        assert conn.execute('SELECT value FROM entries').fetchall() == [('original',)]
-
-
-def test_scheduled_failures_keep_pending_coworker_orders(settings, monkeypatch):
-    store = coworker.CoworkerStore(settings.db_path)
-    cw = store.add('Ava', 'News', schedule={'kind': 'research'})
-    store.add_log(cw.id, 'nachricht', 'Unprocessed order')
-    monkeypatch.setattr(coworker_schedule, 'run_job', lambda *a, **kw: ('Fehler: timeout', ''))
-    coworker.run_scheduled(cw, settings, 'pro', store=store)
-    assert [item['text'] for item in store.unread_messages(cw.id)] == ['Unprocessed order']
-
-
-def test_full_coworker_queue_keeps_its_existing_messages(settings, monkeypatch):
-    monkeypatch.setattr(coworker, 'LOG_KEEP', 2)
-    store = coworker.CoworkerStore(settings.db_path)
-    cw = store.add('Ava', 'Suche aktuelle Nachrichten')
-    store.add_log(cw.id, 'nachricht', 'One')
-    store.add_log(cw.id, 'nachricht', 'Two')
-    with pytest.raises(coworker.CoworkerError):
-        store.add_log(cw.id, 'nachricht', 'Three')
-    assert [item['text'] for item in store.unread_messages(cw.id)] == ['One', 'Two']

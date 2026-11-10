@@ -9,16 +9,13 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-import pytest
 import segno
 import zxingcpp
 from PIL import Image
 
 from aquaticy import web
-from aquaticy.messenger_login import pairing_code, qr_image
 from tests.test_v965 import parallel_site as parallel_site
 from tests.test_v1266_sol import Box
-from tests.test_v1266_sol import login as login
 
 WEB = Path(web.__file__).parent
 
@@ -49,15 +46,9 @@ def payloads(count: int) -> list[str]:
     return out
 
 
-@pytest.mark.parametrize("ecc", ["l", "m"])
-@pytest.mark.parametrize("quality", [75, 95])
-def test_dense_codes_with_few_pixels_per_dot_are_read(ecc: str, quality: int) -> None:
-    for payload in payloads(6):
-        shot = dense_screen(payload, ecc, 3.4, quality)
-        result = qr_image(shot, "whatsapp")
-        assert result is not None
-        with Image.open(io.BytesIO(base64.b64decode(result.split(",", 1)[1]))) as image:
-            assert zxingcpp.read_barcodes(image)[0].text == payload
+# 16.0.1 (Aquaticy-Test): 5 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_the_original_alone_does_not_read_these_codes() -> None:
@@ -72,51 +63,13 @@ def test_the_original_alone_does_not_read_these_codes() -> None:
     assert failed >= 1
 
 
-def test_the_code_is_drawn_fresh_sharp_and_small() -> None:
-    payload = payloads(1)[0]
-    result = qr_image(dense_screen(payload, "m", 4.0), "whatsapp")
-    assert result is not None and result.startswith("data:image/png;base64,")
-    with Image.open(io.BytesIO(base64.b64decode(result.split(",", 1)[1]))) as image:
-        assert image.width < 600 and image.height < 600
-        assert image.getpixel((0, 0)) == (255, 255, 255)
-        colours = {pixel for pixel in image.getdata()}
-        assert colours == {(0, 0, 0), (255, 255, 255)}, "scharf: nur Schwarz und Weiß"
-
-
-def test_only_a_valid_code_of_the_chosen_service_is_ever_drawn() -> None:
-    other = dense_screen("https://example.org/attacker-login?" + "a" * 120, "m", 4.0)
-    assert qr_image(other, "whatsapp") is None
-    assert qr_image(dense_screen(payloads(1)[0], "m", 4.0), "signal") is None
-    assert not pairing_code("https://example.org/x", "whatsapp")
-
-
-def test_a_screen_without_a_code_gives_nothing_and_is_quick() -> None:
-    import time
-
-    blank = io.BytesIO()
-    Image.new("RGB", (1280, 800), "white").save(blank, format="JPEG", quality=75)
-    start = time.monotonic()
-    assert qr_image(blank.getvalue(), "whatsapp") is None
-    assert time.monotonic() - start < 4
-
-
 # -- Wer ist vorn? ---------------------------------------------------------------------
 WINDOW = {"id": "0x1", "klasse": "Navigator.aquaticy-whatsapp", "titel": "WhatsApp Web"}
 
 
-@pytest.mark.parametrize(("after", "expected"), [
-    ({"aktiv": "WhatsApp Web", "aktiv_klasse": "Navigator.aquaticy-whatsapp"}, True),
-    ({"aktiv": "WhatsApp Web", "aktiv_klasse": ""}, True),
-    ({"aktiv": "Ein anderes Fenster", "aktiv_klasse": "Navigator.aquaticy-whatsapp"}, False),
-    ({"aktiv": "Terminal", "aktiv_klasse": "xterm.XTerm"}, False),
-    ({"aktiv": "", "aktiv_klasse": "Navigator.aquaticy-whatsapp"}, True),
-    ({"aktiv": "", "aktiv_klasse": "xterm.XTerm"}, False),
-    ({"aktiv": "", "aktiv_klasse": "feh.Signal"}, False),
-    ({"aktiv": "", "aktiv_klasse": ""}, True),
-    ({}, True),
-])
-def test_the_front_window_check(after: dict[str, Any], expected: bool) -> None:
-    assert web.front_is_messenger(WINDOW, after, "whatsapp") is expected
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 class FrontBox(Box):
@@ -140,16 +93,6 @@ class FrontBox(Box):
         blank = io.BytesIO()
         Image.new("RGB", (1280, 800), "white").save(blank, format="JPEG")
         return blank.getvalue()
-
-
-@pytest.fixture
-def front(login, monkeypatch):
-    from aquaticy import sandbox
-
-    session, _, payload = login
-    box = FrontBox()
-    monkeypatch.setattr(sandbox, "shared", lambda settings: box)
-    return session, box, payload
 
 
 # 16.0.0 (Aquaticy-Test): test_the_answer_says_why_there_is_no_image entfaellt.
@@ -184,20 +127,3 @@ def _chromium() -> str | None:
 # machine ist geloescht
 
 
-def test_the_sandbox_passes_the_quality_to_the_helper(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy import sandbox
-
-    called: list[tuple[str, ...]] = []
-    box = sandbox.Sandbox(user_mode=True)
-
-    def fake(*args: str, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
-        called.append(args)
-        return subprocess.CompletedProcess(args, 0, b"\xff\xd8bild", b"")
-
-    monkeypatch.setattr(box, "desktop", fake)
-    box.screenshot(quality=92)
-    box.screenshot(quality=999)
-    box.screenshot(quality=1)
-    box.screenshot()
-    assert called == [("shot", "--quality", "92"), ("shot", "--quality", "95"),
-                      ("shot", "--quality", "30"), ("shot",)]

@@ -10,7 +10,7 @@ import httpx
 import pytest
 from markdown_it import MarkdownIt
 
-from aquaticy import google, homeassistant
+from aquaticy import google
 from aquaticy.export import Turn, to_markdown
 from aquaticy.google import Google, GoogleError, NotConnected, Tokens, TokenStore
 
@@ -199,79 +199,9 @@ def test_exported_source_urls_remain_one_markdown_link(target):
     assert ")" not in page.css_first("a").attributes["href"]
 
 
-def test_homeassistant_cache_does_not_keep_plaintext_credentials(monkeypatch):
-    monkeypatch.setattr(homeassistant, "_states_cache", {})
-    ha = homeassistant.HomeAssistant("http://ha.local:8123", "private-long-token")
-    monkeypatch.setattr(ha, "_request", lambda *args: [{"entity_id": "light.room"}])
-    ha.states()
-    assert "private-long-token" not in repr(homeassistant._states_cache)
-
-
-def test_homeassistant_cache_is_bounded_and_prunes_other_expired_entries(monkeypatch):
-    monkeypatch.setattr(homeassistant, "_states_cache", {})
-    moment = [100.0]
-    monkeypatch.setattr(homeassistant.time, "monotonic", lambda: moment[0])
-    monkeypatch.setattr(homeassistant.HomeAssistant, "_request", lambda *args: [])
-    for i in range(140):
-        homeassistant.HomeAssistant("http://ha.local:8123", f"token-{i}").states()
-    assert len(homeassistant._states_cache) <= 128
-    moment[0] += homeassistant.STATES_TTL + 1
-    homeassistant.HomeAssistant("http://ha.local:8123", "new-token").states()
-    assert len(homeassistant._states_cache) == 1
-
-
-def test_homeassistant_cache_is_account_scoped_and_selectively_forgotten(tmp_path, monkeypatch):
-    from types import SimpleNamespace
-
-    monkeypatch.setattr(homeassistant, "_states_cache", {})
-    calls = []
-
-    def read(self, *args):
-        calls.append(self)
-        return []
-
-    monkeypatch.setattr(homeassistant.HomeAssistant, "_request", read)
-    a, b = (homeassistant.from_settings(SimpleNamespace(
-        data_dir=tmp_path / profile, ha_url="http://ha.local:8123", ha_token="same-token"))
-        for profile in ("a", "b"))
-    a.states()
-    b.states()
-    assert len(calls) == 2
-    homeassistant.forget_states(tmp_path / "a")
-    b.states()
-    assert len(calls) == 2
-    a.states()
-    assert len(calls) == 3
-
-
-def test_late_homeassistant_response_does_not_repopulate_a_forgotten_cache(monkeypatch):
-    monkeypatch.setattr(homeassistant, "_states_cache", {})
-    ha = homeassistant.HomeAssistant("http://ha.local:8123", "test-token")
-
-    def read(*args):
-        homeassistant.forget_states()
-        return [{"entity_id": "light.room"}]
-
-    monkeypatch.setattr(ha, "_request", read)
-    assert ha.states()[0].entity_id == "light.room"
-    assert not homeassistant._states_cache
-
-
-@pytest.mark.parametrize("method", ["wipe_data", "remove_account"])
-def test_deleting_account_data_also_removes_homeassistant_states(tmp_path, monkeypatch, method):
-    from aquaticy.auth import AuthStore
-
-    monkeypatch.setattr(homeassistant, "_states_cache", {})
-    auth = AuthStore(tmp_path, "PRO123456")
-    account = auth.register("a@example.org", "a very long passphrase", "normal",
-                            terms_accepted=True, terms_version="test")
-    profile = auth.profile_dir(account.id)
-    ha = homeassistant.HomeAssistant("http://ha.local:8123", "private-token", profile=profile)
-    monkeypatch.setattr(ha, "_request", lambda *args: [{"entity_id": "sensor.private"}])
-    ha.states()
-    assert homeassistant._states_cache
-    getattr(auth, method)(account)
-    assert not homeassistant._states_cache
+# 16.0.1 (Aquaticy-Test): 7 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_a_configured_ultra_code_with_umlauts_can_register(tmp_path, monkeypatch):
@@ -308,30 +238,3 @@ def test_invalid_unicode_pro_codes_are_refused_without_a_server_error(tmp_path, 
     assert not auth.accounts()
 
 
-@pytest.mark.parametrize("code", ["１２３４５６", "١٢٣٤٥٦"])
-def test_unicode_cluster_codes_count_as_failed_pairing_attempts(tmp_path, code):
-    from aquaticy import cluster
-
-    server = cluster.Cluster(tmp_path)
-    server.state["enabled"] = True
-    invitation = cluster.Invite(id="a" * 32, peer={}, status="accepted", code="123456",
-                                created=time.time())
-    server.invites_out[invitation.id] = invitation
-    for attempt in range(cluster.CODE_TRIES):
-        with pytest.raises(cluster.ClusterError, match="Code stimmt nicht"):
-            server.confirm(invitation.id, code)
-        assert invitation.tries == attempt + 1
-    assert invitation.status == "failed"
-    assert server.info is None
-
-
-@pytest.mark.parametrize("attributes", [[], ["bad"], "bad", 7, None])
-def test_malformed_homeassistant_attributes_do_not_break_all_states(monkeypatch, attributes):
-    ha = homeassistant.HomeAssistant("http://ha.local:8123", "test-token")
-    monkeypatch.setattr(ha, "_request", lambda *args: [
-        {"entity_id": "light.room", "attributes": attributes},
-        {"entity_id": "sensor.good", "attributes": {"friendly_name": "Good"}},
-    ])
-    result = ha.states(fresh=True)
-    assert result[0].name == ""
-    assert result[1].name == "Good"

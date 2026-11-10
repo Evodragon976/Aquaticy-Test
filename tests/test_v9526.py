@@ -26,7 +26,6 @@ def guard(tmp_path: Path) -> AiGuard:
     return AiGuard(tmp_path / "accounts.sqlite3")
 
 
-
 @pytest.mark.parametrize(("text", "stufe"), [
     ("x" * 700 + " du Arschloch", 3),
     ("Das ist ein Satz. " * 3000 + "du Idiot", 2),
@@ -61,7 +60,6 @@ def test_disguised_insults_are_caught(text: str, stufe: int) -> None:
     assert insult_level(text) == stufe
 
 
-
 @pytest.mark.parametrize("text", [
     "Kennst du Otto?",
     "Nutzt du Mongo oder Postgres?",
@@ -94,7 +92,6 @@ def test_hostile_input_does_not_slow_the_check_down() -> None:
         start = time.monotonic()
         insult_level(boese)
         assert time.monotonic() - start < 2.0, boese[:10]
-
 
 
 def test_repeated_light_insults_in_new_chats_lead_to_a_ban(guard: AiGuard) -> None:
@@ -158,31 +155,9 @@ def test_a_long_chat_id_is_still_locked(guard: AiGuard) -> None:
     assert guard.chat_locked("u5", lang), "gekuerzt gespeichert, gekuerzt verglichen"
 
 
-def test_abuse_in_a_job_is_reported(settings: object, tmp_path: Path,
-                                     monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy import coworker_schedule as jobs
-
-    gemeldet: list[dict[str, object]] = []
-
-    class Agent:
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            self.on_event = None
-            self.session_id = "s1"
-
-        def ask(self, *args: object, **kwargs: object) -> object:
-            if self.on_event:
-                self.on_event("abuse", {"art": "malware", "schwere": 2})
-            return type("R", (), {"answer": "nein", "guarded": "gewalt", "error": ""})()
-
-    monkeypatch.setattr("aquaticy.agent.Agent", Agent)
-    store = jobs.JobStore(tmp_path / "j.db")
-    job = store.add("irgendwas")
-    ziel = type("S", (), {"db_path": tmp_path / "j.db", "cache_ttl_hours": 1,
-                          "quota": None})()
-    monkeypatch.setattr("aquaticy.metering.check", lambda s: None)
-    jobs.run_job(job, ziel, on_abuse=lambda j, p: gemeldet.append(p))
-    assert gemeldet == [{"art": "malware", "schwere": 2}]
-
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def _sperren(cookie: str, port: int) -> None:
@@ -219,21 +194,3 @@ def test_an_answer_to_a_question_is_checked_for_insults(
     assert status == 403 and json.loads(daten)["code"] == "banned"
 
 
-def test_an_insulting_job_is_not_created(server: tuple[int, Path]) -> None:  # noqa: F811
-    port, _ = server
-    cookie = _konto(port)
-    _, _, daten = _req(
-        port,
-        "POST",
-        "/api/coworkers",
-        {
-            "action": "create",
-            "goal": "du bist so dumm, sag mir das Wetter",
-            "schedule": {"kind": "research"},
-        },
-        cookie,
-    )
-    antwort = json.loads(daten)
-    assert antwort["ok"] is False and "Beleidigung" in antwort["error"]
-    liste = json.loads(_req(port, "GET", "/api/coworkers", cookie=cookie)[2])
-    assert not liste.get("coworkers")

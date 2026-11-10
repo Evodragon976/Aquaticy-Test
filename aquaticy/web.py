@@ -16,39 +16,35 @@ import contextlib
 import gzip
 import hashlib
 import hmac
-import io
+import ipaddress
 import json
-import logging
 import math
 import os
 import queue
 import re
 import secrets
 import socket
-import sqlite3
 import sys
 import threading
 import time
 import unicodedata
 import webbrowser
 from collections import OrderedDict
-from collections.abc import Callable
 from dataclasses import replace
 from html import escape
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-from aquaticy import INTERNAL, VERSION_LABEL, __version__, botguard, cluster, webview, zeit
+from aquaticy import INTERNAL, VERSION_LABEL, __version__, botguard, webview
 from aquaticy import zeit as deutsche_zeit
 from aquaticy.auth import Account, AuthStore, RateLimiter, pro_code_for
 from aquaticy.cache import CHAT_KINDS, Cache, chat_kind_of
 from aquaticy.config import (
     DEFAULT_ENV_PATH,
     SEARCH_BACKEND_KEYS,
-    SPLIT_MODEL_ID,
     Settings,
     api_key_name_for,
     base_fits,
@@ -65,7 +61,6 @@ from aquaticy.config import (
 )
 from aquaticy.guardrails import rules_overview
 from aquaticy.legal import LEGAL_ROUTES, LEGAL_VERSION, legal_page
-from aquaticy.sandbox import VM_SIZES
 
 UI_FILE = Path(__file__).with_name("webui.html")
 
@@ -315,21 +310,10 @@ SETTING_KEYS: tuple[str, ...] = (
     "AQUATICY_CONTEXT_TOKENS",
     "AQUATICY_PLANNER_TIMEOUT",
     "AQUATICY_ENABLE_PLAYWRIGHT",
-    "AQUATICY_HA_URL",
-    "AQUATICY_HA_CONTROL",
-    "AQUATICY_HA_DIRECT",
     "AQUATICY_GOOGLE",
     "AQUATICY_GOOGLE_WRITE",
     "AQUATICY_GOOGLE_DIRECT",
-    "AQUATICY_STORAGE_URL",
-    "AQUATICY_STORAGE_ACCESS",
-    "AQUATICY_LAN_ENABLED",
-    "AQUATICY_LAN_SUBNET",
     "AQUATICY_MEMORY",
-    "AQUATICY_VM_SIZE",
-    "AQUATICY_VM_USER_MODE",
-    "AQUATICY_VM_INTERNET",
-    "AQUATICY_VM_LAN",
     "AQUATICY_LEGAL_GUARD",
     "AQUATICY_AUTO_MODEL",
     "AQUATICY_COUNCIL",
@@ -352,16 +336,7 @@ NUMBERS: dict[str, tuple[int, int]] = {
 }
 
 
-CHOICES: dict[str, tuple[str, ...]] = {
-    "AQUATICY_STORAGE_ACCESS": ("off", "read", "write"),
-    "AQUATICY_VM_SIZE": ("normal", "plus"),
-}
-
-
 MAX_VALUE_CHARS = 2_000
-
-
-HA_TOKEN_FIELD = "__HA_TOKEN__"
 
 
 GOOGLE_ID_FIELD = "__GOOGLE_ID__"
@@ -434,9 +409,6 @@ def image_mime(data: bytes) -> str:
 def looks_like_image(data: bytes) -> bool:
     """Beginnt *data* wirklich wie ein PNG, JPEG, GIF, WebP oder BMP?"""
     return bool(image_mime(data))
-
-
-TEXT_TYPES = {".txt", ".md", ".csv", ".json", ".log", ".yaml", ".yml"}
 
 
 KEEP_UPLOADS = 50
@@ -550,33 +522,8 @@ AUTH: AuthStore | None = None
 
 AIGUARD: Any = None
 
-CLUSTER: Any = None
 
 SERVER: Any = None
-
-SHARDING: Any = None
-
-WEBSITE: Any = None
-
-PUBLIC_SERVER: Any = None
-# 15.5.5: HTTPS im Heimnetz und ueber Tailscale (aquaticy/homename.py)
-HOME_TLS: Any = None
-HOME_SERVER: Any = None
-HOME_ANNOUNCER: Any = None
-HOME_CA_ROUTES = frozenset({"/zertifikat", "/aquaticy-ca.crt"})
-
-
-LAN_ONLY = False
-
-
-UPGRADE_DIR: Path | None = None
-UPGRADER: Any = None
-_CLUSTER_RESTART = threading.Event()
-
-
-CLUSTER_LOCAL = frozenset({"/api/auth/status", "/api/auth/login", "/api/auth/register",
-                           "/api/auth/logout", "/api/auth/challenge", "/api/consent",
-                           "/api/cluster"})
 
 
 POST_WHEN_BANNED = frozenset({
@@ -595,6 +542,7 @@ ACCOUNT_ROUTES = frozenset({
 
 DELETE_WORD = "LÖSCHEN"
 WRONG_LOGIN_SINGLE = "Nutzername oder Passwort stimmt nicht."
+WRONG_LOGIN = "E-Mail, Nutzername oder Passwort stimmt nicht."
 AUTH_LIMIT = RateLimiter(attempts=8, window_seconds=60)
 
 
@@ -613,7 +561,6 @@ ADDRESS_LIMIT = RateLimiter(attempts=1200, window_seconds=60)
 
 KEY_TEST_LIMIT = RateLimiter(attempts=10, window_seconds=60)
 
-CLUSTER_HELLO_LIMIT = RateLimiter(attempts=30, window_seconds=60)
 
 _STRING_SETTINGS = {
     "AQUATICY_MODEL": "model",
@@ -627,28 +574,17 @@ _STRING_SETTINGS = {
     "AQUATICY_LOCATION": "location",
     "AQUATICY_LANG": "lang",
     "AQUATICY_COUNTRY": "country",
-    "AQUATICY_HA_URL": "ha_url",
-    "HA_TOKEN": "ha_token",
     "AQUATICY_GITHUB_TOKEN": "github_token",
-    "AQUATICY_LAN_SUBNET": "lan_subnet",
-    "AQUATICY_STORAGE_URL": "storage_url",
-    "AQUATICY_STORAGE_ACCESS": "storage_access",
     "GOOGLE_CLIENT_ID": "google_client_id",
     "GOOGLE_CLIENT_SECRET": "google_client_secret",
 }
 _BOOL_SETTINGS = {
     "AQUATICY_SUBAGENTS_AUTO": "subagents_auto",
     "AQUATICY_ENABLE_PLAYWRIGHT": "enable_playwright",
-    "AQUATICY_HA_CONTROL": "ha_control",
-    "AQUATICY_HA_DIRECT": "ha_direct",
     "AQUATICY_GOOGLE": "google_enabled",
     "AQUATICY_GOOGLE_WRITE": "google_write",
     "AQUATICY_GOOGLE_DIRECT": "google_direct",
-    "AQUATICY_LAN_ENABLED": "lan_enabled",
     "AQUATICY_MEMORY": "memory_enabled",
-    "AQUATICY_VM_USER_MODE": "vm_user_mode",
-    "AQUATICY_VM_INTERNET": "vm_internet",
-    "AQUATICY_VM_LAN": "vm_lan",
     "AQUATICY_AUTO_MODEL": "auto_model",
     "AQUATICY_COUNCIL": "council",
 }
@@ -711,28 +647,16 @@ def header_for(settings: Settings) -> dict[str, Any]:
         ui_state().read(),
         strong_model=(strong_models(1) or [{}])[0].get("id", ""),
         strong_code_model=(strong_models(1, purpose="code") or [{}])[0].get("id", ""),
-        ha_connected=bool(settings.ha_url and settings.ha_token),
         problems=settings.missing_requirements(),
     )
-    if kopf.get("model") == SPLIT_MODEL_ID and SHARDING is not None:
-        kopf["model_label"] = SHARDING.label()
-    else:
-        from aquaticy.local_model import local_name
-        from aquaticy.system import model_usable
+    from aquaticy.local_model import local_name
+    from aquaticy.system import model_usable
 
-        modell = str(kopf.get("model") or "")
+    modell = str(kopf.get("model") or "")
 
-        if modell and not local_name(modell) and not model_usable(settings, modell):
-            auto = str(kopf.get("model_label") or "").startswith("Auto · ")
-            kopf["model_label"] = ("Auto · " if auto else "") + "Modell wählen"
-    if UPGRADE_DIR is not None:
-        from aquaticy import upgrading
-
-        with contextlib.suppress(Exception):
-            schoen = upgrading.display_label(UPGRADE_DIR, kopf.get("model", ""))
-            if schoen:
-                kopf["model_label"] = kopf["model_label"].replace(
-                    kopf["model"].split("/")[-1], schoen)
+    if modell and not local_name(modell) and not model_usable(settings, modell):
+        auto = str(kopf.get("model_label") or "").startswith("Auto · ")
+        kopf["model_label"] = ("Auto · " if auto else "") + "Modell wählen"
     from aquaticy import standard
 
     if kopf.get("model") == standard.MODEL_ID:
@@ -771,69 +695,7 @@ def storage_view(usage: dict[str, Any]) -> dict[str, Any]:
             f"{usage.get('limit_mb')} MB belegt"}
 
 
-def system_gauges(data: dict[str, Any]) -> list[dict[str, Any]]:
-    """Die Anzeigen der Auslastung -- Name, Wert, Zusatz, Anteil."""
-    anzeigen: list[dict[str, Any]] = []
-    cpu, mem, disk, gpu = (data.get(k) or {} for k in ("cpu", "memory", "disk", "gpu"))
-    if cpu.get("percent") is not None:
-        anzeigen.append({"name": "Prozessor", "value": f"{cpu['percent']} %",
-                         "sub": f"{cpu.get('cores')} Kerne · Last {cpu.get('load')}",
-                         "percent": cpu["percent"]})
-    if mem.get("percent") is not None:
-        anzeigen.append({"name": "Arbeitsspeicher", "value": f"{mem.get('used_gb')} GB",
-                         "sub": f"von {mem.get('total_gb')} GB", "percent": mem["percent"]})
-    if disk.get("percent") is not None:
-        anzeigen.append({"name": "Festplatte", "value": f"{disk.get('free_gb')} GB frei",
-                         "sub": f"von {disk.get('total_gb')} GB", "percent": disk["percent"]})
-    if gpu.get("name"):
-        anzeigen.append({"name": "Grafikkarte", "value": f"{gpu.get('percent')} %",
-                         "sub": f"{gpu['name']} · {gpu.get('used_gb')} von "
-                                f"{gpu.get('total_gb')} GB", "percent": gpu.get("percent")})
-    speicher = data.get("storage") or {}
-    if speicher:
-        anzeigen.append({"name": "Speicher", "value": f"{speicher.get('used_mb')} MB",
-                         "sub": f"von {speicher.get('limit_mb')} MB · "
-                                f"{speicher.get('entries')} Notizen",
-                         "percent": speicher.get("percent")})
-    return anzeigen
-
-
 ROLE_LABELS = {"modelle": "Modelle und etwas Website", "website": "Nur Website"}
-
-
-def cluster_gauges(verbund: Any) -> list[dict[str, Any]]:
-    """Die Auslastung jedes Servers im Verbund -- fuer die Anzeige unter "Auslastung".
-
-    Aus den Lebenszeichen, die sich die Server alle drei Sekunden schicken;
-    geprueft in cluster.hardware. Dazu, was der Master dem Server zuteilt.
-    """
-    rollen = verbund.roles()
-    master = verbund.master_node()
-    server: list[dict[str, Any]] = []
-    for mitglied in verbund.members():
-        knoten = str(mitglied.get("node", ""))
-        hw = verbund.hw_of(knoten)
-        lebendig = verbund.alive(knoten)
-        anzeigen: list[dict[str, Any]] = []
-        if lebendig and hw.get("cores"):
-            anzeigen.append({"name": "Prozessor", "value": f"{hw['cpu_pct']} %",
-                             "sub": f"{hw['cores']} Kerne", "percent": hw["cpu_pct"]})
-        if lebendig and hw.get("ram_gb"):
-            anzeigen.append({"name": "Arbeitsspeicher", "value": f"{hw['ram_used_gb']} GB",
-                             "sub": f"von {hw['ram_gb']} GB", "percent": hw["ram_pct"]})
-        if lebendig and hw.get("gpu"):
-            anzeigen.append({"name": "Grafikkarte", "value": f"{hw['gpu_pct']} %",
-                             "sub": f"{hw['gpu']} · {hw['vram_used_gb']} von "
-                                    f"{hw['vram_gb']} GB", "percent": hw["gpu_pct"]})
-        rolle = rollen.get(knoten, "")
-        server.append({
-            "name": str(mitglied.get("name") or knoten[:8])[:60],
-            "self": knoten == verbund.node_id, "master": knoten == master,
-            "alive": lebendig, "role": rolle, "role_label": ROLE_LABELS.get(rolle, ""),
-            "accounts": sum(1 for n in list(verbund.homes.values()) if n == knoten),
-            "gauges": anzeigen,
-        })
-    return server
 
 
 def usage_view(settings: Settings) -> dict[str, Any]:
@@ -1013,30 +875,6 @@ def client_ip(direkt: str, forwarded: str = "", real_ip: str = "") -> str:
     return direkt
 
 
-WORKSHOP_FIELDS: tuple[str, ...] = (
-    "vm_size", "vm_image", "vm_idle_minutes", "vm_memory_mb", "vm_disk_gb", "vm_cpus",
-    "vm_user_mode", "vm_internet", "vm_lan", "vm_desktop_image", "user_agent", "data_dir",
-)
-
-
-def workshop_changed(alt: Any, neu: Any) -> bool:
-    """Braucht die virtual machine nach diesem Speichern einen Neuaufbau?"""
-    return any(getattr(alt, feld, None) != getattr(neu, feld, None) for feld in WORKSHOP_FIELDS)
-
-
-def delete_coworker(store: Any, nummer: int, settings: Settings) -> bool:
-    """Loescht den Coworker samt exklusivem privaten Vergleichsbild."""
-    cw = store.get(nummer)
-    bild = str(cw.schedule.get("image_id") or "") if cw is not None else ""
-    deleted = bool(store.delete(nummer))
-    if deleted and bild and not any(c.schedule.get("image_id") == bild for c in store.all()):
-        from aquaticy.media import delete_snapshot
-
-        with contextlib.suppress(OSError, ValueError):
-            delete_snapshot(settings.data_dir, bild)
-    return deleted
-
-
 def _chat_untrusted(entries: list[Any]) -> bool:
     """Stand in diesem Chat schon fremder Text (Webseite, Mail, Anhang)?
 
@@ -1119,31 +957,6 @@ def remove_env_keys(path: Path, names: set[str]) -> None:
         write_env_file({}, path, remove=names)
 
 
-def _apply_vm_size(settings: Settings, raw: dict[str, str], plan: str) -> None:
-    """Die Groesse der virtual machine aus der Datei des Kontos -- samt Kernen, Speicher, Platte.
-
-    Bis 12.7.8 las das Konto nur seine anderen Einstellungen: "Plus" wurde gespeichert, beim
-    naechsten Oeffnen stand wieder "Normal", und die Zahlen blieben die der kleinen.
-    Nur Ultra darf waehlen; fehlt die Angabe, gilt, was der Betreiber eingestellt hat.
-    Eigene Zahlen in der Datei (AQUATICY_VM_MEMORY_MB, _DISK_GB, _CPUS) gehen vor.
-    """
-    if plan != "ultra":
-        return
-    groesse = raw.get("AQUATICY_VM_SIZE", "").strip().lower()
-    if groesse in VM_SIZES:
-        preset = VM_SIZES[groesse]
-        settings.vm_size = groesse
-        settings.vm_cpus = preset["cpus"]
-        settings.vm_memory_mb = preset["memory_mb"]
-        settings.vm_disk_gb = preset["disk_gb"]
-    for key, attr in (("AQUATICY_VM_MEMORY_MB", "vm_memory_mb"),
-                      ("AQUATICY_VM_DISK_GB", "vm_disk_gb"), ("AQUATICY_VM_CPUS", "vm_cpus")):
-        with contextlib.suppress(ValueError):
-            wert = int(raw.get(key, "").strip() or 0)
-            if wert > 0:
-                setattr(settings, attr, wert)
-
-
 def _profile_settings(profile: Path, plan: str, account: Account | None = None) -> Settings:
     """Kopiert die Servervorgaben und legt die Werte eines Kontos darueber."""
     base = get_settings()
@@ -1156,9 +969,6 @@ def _profile_settings(profile: Path, plan: str, account: Account | None = None) 
     )
 
     raw = read_env_file(settings.env_path)
-
-    settings.ha_url = ""
-    settings.ha_token = ""
 
     settings.legal_guard = True
     for key, attr in _STRING_SETTINGS.items():
@@ -1174,7 +984,6 @@ def _profile_settings(profile: Path, plan: str, account: Account | None = None) 
         if key in raw:
             with contextlib.suppress(ValueError):
                 setattr(settings, attr, int(raw[key]))
-    _apply_vm_size(settings, raw, plan)
     if "AQUATICY_LEGAL_GUARD" in raw:
         settings.legal_guard = guard_on(raw["AQUATICY_LEGAL_GUARD"])
 
@@ -1202,7 +1011,7 @@ def _profile_settings(profile: Path, plan: str, account: Account | None = None) 
     except Exception:
         settings.github_token = ""
 
-    for name, attr in (("HA_TOKEN", "ha_token"), ("GOOGLE_CLIENT_SECRET", "google_client_secret")):
+    for name, attr in (("GOOGLE_CLIENT_SECRET", "google_client_secret"),):
         with contextlib.suppress(Exception):
             alt = raw.get(name, "").strip()
             if alt:
@@ -1213,7 +1022,6 @@ def _profile_settings(profile: Path, plan: str, account: Account | None = None) 
             gespeichert = tresor.secret(name)
             if gespeichert:
                 setattr(settings, attr, gespeichert)
-    _bind_ha_token(settings, tresor)
 
     settings.account_email = str(getattr(account, "email", "") or "")
     settings.operator_search_backends = (
@@ -1227,24 +1035,7 @@ def _profile_settings(profile: Path, plan: str, account: Account | None = None) 
 
     settings.api_base_for = base.model
     if plan != "ultra":
-        settings.lan_enabled = False
-        settings.ha_url = ""
-        settings.ha_token = ""
-        settings.ha_control = False
-        settings.ha_direct = False
-        settings.storage_url = ""
-        settings.storage_access = "off"
-        settings.vm_size = "normal"
-        settings.vm_cpus = VM_SIZES["normal"]["cpus"]
-        settings.vm_memory_mb = VM_SIZES["normal"]["memory_mb"]
-        settings.vm_disk_gb = VM_SIZES["normal"]["disk_gb"]
-
         settings.legal_guard = True
-        settings.vm_user_mode = False
-
-        settings.vm_internet = False
-        settings.vm_lan = False
-
         settings.quota = account_quota(profile, account)
 
         settings.api_base = base.api_base
@@ -1301,7 +1092,6 @@ class ChatSession:
 
         self._reload_after = False
 
-        self._reload_workshop = False
 
         self._reload_old: Settings | None = None
 
@@ -1312,10 +1102,6 @@ class ChatSession:
         self._owner = self
         self._chat_lock = threading.RLock()
         self._chat_sessions: dict[str, ChatSession] = {}
-        self._qr_lock = threading.Lock()
-        self._qr_state_lock = threading.Lock()
-        self._qr_login: tuple[str, str, float] = ("", "", 0.0)
-        self._qr_restarts: dict[str, int] = {}
         self._selected = self
 
     def chat_sessions(self) -> list[ChatSession]:
@@ -1420,27 +1206,6 @@ class ChatSession:
                 if self.profile is not None
                 else get_settings()
             )
-            self._upgrade_gen = -1
-        if UPGRADE_DIR is not None:
-            from aquaticy import upgrading
-
-            directory = UPGRADE_DIR
-
-            def access(model: str) -> None:
-                if not upgrading.allowed(directory, model, self.ultra):
-                    raise ValueError("Diese Modellversion steht dir nicht mehr zur Wahl.")
-
-            self._settings.model_access = access
-            self._settings.model_context = lambda model: upgrading.model_context(
-                directory, model, self.ultra)
-            for field in ("model", "vision_model", "subagent_model", "code_model"):
-                value = getattr(self._settings, field)
-                if value and (field == "model" or not upgrading.allowed(
-                        directory, value, self.ultra)):
-                    with contextlib.suppress(upgrading.UpgradeError):
-                        setattr(self._settings, field, upgrading.resolve(
-                            directory, value, self.ultra,
-                            getattr(self.account, "id", "") or ""))
         return self._settings
 
     @property
@@ -1468,12 +1233,6 @@ class ChatSession:
                 from aquaticy.learning import Learning
 
                 agent.learning = Learning(settings.data_dir)
-                # Auftraege im Chat koennen Coworker werden (15.0.0) -- fuer genau dieses Konto.
-                werkzeuge = getattr(agent, "toolbox", None)
-                if werkzeuge is not None:
-                    werkzeuge.coworker_creator = lambda nutzlast: coworker_action(
-                        {**nutzlast, "action": "create"}, getattr(self, "account", None),
-                        session=self)[0]
 
                 if self._carry_over:
                     weiter, self._carry_over = self._carry_over, ""
@@ -1534,37 +1293,26 @@ class ChatSession:
             ],
         }
 
-    def reload(self, workshop: bool = False, *, _peers: bool = True) -> None:
+    def reload(self, *, _peers: bool = True) -> None:
         """Nach dem Speichern neuer Einstellungen alles neu aufbauen.
-
-        Die virtual machine gehoert dazu, wenn sich an ihr etwas geaendert hat: haette
-        jemand ihre Grenzen geaendert, arbeitete die laufende sonst noch mit den
-        alten weiter. *workshop* erzwingt den Neuaufbau (Add-ons: die virtual machine
-        muss ihre Datentraeger loslassen oder neu einhaengen).
 
         Der Chat bleibt derselbe. Wer waehrend eines Gespraechs das Modell
         wechselt, will ein anderes Modell -- nicht ein anderes Gespraech.
         """
         if _peers:
-            from aquaticy.homeassistant import forget_states
-
-            forget_states(self.profile or getattr(self._settings, "data_dir", None))
             for session in self.chat_sessions():
                 if session is not self:
-                    session.reload(workshop, _peers=False)
+                    session.reload(_peers=False)
         if self.busy():
             if self._reload_old is None:
                 self._reload_old = self._settings
-            self._reload_workshop = self._reload_workshop or workshop
             self._reload_after = True
             self._settings = None
             if self.profile is None:
                 reset_settings_cache()
             return
         with self._lock, self._agent_lock:
-            old_settings = self._reload_old or self._settings
-            workshop = workshop or self._reload_workshop
-            self._reload_old, self._reload_workshop = None, False
+            self._reload_old = None
             if self._agent is not None:
                 self._carry_over = str(getattr(self._agent, "session_id", ""))
 
@@ -1576,13 +1324,6 @@ class ChatSession:
             self._settings = None
             if self.profile is None:
                 reset_settings_cache()
-
-            with contextlib.suppress(Exception):
-                from aquaticy.sandbox import forget_shared
-
-                if (workshop or old_settings is None
-                        or workshop_changed(old_settings, self.settings())):
-                    forget_shared(old_settings)
 
             self._settings = None
 
@@ -1628,7 +1369,6 @@ class ChatSession:
         recheck: bool | None = None,
         effort: str = "",
         online: bool | None = None,
-        sandbox: bool | None = None,
         agents: int | None = None,
         visual_sources: bool | None = None,
     ) -> Any:
@@ -1662,21 +1402,15 @@ class ChatSession:
                 agent.toolbox.secure_mode = secure
                 if secure:
                     # 16.0.0 (Aquaticy-Test): Secure Pro beantwortet nur Fragen -- jedes Konto.
-                    agent.toolbox.secure_provider = None
-                    mode, structured, recheck, sandbox = "normal", False, False, False
+                    mode, structured, recheck = "normal", False, False
                     visual_sources = False
                     agent._refresh_system()
                 elif previous_secure:
                     from aquaticy.learning import Learning
 
-                    agent.toolbox.secure_provider = None
                     agent.use_subagents = self.settings().max_subagents > 0
                     agent.learning = Learning(self.settings().data_dir)
                     agent._refresh_system()
-                # 15.5.5: "schreib mir das auf WhatsApp" -- nur in den eigenen Chat.
-                agent.toolbox.messenger_sender = (
-                    (lambda messenger, text: messenger_to_owner(self, messenger, text))
-                    if owner_messenger_ready(self) else None)
                 previous_agent_limit = getattr(agent, "_agent_limit_override", None)
                 try:
                     def melden(name: str, payload: dict[str, Any]) -> None:
@@ -1705,13 +1439,9 @@ class ChatSession:
                         visual_sources = False
                         if plugin.online is not None:
                             online = plugin.online
-                        if plugin.sandbox is not None:
-                            sandbox = plugin.sandbox
                         context = ""
                         if attachments:
-                            context = self.attachments_text(
-                                agent, attachments, emit,
-                                workshop=self._workshop_wanted(agent, mode, sandbox))
+                            context = self.attachments_text(agent, attachments, emit)
                             if context:
                                 from aquaticy.injection import wrap_attachment
 
@@ -1730,11 +1460,7 @@ class ChatSession:
                     elif message.startswith("/image"):
                         message = self._image_question(agent, message)
                     elif attachments:
-                        context = self.attachments_text(
-                            agent, attachments, emit, workshop=self._workshop_wanted(
-                                agent, mode, sandbox
-                            )
-                        )
+                        context = self.attachments_text(agent, attachments, emit)
 
                         if context:
                             from aquaticy.injection import wrap_attachment
@@ -1747,7 +1473,6 @@ class ChatSession:
                     ask_options = {
                         "stream": True, "mode": mode, "structured": structured,
                         "recheck": recheck, "effort": effort, "online": online,
-                        "sandbox": sandbox,
                     }
 
                     from aquaticy.agent import Agent as BuiltinAgent
@@ -1778,20 +1503,6 @@ class ChatSession:
                 self._reload_after = False
                 self.reload()
 
-    @staticmethod
-    def _workshop_wanted(agent: Any, mode: str, sandbox: bool | None) -> bool:
-        """Ob dieser Turn in der virtual machine landet -- vor `agent.ask`.
-
-        Die Anhaenge werden verarbeitet, bevor der Agent den Modus dieses
-        Turns kennt. Wer stattdessen `agent.workshop_on` fragt, bekommt den
-        Stand der VORIGEN Frage -- und legt die Datei in die falsche Welt
-        oder gar nicht ab.
-        """
-        from aquaticy.agent import clean_mode
-
-        an = getattr(agent, "sandbox", False) if sandbox is None else bool(sandbox)
-        welcher = clean_mode(mode) if mode else getattr(agent, "mode", "normal")
-        return bool(an) and welcher == "code"
 
     def _ask_browser(self, question: str, options: list[str]) -> str:
         """Wartet auf die Antwort aus dem Browser.
@@ -1838,8 +1549,6 @@ class ChatSession:
         agent: Any,
         attachments: list[dict[str, Any]],
         emit: Any,
-        *,
-        workshop: bool = False,
     ) -> str:
         """Macht aus hochgeladenen Dateien Text, den das Modell lesen kann.
 
@@ -1870,49 +1579,9 @@ class ChatSession:
                 )
                 continue
             emit("upload", {"name": name, "bytes": len(data)})
-            block = self._one_attachment(agent, name, data)
-
-            gelegt = self._into_workshop(name, data) if workshop else ""
-            if gelegt:
-                block += f"\n[Liegt in der virtual machine unter {gelegt}]"
-            blocks.append(block)
+            blocks.append(self._one_attachment(agent, name, data))
         return "\n\n".join(blocks)
 
-    def _into_workshop(self, name: str, data: bytes) -> str:
-        """Legt einen Anhang in die virtual machine.
-
-        Returns: der Pfad drinnen, oder "" wenn das Hineinlegen nicht
-        geklappt hat. Ein Fehlschlag hier darf die Anfrage nicht abbrechen:
-        der Text der Datei steht ja trotzdem da.
-        """
-        from aquaticy.sandbox import MAX_FILE_BYTES
-
-        if len(data) > MAX_FILE_BYTES:
-            return ""
-
-        schlicht = "".join(
-            zeichen if zeichen.isascii() and (zeichen.isalnum() or zeichen in "-_.") else "_"
-            for zeichen in name
-        ).strip("._") or "datei"
-        from aquaticy import metering
-        from aquaticy import sandbox as werkstatt
-
-        reservation = None
-        try:
-            reservation = metering.reserve_work(self.settings(), "datei")
-            antwort = werkstatt.shared(self.settings()).put_bytes(f"eingang/{schlicht}", data)
-            if isinstance(antwort, dict) and antwort.get("written"):
-                reservation.settle_work(metering.work_cost("datei"))
-                return str(antwort["written"])
-        except metering.QuotaExceeded:
-            return ""
-        except Exception:
-            logging.getLogger("aquaticy.web").warning(
-                "Anhang nicht in die virtual machine gelegt", exc_info=True)
-        finally:
-            if reservation is not None:
-                reservation.cancel()
-        return ""
 
     def _one_attachment(self, agent: Any, name: str, data: bytes) -> str:
         """Liest eine einzelne Datei aus -- je nach Art auf ihrem eigenen Weg."""
@@ -2317,18 +1986,6 @@ class SessionRegistry:
 
 SESSIONS = SessionRegistry()
 
-USER_COWORKERS: dict[str, Any] = {}
-
-USER_BRIDGES: dict[str, Any] = {}
-
-BRIDGE_RUNNER: Any = None
-#: Die direkten Kopplungen (ohne virtual machine) je Konto und ohne Konto (12.7.8 Terra).
-USER_NATIVE: dict[str, Any] = {}
-NATIVE_HUB: Any = None
-
-
-_SCHEDULER_LOCK = threading.Lock()
-
 
 class SessionProxy:
     """Haelt den bestehenden Code lesbar und waehlt pro Anfrage das Konto."""
@@ -2369,826 +2026,14 @@ def previous_user_message(session: Any) -> str:
     return ""
 
 
-def job_abuse(account: Any, job: Any, payload: dict[str, Any]) -> None:
-    """Missbrauch in einem Auftrag -> Ai-guard, wie im Chat (9.5.26)."""
-    if AIGUARD is None or account is None:
-        return
-    AIGUARD.record_incident(
-        str(account.id), str(payload.get("art") or ""), payload.get("schwere") or 0,
-        chat=f"auftrag:{getattr(job, 'id', '')}", detail=str(payload.get("art") or ""),
-        enforce=not getattr(account, "ultra", False), text=str(getattr(job, "question", "")))
-
-
-def coworker_abuse(account: Any, kollege: Any, payload: dict[str, Any]) -> None:
-    """Missbrauch in einem Coworker -> Ai-guard, wie bei Auftraegen (11.0.0 Luna)."""
-    if AIGUARD is None or account is None:
-        return
-    AIGUARD.record_incident(
-        str(account.id), str(payload.get("art") or ""), payload.get("schwere") or 0,
-        chat=f"coworker:{getattr(kollege, 'id', '')}", detail=str(payload.get("art") or ""),
-        enforce=not getattr(account, "ultra", False), text=str(getattr(kollege, "goal", "")))
-
-
-def _plan_of(konto_id: str, fallback: Any) -> str:
-    """Die Stufe, wie sie JETZT ist -- ein herabgestuftes Konto laesst Coworker ruhen."""
-    if AUTH is not None:
-        with contextlib.suppress(Exception):
-            frisch = AUTH.account(konto_id)
-            return frisch.plan if frisch is not None else ""
-    return str(getattr(fallback, "plan", "") or "")
-
-
-def start_user_scheduler(account: Account) -> None:
-    """Startet genau einen Coworker-Taktgeber fuer alle Aufgaben des Kontos."""
-    from aquaticy import coworker as coworker_mod
-
-    with _SCHEDULER_LOCK:
-        konto_id = account.id
-
-        def ruht() -> bool:
-            return (AIGUARD is not None
-                    and AIGUARD.is_banned(user_id=konto_id) is not None) or (
-                CLUSTER is not None and not CLUSTER.is_home(konto_id))
-
-        if account.id not in USER_COWORKERS:
-            kollegen = coworker_mod.Scheduler(
-                SESSIONS.get(account).settings,
-                plan=lambda: _plan_of(konto_id, account),
-                paused=ruht,
-                on_abuse=lambda kollege, payload: coworker_abuse(account, kollege, payload),
-            )
-            kollegen.start()
-            USER_COWORKERS[account.id] = kollegen
-    start_user_bridge(account)
-
-
-def bridge_abuse(account: Any, payload: dict[str, Any]) -> None:
-    """Missbrauch in der Messenger-Bruecke -> Ai-guard, wie bei Auftraegen (12.6.6 Luna).
-
-    Die Bruecke meldet nur, was der Besitzer oder eine seiner Nummern geschrieben hat.
-    """
-    if AIGUARD is None or account is None:
-        return
-    AIGUARD.record_incident(
-        str(account.id), str(payload.get("art") or ""), payload.get("schwere") or 0,
-        chat="messenger", detail=str(payload.get("art") or ""),
-        enforce=not getattr(account, "ultra", False), text="")
-
-
-def _build_bridge_runner(get_session: Callable[[], Any], account: Any) -> Any:
-    """Der Hintergrundlauf der Messenger-Bruecke fuer ein Konto (oder den eigenen Rechner)."""
-    from aquaticy import bridge as bridge_mod
-    from aquaticy import sandbox as werkstatt
-    from aquaticy.desktop import Desktop
-
-    def einstellungen() -> Settings:
-        return get_session().settings()
-
-    def ruht() -> bool:
-        if account is not None:
-            if _plan_of(account.id, account) != "ultra":
-                return True
-            if AIGUARD is not None and AIGUARD.is_banned(user_id=account.id) is not None:
-                return True
-            if CLUSTER is not None and not CLUSTER.is_home(account.id):
-                return True
-        session = get_session()
-        owner = getattr(session, "_owner", session)
-        return bool(workshop_busy(session)
-                    or getattr(owner, "_qr_login", ("", "", 0.0))[2] > time.monotonic())
-
-    def treiber(messenger: str) -> Any:
-        settings = einstellungen()
-        return bridge_mod.VisionDriver(Desktop(werkstatt.shared(settings), settings), messenger)
-
-    antworter = bridge_mod.AgentAnswerer(
-        einstellungen, on_abuse=lambda payload: bridge_abuse(account, payload),
-        session_command=_messenger_session_command(get_session))
-    runner = bridge_mod.Runner(
-        bridge_mod.Bridge(einstellungen, treiber, antworter, paused=ruht), einstellungen)
-    runner.answerer = antworter  # type: ignore[attr-defined]
-    return runner
-
-
-def _messenger_session_command(get_session: Callable[[], Any]) -> Callable[[str, str], str]:
-    """/memory, /notes, /history, /uploads, /forget aus dem eigenen Messenger-Chat des Besitzers.
-
-    Die Bruecke erlaubt das nur dort (bridge.OWN_CHAT_COMMANDS); hier ist es zusaetzlich auf
-    genau diese Befehle begrenzt.
-    """
-    from aquaticy import bridge as bridge_mod
-
-    def ausfuehren(name: str, argument: str) -> str:
-        if name not in bridge_mod.OWN_CHAT_COMMANDS:
-            raise ValueError("Dieser Befehl geht hier nicht.")
-        ergebnis = get_session().command(f"/{name} {argument}".strip())
-        return str(ergebnis.get("text") or "")
-
-    return ausfuehren
-
-
-_SECURE_ORDER = re.compile(r"^\s*(?:/secure-?pro|secure[ -]?pro)\b[\s:,.-]*(.*)$", re.I | re.S)
-_COWORKER_ORDER = re.compile(
-    r"^\s*(?:/coworker|coworker)\s+(?:([^:\n]{1,40}?)\s*:\s*(.+)|([^\s:,]{1,40})[\s,.-]+(.+))$",
-    re.I | re.S)
-
-
-def _messenger_orders(get_session: Callable[[], Any], account: Any
-                      ) -> Callable[[str], str | None]:
-    """Auftraege aus dem eigenen Messenger-Chat an Secure Pro und Coworker (14.4.4).
-
-    "Secure Pro prüfen" oder "Coworker Ava: Schau nach neuen Mails". Nur im eigenen Chat des
-    Besitzers (aquaticy/bridge_native.py), nur mit dem Schalter beim Coworker bzw. bei Secure
-    Pro. Die Antwort beginnt mit "[Aquaticy Secure Pro]" oder "[Aquaticy Coworker Ava]" und
-    nennt den Auftrag. Alles andere geht wie gewohnt an Aquaticy.
-    """
-    def antworten(auftrag: str) -> str | None:
-        text = str(auftrag or "").strip()
-        ausdruecklich = text.startswith("/")
-        treffer = _SECURE_ORDER.match(text)
-        if treffer:
-            befehl = treffer.group(1).strip()
-            # "Secure Pro, was ist ARP-Spoofing?" ist eine Frage, kein Befehl.
-            if ausdruecklich or _secure_command(befehl):
-                return secure_messenger_order(get_session(), befehl, text)
-            return None
-        treffer = _COWORKER_ORDER.match(text)
-        if treffer:
-            name = (treffer.group(1) or treffer.group(3) or "").strip()
-            inhalt = (treffer.group(2) or treffer.group(4) or "").strip()
-            if not ausdruecklich and treffer.group(1) is None:
-                # "Coworker sind toll" -- nur ein Auftrag, wenn es den Coworker gibt.
-                from aquaticy import coworker as coworker_mod
-
-                sitzung = get_session()
-                try:
-                    if coworker_mod.CoworkerStore(sitzung.settings().db_path).by_name(name) is None:
-                        return None
-                except coworker_mod.CoworkerError as exc:
-                    return _order_reply("[Aquaticy]", text, str(exc))
-            return coworker_messenger_order(get_session(), account, name, inhalt, text)
-        return None
-
-    return antworten
-
-
-_SECURE_COMMANDS = ("prüf", "pruef", "check", "scan", "tipp", "tip", "wichtig", "befund",
-                    "finding", "gerät", "geraet", "device", "aufgabe", "task", "status", "stand",
-                    "hilfe", "help")
-
-
-def _secure_command(befehl: str) -> bool:
-    klein = befehl.casefold().strip(" .!?")
-    return not klein or klein.startswith(_SECURE_COMMANDS)
-
-
-def _order_reply(kennung: str, auftrag: str, text: str) -> str:
-    from aquaticy import bridge as bridge_mod
-    from aquaticy.desktop import payment_data
-
-    auftrag = " ".join(auftrag.split())
-    auftrag = auftrag if len(auftrag) <= 300 else auftrag[:299] + "…"
-    antwort = bridge_mod.to_chat_text(f"Auftrag: {auftrag}\n{text}", wide=True, limit=3000,
-                                      signature=kennung)
-    if payment_data(antwort):
-        return bridge_mod.to_chat_text("Darin stehen Zahlungsdaten. Die sende ich nicht.")
-    return antwort
-
-
-def secure_messenger_order(session: Any, befehl: str, auftrag: str) -> str:
-    """Secure Pro per WhatsApp/Signal: Status, Prüfen, Wichtig, Tipps, Geräte, Aufgabe."""
-    from aquaticy import secure_pro
-
-    kennung = secure_pro.SIGNATURE
-    if not host_feature_owner(session):
-        return _order_reply(kennung, auftrag, "Secure Pro gibt es nur für den Besitzer.")
-    directory = get_settings().data_dir
-    config = secure_pro.read(directory)
-    if config.get("enabled") is not True:
-        return _order_reply(kennung, auftrag, "Secure Pro ist aus. Gib dein Netz in den "
-                            "Einstellungen frei.")
-    if not secure_pro.options(config)["messenger"]:
-        return _order_reply(kennung, auftrag, "Aufträge per WhatsApp/Signal sind für Secure "
-                            "Pro aus. Schalte sie unter Einstellungen → Zuhause & Netz → "
-                            "Secure Pro ein.")
-    klein = befehl.casefold()
-    stand = feature_view(session)
-    if klein.startswith(("prüf", "pruef", "check", "scan")):
-        if SECURE_WATCHER is None:
-            antwort = "Der Prüfungsdienst läuft gerade nicht."
-        elif SECURE_WATCHER.request():
-            antwort = "Prüfung gestartet. Wichtiges melde ich hier."
-        else:
-            antwort = "Warte vor einer weiteren Prüfung mindestens eine Minute."
-    elif klein.startswith(("tipp", "tip")):
-        antwort = "\n".join(f"• {t}" for t in stand.get("tips", [])[:8]) or "Keine Tipps."
-    elif klein.startswith(("wichtig", "befund", "finding")):
-        liste = stand.get("important", [])[:8] or stand.get("findings", [])[:8]
-        antwort = "\n".join(f"• {t}" for t in liste) or "Keine Befunde."
-    elif klein.startswith(("gerät", "geraet", "device")):
-        geraete = stand.get("devices", [])
-        aktiv = [d for d in geraete if d.get("active")]
-        zeilen = [f"• {d['address']}" + (f" {d['name']}" if d.get("name") else "")
-                  + (f" ({d['vendor']})" if d.get("vendor") else "") for d in aktiv[:15]]
-        antwort = f"{len(aktiv)} Geräte antworten.\n" + "\n".join(zeilen)
-    elif klein.startswith(("aufgabe", "task")):
-        _, _, rest = befehl.partition(":")
-        try:
-            neu = secure_pro.add_task(directory, (rest or befehl.split(None, 1)[-1]).strip())
-            antwort = f"Aufgabe gespeichert: {neu['label']}"
-        except ValueError as exc:
-            antwort = str(exc)
-    elif klein in ("", "status", "stand"):
-        antwort = ("Secure Pro ist an." + (" Die Prüfung läuft." if stand.get("scanning")
-                                           else ""))
-        if stand.get("score") is not None:
-            antwort += f"\nSicherheitswert: {stand['score']}/100 ({stand.get('grade', '')})"
-        if stand.get("checked"):
-            antwort += "\nLetzte Prüfung: " + zeit.text(stand["checked"])
-        wichtig = stand.get("important", [])
-        antwort += (f"\nWichtig: {len(wichtig)}\n" + "\n".join(f"• {t}" for t in wichtig[:5])
-                    if wichtig else "\nNichts Wichtiges.")
-    else:
-        antwort = ("Das kenne ich nicht. Schreib: Secure Pro Status, Prüfen, Wichtig, Tipps, "
-                   "Geräte oder Aufgabe: Melde neue Geräte.")
-    return _order_reply(kennung, auftrag, antwort)
-
-
-def coworker_messenger_order(session: Any, account: Any, name: str, inhalt: str,
-                             auftrag: str) -> str:
-    """Ein Auftrag an einen Coworker per WhatsApp/Signal -- wie eine Nachricht in der App."""
-    from aquaticy import coworker as coworker_mod
-
-    store = coworker_mod.CoworkerStore(session.settings().db_path)
-    try:
-        kollege = store.by_name(name)
-    except coworker_mod.CoworkerError as exc:
-        return _order_reply("[Aquaticy]", auftrag, str(exc))
-    if kollege is None:
-        return _order_reply("[Aquaticy]", auftrag, f"Einen Coworker „{name[:40]}“ gibt es "
-                            "nicht.")
-    kennung = f"[Aquaticy Coworker {kollege.name.replace(']', '')[:40]}]"
-    if not kollege.messenger_orders:
-        return _order_reply(kennung, auftrag, f"{kollege.name} nimmt keine Aufträge per "
-                            "WhatsApp/Signal an. Schalte das im Coworker-Fenster ein.")
-    if AIGUARD is not None and account is not None and AIGUARD.is_banned(
-            user_id=account.id) is not None:
-        return _order_reply(kennung, auftrag, "Während einer Sperre arbeiten keine Coworker.")
-    text = coworker_mod._clean_text(inhalt, coworker_mod.MAX_MESSAGE)
-    if not text:
-        return _order_reply(kennung, auftrag, "Schreib nach dem Namen, was zu tun ist.")
-    nein = _coworker_insult(account, text, f"coworker:{kollege.id}")
-    if nein:
-        return _order_reply(kennung, auftrag, nein)
-    store.add_log(kollege.id, "nachricht", text)
-    takt = _coworker_scheduler(session)
-    if takt is not None:
-        takt.wake()
-    return _order_reply(kennung, auftrag, (
-        f"Angenommen. {kollege.name} meldet sich hier, wenn es Neues gibt."
-        if kollege.enabled else
-        f"{kollege.name} ist pausiert und liest es, sobald es weitergeht."))
-
-
-def _native_paused(account: Any) -> bool:
-    """Ruht die direkte Bruecke? Stufe, Ai-guard-Sperre und Verbund wie bei der anderen."""
-    if account is None:
-        return False
-    if _plan_of(account.id, account) != "ultra":
-        return True
-    if AIGUARD is not None and AIGUARD.is_banned(user_id=account.id) is not None:
-        return True
-    return CLUSTER is not None and not CLUSTER.is_home(account.id)
-
-
-def owner_messenger_ready(session: Any) -> bool:
-    """Hat dieses Konto WhatsApp oder Signal direkt gekoppelt (und darf es nutzen)?"""
-    konto = getattr(session, "account", None)
-    if not getattr(session, "ultra", False) or _native_paused(konto):
-        return False
-    try:
-        return bool(_native_hub(session).owner_channels())
-    except Exception:
-        return False
-
-
-def messenger_to_owner(session: Any, messenger: str, text: str) -> dict[str, Any]:
-    """Schickt dem Konto eine Nachricht in den eigenen Messenger-Chat (15.5.5)."""
-    from aquaticy.messenger_native import NAMES
-
-    if not owner_messenger_ready(session):
-        return {"error": "WhatsApp oder Signal ist nicht gekoppelt."}
-    hub = _native_hub(session)
-    wege = hub.owner_channels()
-    ziel = messenger or (wege[0] if wege else "")
-    if ziel not in wege:
-        return {"error": f"{NAMES.get(ziel, ziel) or 'Dieser Messenger'} ist nicht gekoppelt. "
-                         f"Gekoppelt: {', '.join(NAMES.get(w, w) for w in wege) or 'keiner'}."}
-    stand = hub.message_owner(ziel, text)
-    if not stand:
-        return {"error": "Die Nachricht ließ sich gerade nicht senden. Versuch es gleich noch "
-                         "einmal."}
-    return {"sent": stand == "gesendet", "queued": stand == "wartet", "messenger": ziel,
-            "note": ("Gesendet." if stand == "gesendet" else
-                     "Die Verbindung wird aufgebaut, die Nachricht geht gleich raus.")}
-
-
-SECURE_WATCHER: Any = None
-FEATURE_LOCK = threading.RLock()
-
-
-def host_feature_owner(session: Any) -> bool:
-    account = getattr(session, "account", None)
-    if AUTH is None or not AUTH.single or account is None or not session.ultra:
-        return False
-    owner = AUTH.ensure_owner_ultra()
-    return bool(owner is not None and owner.id == account.id and not _native_paused(account))
-
-
-def feature_view(session: Any) -> dict[str, Any]:
-    if not host_feature_owner(session):
-        return {"allowed": False}
-    from aquaticy import secure_knowledge, secure_nmap, secure_pro, voice
-
-    directory = get_settings().data_dir
-    config = secure_pro.read(directory)
-    report: dict[str, Any] = SECURE_WATCHER.snapshot() if SECURE_WATCHER else {
-        "findings": [], "positives": [], "checked": 0, "scanning": False, "error": "",
-        "devices": [], "important": [], "events": [], "packet_status": "", "next_check": 0,
-        "nmap_status": ""}
-    if report.get("configuration", "") != secure_pro.config_token(config):
-        report.update(findings=[], positives=[], checked=0, error="", devices=[], scope="",
-                      important=[], events=[], packet_status="", next_check=0,
-                      nmap_status="")
-    an = config.get("enabled") is True
-    gewaehlt = secure_pro.options(config if an else {})
-    settings = session.settings()
-    netz = bool(getattr(settings, "lan_enabled", False) and getattr(settings, "vm_lan", False))
-    return {"allowed": True, "voice": voice.enabled(), "voice_ready": voice.ready(directory),
-            "secure": an, "subnet": config.get("subnet", ""),
-            "router": config.get("router", ""),
-            "watch": gewaehlt["watch"], "seconds": gewaehlt["seconds"],
-            "intervals": list(secure_pro.INTERVALS), "packets": gewaehlt["packets"],
-            "vm": gewaehlt["vm"], "vm_network": netz, "nmap": gewaehlt["nmap"],
-            "messenger": gewaehlt["messenger"],
-            "history": list(reversed(secure_pro.read_history(directory)["events"][-30:]))
-            if an else [],
-            "nmap_ready": secure_nmap.available(),
-            # Eigene Tipps fuer dieses Heimnetz (14.1.3 Terra), aus den Messwerten.
-            "tips": secure_knowledge.network_tips(
-                report.get("devices", []), report.get("events", []), gewaehlt,
-                router=str(config.get("router") or ""),
-                nmap_ready=secure_nmap.available()) if an else [],
-            "tasks": [{"id": t["id"], "text": t["text"], "label": t["label"],
-                       "host": t["host"], "port": t["port"]} for t in gewaehlt["tasks"]],
-            **report}
-
-
-def feature_action(session: Any, payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    if not host_feature_owner(session):
-        return {"error": "Diese Funktionen verwaltet nur der Besitzer im Einzelkonto-Modus."}, 403
-    from aquaticy import network_router as router
-    from aquaticy import secure_pro, voice
-
-    with FEATURE_LOCK:
-        directory = get_settings().data_dir
-        settings = session.settings()
-        cache = Cache(settings.db_path, settings.cache_ttl_hours)
-        action = payload.get("action")
-        if action == "detect" or action == "router_test":
-            if action == "detect":
-                return {"ok": True, **router.detect()}, 200
-            if payload.get("consent") is not True:
-                return {"error": "Bestätige die Netzfreigabe in den "
-                                 "Secure-Pro-Einstellungen."}, 400
-            try:
-                tested = router.test(str(payload.get("router", "")),
-                                     str(payload.get("subnet", "")))
-                secure_pro.configure(directory, str(tested["subnet"]),
-                                     secure_pro.read(directory).get("folder", ""),
-                                     router=str(tested["router"]))
-            except (ValueError, OSError) as exc:
-                return {"error": str(exc)}, 400
-            if SECURE_WATCHER:
-                SECURE_WATCHER.wake.set()
-                SECURE_WATCHER.start()
-            return {"ok": True, "tested": tested, **feature_view(session)}, 200
-        elif action == "check":
-            if secure_pro.read(directory).get("enabled") is not True:
-                return {"error": "Gib zuerst dein Netz in den Secure-Pro-Einstellungen frei."}, 400
-            if SECURE_WATCHER is None:
-                return {"error": "Der Prüfungsdienst ist nicht verfügbar."}, 503
-            return {"ok": True, "requested": SECURE_WATCHER.request(),
-                    **feature_view(session)}, 200
-        elif action == "options":
-            werte: dict[str, Any] = {key: payload[key] for key in
-                                     ("watch", "seconds", "packets", "vm", "nmap",
-                                      "messenger") if key in payload}
-            if not werte:
-                return {"error": "Nichts zu ändern."}, 400
-            try:
-                secure_pro.set_options(directory, werte)
-            except ValueError as exc:
-                return {"error": str(exc)}, 400
-            if SECURE_WATCHER:
-                # Neuer Zeitplan oder Paketpruefung: gleich einmal pruefen, dann im Takt.
-                SECURE_WATCHER.wake.set()
-                SECURE_WATCHER.start()
-        elif action == "task_add":
-            try:
-                aufgabe = secure_pro.add_task(directory, str(payload.get("text", ""))[:400])
-            except ValueError as exc:
-                return {"error": str(exc)}, 400
-            return {"ok": True, "task": {"id": aufgabe["id"], "label": aufgabe["label"],
-                                         "host": aufgabe["host"], "port": aufgabe["port"]},
-                    **feature_view(session)}, 200
-        elif action == "device_name":
-            try:
-                secure_pro.name_device(directory, str(payload.get("address", ""))[:40],
-                                       str(payload.get("mac", ""))[:40],
-                                       str(payload.get("name", ""))[:80])
-            except ValueError as exc:
-                return {"error": str(exc)}, 400
-            if SECURE_WATCHER:
-                SECURE_WATCHER.rename(secure_pro.options(secure_pro.read(directory))["known"])
-        elif action == "task_remove":
-            if not secure_pro.remove_task(directory, str(payload.get("id", ""))[:40]):
-                return {"error": "Diese Aufgabe gibt es nicht mehr."}, 404
-        elif action == "voice":
-            if not isinstance(payload.get("enabled"), bool):
-                return {"error": "Wähle an oder aus."}, 400
-            try:
-                voice.set_enabled(directory, payload["enabled"])
-            except ValueError as exc:
-                return {"error": str(exc)}, 400
-        elif action == "configure":
-            if payload.get("enabled") is True:
-                if payload.get("consent") is not True:
-                    return {"error": "Bestätige die Netzfreigabe in den "
-                                     "Secure-Pro-Einstellungen."}, 400
-                try:
-                    secure_pro.configure(directory, str(payload.get("subnet", "")),
-                                         secure_pro.read(directory).get("folder", ""))
-                except ValueError as exc:
-                    return {"error": str(exc)}, 400
-                if SECURE_WATCHER:
-                    SECURE_WATCHER.wake.set()
-                    SECURE_WATCHER.start()
-            elif payload.get("enabled") is False:
-                secure_pro.disable(directory)
-                if SECURE_WATCHER:
-                    SECURE_WATCHER.wake.set()
-            else:
-                return {"error": "Wähle an oder aus."}, 400
-        elif action == "message":
-            if not cache.is_secure_chat(session.chat_id()):
-                return {"error": "Öffne zuerst einen Secure-Pro-Chat."}, 409
-            text = str(payload.get("message", "")).strip()[:2000]
-            if text.casefold() in {"prüfen", "pruefen", "check"}:
-                if secure_pro.read(directory).get("enabled") is not True:
-                    answer = "Gib zuerst dein eigenes Netz frei."
-                elif SECURE_WATCHER and SECURE_WATCHER.request():
-                    answer = "Prüfung angefordert. Mit Status siehst du die letzten Ergebnisse."
-                else:
-                    answer = "Warte vor einer weiteren Prüfung mindestens eine Minute."
-            else:
-                state = feature_view(session)
-                answer = ("Secure Pro ist an." if state["secure"] else "Secure Pro ist aus.")
-                if state["scanning"]:
-                    answer += "\nDie Prüfung läuft. Die Anzeige aktualisiert sich automatisch."
-                if state["error"]:
-                    answer += "\n" + state["error"]
-                if state["checked"]:
-                    answer += ("\nLetzte abgeschlossene Prüfung: "
-                               + zeit.text(state["checked"], "%d.%m.%Y %H:%M:%S")
-                               + f" ({zeit.kurz(zeit.aus_stempel(state['checked']))})")
-                if state["positives"]:
-                    answer += "\n\nPositiv beobachtet:\n- " + "\n- ".join(state["positives"])
-                answer += "\n" + ("\n".join(state["findings"]) or
-                                   "Noch keine Prüfhinweise vorhanden. "
-                                   "Das ist kein Sicherheitsnachweis.")
-                answer += "\nBefehle: Status, Prüfen. Die Netzfreigabe änderst du im Formular."
-            cache.add_history(session.chat_id(), text or "Status", answer, mode="normal")
-            return {"ok": True, "answer": answer, **feature_view(session)}, 200
-        else:
-            return {"error": "Unbekannte Aktion."}, 400
-        return {"ok": True, **feature_view(session)}, 200
-
-
-def secure_feature_tool(session: Any, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    if (not host_feature_owner(session)
-            or not Cache(session.settings().db_path).is_secure_chat(session.chat_id())):
-        return {"error": "Dieser Secure-Pro-Zugriff ist nicht freigegeben."}
-    from aquaticy import secure_network, secure_pro
-
-    if name == "secure_privacy":
-        return {"domains": [domain for event in feature_view(session).get("events", [])
-                            for domain in event.get("dns_names", []) if isinstance(domain, str)]}
-    if name in {"secure_status", "secure_devices", "secure_findings"}:
-        state = feature_view(session)
-        state.pop("voice", None)
-        state.pop("voice_ready", None)
-        state.pop("configuration", None)
-        all_devices = state.get("devices", [])
-        if name in {"secure_devices", "secure_findings"}:
-            try:
-                offset = max(0, min(255, int(arguments.get("offset", 0))))
-            except (ValueError, TypeError, OverflowError):
-                return {"error": "Ungültige Seite der Geräteliste."}
-            field = "devices" if name == "secure_devices" else "findings"
-            items = state.get(field, [])
-            return {"total": len(items), "offset": offset,
-                    field: items[offset:offset + 24],
-                    "next_offset": offset + 24 if offset + 24 < len(items) else None}
-        state["device_count"] = len(all_devices)
-        state["devices"] = all_devices[:24]
-        state["events"] = state.get("events", [])[:24]
-        state["history"] = state.get("history", [])[:15]
-        state["important"] = state.get("important", [])[:24]
-        state["findings_count"] = len(state.get("findings", []))
-        state["findings"] = state.get("findings", [])[:24]
-        if state.get("subnet", "").endswith("/32"):
-            state["scope_note"] = ("Nur eine Adresse freigegeben. Weitere Geräte brauchen "
-                                   "eine bestätigte Netzfreigabe in den Einstellungen.")
-        state["limitations"] = ("Nachbartabellen können alte Einträge enthalten. "
-                                "Keine Paketaufzeichnung oder Fernprüfung aller Dateien.")
-        return state
-    directory = get_settings().data_dir
-    config = secure_pro.read(directory)
-    if config.get("enabled") is not True:
-        return {"error": "Gib zuerst dein Netz in den Secure-Pro-Einstellungen frei."}
-    if name == "secure_vm":
-        # Abwehr per SSH (14.1.3 Luna): nur mit dem VM-Schalter von Secure Pro und beiden
-        # Heimnetz-Freigaben. Jeder Befehl braucht danach trotzdem das Ja im Chat.
-        settings = session.settings()
-        if not secure_pro.options(config)["vm"]:
-            return {"ok": False, "error": "Secure Pro darf die VM nicht nutzen. Schalte das "
-                                          "in den Secure-Pro-Einstellungen ein."}
-        if not (getattr(settings, "lan_enabled", False) and getattr(settings, "vm_lan", False)):
-            return {"ok": False, "error": "Die VM braucht „Auch ins lokale Netz“ und „Ins "
-                                          "eigene Netz sehen dürfen“."}
-        return {"ok": True, "subnet": str(config.get("subnet", "")),
-                "router": str(config.get("router", ""))}
-    if name == "secure_nmap":
-        # nmap im Chat (14.1.3 Terra): nur mit dem Schalter, nur im freigegebenen Netz.
-        from aquaticy import secure_nmap
-
-        if not secure_pro.options(config)["nmap"]:
-            return {"error": "Schalte „nmap für Schwachstellen nutzen“ in den "
-                             "Secure-Pro-Einstellungen ein."}
-        ziel = str(arguments.get("host", "")).strip()
-        ziel = str(config.get("subnet", "")) if ziel.lower() in ("netz", "net", "") else ziel
-        modus = str(arguments.get("mode") or "schwachstellen")
-        try:
-            ergebnis = secure_nmap.run(
-                str(config.get("subnet", "")), [ziel], modus,
-                allowed=lambda: (host_feature_owner(session) and
-                                 secure_pro.grant_active(directory, config, "nmap")))
-        except (secure_nmap.NmapError, ValueError) as exc:
-            return {"error": str(exc)}
-        if (not host_feature_owner(session) or
-                not secure_pro.grant_active(directory, config, "nmap")):
-            return {"error": "Die Freigabe hat sich während der Prüfung geändert."}
-        ergebnis["findings"] = [e["text"] for e in secure_nmap.events(ergebnis["hosts"])]
-        return ergebnis
-    if name == "secure_scan":
-        if SECURE_WATCHER is None:
-            return {"error": "Der Prüfungsdienst ist nicht verfügbar. Starte Aquaticy neu."}
-        requested = SECURE_WATCHER.request()
-        return {"requested": requested, "note": (
-            "Prüfung angefordert. Ergebnisse folgen im Status." if requested else
-            "Warte vor einer weiteren Prüfung mindestens eine Minute.")}
-    if name == "secure_inspect":
-        try:
-            result = secure_network.inspect(config.get("subnet", ""),
-                                            str(arguments.get("host", "")))
-        except (ValueError, OSError) as exc:
-            return {"error": str(exc)}
-        if not host_feature_owner(session) or secure_pro.read(directory) != config:
-            return {"error": "Die Freigabe hat sich während der Prüfung geändert."}
-        return result
-    return {"error": "Unbekannte Secure-Pro-Prüfung."}
-
-
-def _build_native_hub(get_session: Callable[[], Any], account: Any, directory: Path) -> Any:
-    """Die direkten Kopplungen eines Kontos: WhatsApp (neonize) und Signal (signal-cli)."""
-    from aquaticy import bridge as bridge_mod
-    from aquaticy.bridge_native import NativeResponder
-    from aquaticy.messenger_native import NativeHub
-
-    def einstellungen() -> Settings:
-        return get_session().settings()
-
-    antworter = bridge_mod.AgentAnswerer(
-        einstellungen, on_abuse=lambda payload: bridge_abuse(account, payload),
-        session_command=_messenger_session_command(get_session))
-    antwort = NativeResponder(einstellungen, antworter,
-                              paused=lambda: _native_paused(account),
-                              orders=_messenger_orders(get_session, account))
-
-    def gewollt(messenger: str) -> bool:
-        return bool(bridge_mod.load_config(einstellungen())[messenger]["an"])
-
-    hub = NativeHub(directory, antwort, gewollt, paused=lambda: _native_paused(account))
-    hub.answerer = antworter  # type: ignore[attr-defined]
-
-    def empfaenger(messenger: str) -> list[str]:
-        """15.5.6: Meldungen (Secure Pro, Coworker) auch an die eingetragenen Nummern --
-        nur wenn dort "Mein Chat und diese Nummern" (oder mehr) gewaehlt ist."""
-        konfig = bridge_mod.load_config(einstellungen())[messenger]
-        if not konfig["an"] or konfig["wer"] == "selbst":
-            return []
-        return list(konfig["nummern"])
-
-    hub.recipients = empfaenger
-    return hub
-
-
-def _native_hub(session: Any) -> Any:
-    """Die Kopplungen der Sitzung -- gebaut beim ersten Bedarf."""
-    global NATIVE_HUB
-    konto = getattr(session, "account", None)
-    konto_id = str(getattr(konto, "id", "") or "")
-    if konto is not None and konto_id:
-        with _SCHEDULER_LOCK:
-            if konto_id not in USER_NATIVE:
-                from aquaticy.messenger_native import native_dir
-
-                USER_NATIVE[konto_id] = _build_native_hub(
-                    lambda: SESSIONS.get(konto), konto, native_dir(session.settings()))
-            return USER_NATIVE[konto_id]
-    with _SCHEDULER_LOCK:
-        if NATIVE_HUB is None:
-            from aquaticy.messenger_native import native_dir
-
-            NATIVE_HUB = _build_native_hub(
-                lambda: DEFAULT_SESSION, None, native_dir(DEFAULT_SESSION.settings()))
-        return NATIVE_HUB
-
-
-def _stop_native(hub: Any) -> None:
-    with contextlib.suppress(Exception):
-        close = getattr(hub, "close", hub.stop)
-        close()
-    with contextlib.suppress(Exception):
-        hub.answerer.close()
-    wait = getattr(hub, "wait_stopped", None)
-    if wait is not None:
-        wait()
-
-
-def start_user_bridge(account: Account) -> None:
-    """Startet die Messenger-Bruecke des Kontos -- aber nur, wenn eine eingeschaltet ist.
-
-    Die Pruefung liest nur die Datei im Profilordner: Die Einstellungen des Kontos werden
-    erst geladen, wenn sie gebraucht werden (nicht schon bei der Anmeldung).
-    """
-    from aquaticy import bridge as bridge_mod
-    from aquaticy.messenger_native import NativeStore
-
-    if AUTH is None:
-        return
-    with contextlib.suppress(Exception):
-        profil = Path(AUTH.profile_dir(account.id))
-        an = bridge_mod.enabled_in(profil)
-        gekoppelt = NativeStore(profil / "messenger")
-        direkt = [name for name in an if gekoppelt.linked(name)]
-        # Eine Sitzung gehoert zu genau einem Server: Zwei Verbindungen verdraengen sich.
-        zuhause = CLUSTER is None or CLUSTER.is_home(account.id)
-        if direkt and zuhause:
-            with _SCHEDULER_LOCK:
-                hub = USER_NATIVE.get(account.id)
-                if hub is None:
-                    hub = _build_native_hub(lambda: SESSIONS.get(account), account,
-                                            profil / "messenger")
-                    USER_NATIVE[account.id] = hub
-            hub.ensure_running()
-        if len(an) == len(direkt):
-            return
-        with _SCHEDULER_LOCK:
-            runner = USER_BRIDGES.get(account.id)
-            if runner is None:
-                runner = _build_bridge_runner(lambda: SESSIONS.get(account), account)
-                USER_BRIDGES[account.id] = runner
-        runner.ensure_running()
-
-
-def _bridge_runner(session: Any) -> Any:
-    """Der Hintergrundlauf der Bruecke fuer die Sitzung -- gebaut beim ersten Bedarf."""
-    global BRIDGE_RUNNER
-    konto = getattr(session, "account", None)
-    if konto is not None:
-        with _SCHEDULER_LOCK:
-            if konto.id not in USER_BRIDGES:
-                USER_BRIDGES[konto.id] = _build_bridge_runner(
-                    lambda: SESSIONS.get(konto), konto)
-            return USER_BRIDGES[konto.id]
-    with _SCHEDULER_LOCK:
-        if BRIDGE_RUNNER is None:
-            BRIDGE_RUNNER = _build_bridge_runner(lambda: DEFAULT_SESSION, None)
-        return BRIDGE_RUNNER
-
-
-def _stop_bridge(runner: Any) -> None:
-    runner.stop()
-    runner.wait_stopped()
-    with contextlib.suppress(Exception):
-        runner.answerer.close()
-
-
-def _bind_ha_token(settings: Settings, tresor: Any) -> None:
-    """Der Home-Assistant-Token eines Kontos gilt nur fuer seine Adresse (9.6.9 Luna).
-
-    Beim Speichern steht die Adresse mit im Schluesselbund (HA_TOKEN_URL).
-    Zeigt die Einstellung danach woanders hin, wird der Token nicht benutzt --
-    fuer die neue Adresse traegt man ihn neu ein. Ein Token aus der Zeit vor
-    der Bindung wird einmal an die Adresse gebunden, die gerade gilt.
-    """
-    from aquaticy.homeassistant import normalize_url
-
-    if not settings.ha_token:
-        return
-    with contextlib.suppress(Exception):
-        gebunden = tresor.secret("HA_TOKEN_URL")
-        jetzt = normalize_url(settings.ha_url)
-        if not gebunden and jetzt:
-            tresor.set_secret("HA_TOKEN_URL", jetzt)
-            return
-        if gebunden and gebunden == jetzt:
-            return
-    settings.ha_token = ""
-
-
-def _stop_schedulers() -> None:
-    """Haelt alle Planer an -- beim Beenden und vor einem Neustart (9.6.8 Ultra)."""
-    global COWORKER_SCHEDULER, BRIDGE_RUNNER, NATIVE_HUB
-    with _SCHEDULER_LOCK:
-        planer = list(USER_COWORKERS.values())
-        USER_COWORKERS.clear()
-        bruecken = list(USER_BRIDGES.values())
-        USER_BRIDGES.clear()
-        if BRIDGE_RUNNER is not None:
-            bruecken.append(BRIDGE_RUNNER)
-        BRIDGE_RUNNER = None
-        direkte = list(USER_NATIVE.values())
-        USER_NATIVE.clear()
-        if NATIVE_HUB is not None:
-            direkte.append(NATIVE_HUB)
-        NATIVE_HUB = None
-    for global_planer in (COWORKER_SCHEDULER,):
-        if global_planer is not None:
-            planer.append(global_planer)
-    COWORKER_SCHEDULER = None
-    for eins in planer:
-        with contextlib.suppress(Exception):
-            eins.stop()
-    for component, stop in [(item, _stop_bridge) for item in bruecken] + [
-            (item, _stop_native) for item in direkte]:
-        try:
-            stop(component)
-        except Exception:
-            logging.getLogger("aquaticy.web").exception(
-                "Hintergrunddienst blieb beim Beenden aktiv")
-    with contextlib.suppress(Exception):
-        from aquaticy import coworker as coworker_mod
-
-        coworker_mod.stop_boxes()
-
-
 def forget_account_runtime(account: Account) -> None:
-    """Haelt alles an, was fuer ein Konto laeuft: Auftraege, virtual machine, Sitzung.
+    """Haelt alles an, was fuer ein Konto laeuft: die Chats der Sitzung.
 
-    Vor dem Loeschen der Daten oder des Kontos (9.5.32) -- sonst schriebe ein
-    laufender Auftrag gleich wieder in den frisch geleerten Ordner.
+    Vor dem Loeschen der Daten oder des Kontos (9.5.32) -- sonst schriebe eine
+    laufende Antwort gleich wieder in den frisch geleerten Ordner.
     """
-    with _SCHEDULER_LOCK:
-        planer = [USER_COWORKERS.get(account.id)]
-        bruecke = USER_BRIDGES.get(account.id)
-        hub = USER_NATIVE.get(account.id)
-    for eins in planer:
-        if eins is not None:
-            eins.stop()
-            if hasattr(eins, "wait_stopped"):
-                eins.wait_stopped()
-    if bruecke is not None:
-        _stop_bridge(bruecke)
-    if hub is not None:
-        _stop_native(hub)
-    with _SCHEDULER_LOCK:
-        USER_COWORKERS.pop(account.id, None)
-        USER_BRIDGES.pop(account.id, None)
-        USER_NATIVE.pop(account.id, None)
     with SESSIONS._lock:
         sitzung = SESSIONS._sessions.get(account.id)
-
-    with contextlib.suppress(Exception):
-        from aquaticy import coworker as coworker_mod
-
-        gebaut = getattr(sitzung, "_settings", None) if sitzung is not None else None
-        ordner = gebaut.data_dir if gebaut is not None else (
-            AUTH.profile_dir(account.id) if AUTH is not None else None)
-        if ordner is not None:
-            coworker_mod.stop_boxes(ordner)
     if sitzung is not None:
         chats = sitzung.chat_sessions()
         for chat in chats:
@@ -3201,10 +2046,6 @@ def forget_account_runtime(account: Account) -> None:
             with contextlib.suppress(Exception):
                 if chat._agent is not None:
                     chat._agent.close()
-        with contextlib.suppress(Exception):
-            from aquaticy import sandbox as werkstatt
-
-            werkstatt.forget_shared(sitzung.settings())
     SESSIONS.drop(account.id)
 
 
@@ -3213,9 +2054,6 @@ def ui_state() -> Any:
     from aquaticy.uistate import UIState
 
     return UIState(SESSION.settings().db_path)
-
-
-COWORKER_SCHEDULER: Any = None
 
 
 OWN_MODEL_FIELDS = (
@@ -3274,21 +2112,10 @@ def current_values() -> dict[str, str]:
         "AQUATICY_CONTEXT_TOKENS": str(settings.context_tokens),
         "AQUATICY_PLANNER_TIMEOUT": str(int(settings.planner_timeout)),
         "AQUATICY_ENABLE_PLAYWRIGHT": "true" if settings.enable_playwright else "false",
-        "AQUATICY_HA_URL": settings.ha_url,
-        "AQUATICY_HA_CONTROL": "true" if settings.ha_control else "false",
-        "AQUATICY_HA_DIRECT": "true" if settings.ha_direct else "false",
         "AQUATICY_GOOGLE": "true" if settings.google_enabled else "false",
         "AQUATICY_GOOGLE_WRITE": "true" if settings.google_write else "false",
         "AQUATICY_GOOGLE_DIRECT": "true" if settings.google_direct else "false",
-        "AQUATICY_STORAGE_URL": settings.storage_url,
-        "AQUATICY_STORAGE_ACCESS": settings.storage_access,
-        "AQUATICY_LAN_ENABLED": "true" if settings.lan_enabled else "false",
-        "AQUATICY_LAN_SUBNET": settings.lan_subnet,
         "AQUATICY_MEMORY": "true" if settings.memory_enabled else "false",
-        "AQUATICY_VM_SIZE": settings.vm_size,
-        "AQUATICY_VM_USER_MODE": "true" if settings.vm_user_mode else "false",
-        "AQUATICY_VM_INTERNET": "true" if settings.vm_internet else "false",
-        "AQUATICY_VM_LAN": "true" if settings.vm_lan else "false",
         "AQUATICY_LEGAL_GUARD": "true" if settings.legal_guard else "false",
         "AQUATICY_AUTO_MODEL": "true" if settings.auto_model else "false",
         "AQUATICY_COUNCIL": "true" if getattr(settings, "council", False) else "false",
@@ -3501,9 +2328,8 @@ def google_redirect(host: str = "", *, https: bool = False) -> str:
 def check_values(values: dict[str, str]) -> str:
     """Prueft die Formularwerte. Returns: die Beanstandung, oder "".
 
-    Der Browser kann alles schicken -- ein Zahlenfeld mit Buchstaben darin,
-    eine Auswahl mit einem Wort, das es nicht gibt, eine Adresse von einer
-    Laenge, die niemand tippt. Hier ist die Stelle, an der das auffaellt.
+    Der Browser kann alles schicken -- ein Zahlenfeld mit Buchstaben darin oder eine
+    Adresse von einer Laenge, die niemand tippt. Hier ist die Stelle, an der das auffaellt.
     """
     for key, wert in values.items():
         if len(wert) > MAX_VALUE_CHARS:
@@ -3516,9 +2342,6 @@ def check_values(values: dict[str, str]) -> str:
                 return f"{key}: '{wert}' ist keine Zahl."
             if not von <= zahl <= bis:
                 return f"{key}: {zahl} liegt ausserhalb von {von} bis {bis}."
-        if key in CHOICES and wert and wert not in CHOICES[key]:
-            erlaubt = ", ".join(CHOICES[key])
-            return f"{key}: '{wert}' gibt es nicht. Erlaubt sind: {erlaubt}."
     return ""
 
 
@@ -3531,25 +2354,6 @@ def save_values(payload: dict[str, Any]) -> Path:
             schlimmer als gar keine.
     """
     session = SESSION.current() if isinstance(SESSION, SessionProxy) else SESSION
-    pro_integration = any(
-        key in payload
-        for key in (
-            "AQUATICY_HA_URL",
-            "AQUATICY_HA_CONTROL",
-            "AQUATICY_HA_DIRECT",
-            HA_TOKEN_FIELD,
-            "AQUATICY_LAN_ENABLED",
-            "AQUATICY_LAN_SUBNET",
-            "AQUATICY_STORAGE_URL",
-            "AQUATICY_STORAGE_ACCESS",
-        )
-    )
-    plus_workshop = str(payload.get("AQUATICY_VM_SIZE", "")).strip() == "plus"
-    if not session.ultra and (pro_integration or plus_workshop):
-        raise ValueError(
-            "Heimnetz-Suche, Home Assistant, Lagerverwaltung und die große virtual machine "
-            "gibt es nur mit einem Ultra-Konto."
-        )
     if not session.ultra:
         base = get_settings()
         for key, erlaubt in (("AQUATICY_API_BASE", base.api_base),
@@ -3567,26 +2371,6 @@ def save_values(payload: dict[str, Any]) -> Path:
             "Die Rechts-Leitplanken (Grundgesetz und BGB) lassen sich nur mit einem "
             "Ultra-Konto abschalten."
         )
-    user_mode_on = "AQUATICY_VM_USER_MODE" in payload and str(
-        payload.get("AQUATICY_VM_USER_MODE", "")
-    ).strip().lower() in {"1", "true", "yes", "on", "ja"}
-    if user_mode_on and not session.ultra:
-        raise ValueError(
-            "Der User mode (virtual machine mit Desktop und Internet) braucht ein Ultra-Konto."
-        )
-
-    netz_on = "AQUATICY_VM_INTERNET" in payload and str(
-        payload.get("AQUATICY_VM_INTERNET", "")
-    ).strip().lower() in {"1", "true", "yes", "on", "ja"}
-    if netz_on and not session.ultra:
-        raise ValueError("Internet für die virtual machine gibt es nur mit einem "
-                         "Ultra-Konto.")
-    lan_on = "AQUATICY_VM_LAN" in payload and str(
-        payload.get("AQUATICY_VM_LAN", "")
-    ).strip().lower() in {"1", "true", "yes", "on", "ja"}
-    if lan_on and not session.ultra:
-        raise ValueError("Das lokale Netz für die virtual machine gibt es nur mit einem "
-                         "Ultra-Konto.")
     values = {
         key: str(payload.get(key, "")).strip() for key in SETTING_KEYS if key in payload
     }
@@ -3609,27 +2393,7 @@ def save_values(payload: dict[str, Any]) -> Path:
             basis = values.get("AQUATICY_API_BASE", session.settings().api_base) or ""
             if not model_allowed(values[key], basis):
                 raise ValueError(MODEL_RULE_TEXT)
-    if UPGRADE_DIR is not None:
-        from aquaticy import upgrading
-
-        for key in ("AQUATICY_MODEL", "AQUATICY_VISION_MODEL",
-                    "AQUATICY_SUBAGENT_MODEL", "AQUATICY_CODE_MODEL"):
-            if values.get(key) and not upgrading.allowed(UPGRADE_DIR, values[key], session.ultra):
-                raise ValueError("Diese Modellversion steht dir nicht mehr zur Wahl.")
-    ha_token = str(payload.get(HA_TOKEN_FIELD, "")).strip()
-
     geheim: dict[str, str] = {}
-    if ha_token:
-        geheim["HA_TOKEN"] = ha_token
-
-        from aquaticy.homeassistant import normalize_url
-
-        ziel = normalize_url(str(values.get("AQUATICY_HA_URL")
-                                 or payload.get("AQUATICY_HA_URL")
-                                 or session.settings().ha_url))
-        if ziel:
-            geheim["HA_TOKEN_URL"] = ziel
-
     google_id = str(payload.get(GOOGLE_ID_FIELD, "")).strip()
     if google_id:
         values["GOOGLE_CLIENT_ID"] = google_id
@@ -3637,7 +2401,6 @@ def save_values(payload: dict[str, Any]) -> Path:
     if google_secret:
         geheim["GOOGLE_CLIENT_SECRET"] = google_secret
     if geheim and session.profile is None:
-        geheim.pop("HA_TOKEN_URL", None)
         values.update(geheim)
         geheim = {}
     target = (
@@ -3645,7 +2408,6 @@ def save_values(payload: dict[str, Any]) -> Path:
         if session.profile is not None
         else find_env_file() or DEFAULT_ENV_PATH
     )
-    previous_settings = session.settings()
     written = write_env_file(values, target)
     if geheim and session.profile is not None:
         from aquaticy.keyvault import VaultError
@@ -3663,15 +2425,7 @@ def save_values(payload: dict[str, Any]) -> Path:
         from aquaticy.memory import secure_file
 
         secure_file(written)
-    if UPGRADE_DIR is not None and values.get("AQUATICY_MODEL"):
-        upgrading.choose(UPGRADE_DIR, values["AQUATICY_MODEL"], session.ultra,
-                         getattr(session.account, "id", "") or "")
     session.reload()
-    if (any(key.startswith("AQUATICY_VM_") for key in values)
-            and workshop_changed(previous_settings, session.settings())):
-        from aquaticy.coworker import stop_boxes
-
-        stop_boxes(previous_settings.data_dir)
     return written
 
 
@@ -3835,75 +2589,15 @@ def addons_view(session: Any) -> dict[str, Any]:
         addons.mark_installed(settings, provider)
     view = addons.public_view(settings, session.ultra)
     konten = {k["provider"]: k for k in linked_view(session)["accounts"]}
-    from aquaticy import bridge
-
     for eintrag in view["addons"]:
         if eintrag["id"] in konten:
             eintrag["konto"] = konten[eintrag["id"]]
-        if eintrag["id"] in bridge.MESSENGERS:
-            eintrag["bruecke"] = bridge.public_view(settings, eintrag["id"], session.ultra)
-            if session.ultra:
-                with contextlib.suppress(Exception):  # das Add-on-Fenster geht immer auf
-                    eintrag["native"] = native_view(session, eintrag["id"], image=False)
-                    if eintrag["native"]["linked"]:
-                        _native_bridge_status(eintrag["bruecke"], eintrag["native"])
     return view
 
 
-def _native_bridge_status(bruecke: dict[str, Any], native: dict[str, Any]) -> None:
-    """Bei direkter Kopplung zeigt die Bruecke den Stand der Verbindung, nicht den Bildschirm."""
-    status = bruecke["status"]
-    status["bereit"] = bool(bruecke["config"]["an"]) and native["state"] == "verbunden"
-    status["ok"] = native["state"] != "fehler"
-    status["fehler"] = native["error"] if native["state"] == "fehler" else ""
-    if bruecke["config"]["an"] and native["state"] == "aus" and not native["available"]:
-        # An, aber es startet nie: sonst stuende dort fuer immer "Warte kurz".
-        status["ok"], status["fehler"] = False, native["hinweis"]
-    bruecke["direkt"] = True
-
-
 ADDON_ACTIONS = frozenset({
-    "install", "uninstall", "enable", "disable", "token", "login", "login_done", "logout",
-    "feeds", "rights", "bridge",
+    "install", "uninstall", "enable", "disable", "token", "logout", "feeds", "rights",
 })
-
-
-_RESTARTS_WORKSHOP = frozenset({"uninstall", "enable", "disable", "logout"})
-
-
-def _bridge_action(session: Any, settings: Any, messenger: str, daten: Any) -> str:
-    """Speichert die Einstellungen der Messenger-Bruecke und weckt ihren Lauf (12.6.6 Luna).
-
-    Nur Ultra darf sie einschalten; Einschalten braucht alle Voraussetzungen.
-    """
-    from aquaticy import addons
-    from aquaticy import bridge as bridge_mod
-
-    if messenger not in bridge_mod.MESSENGERS:
-        raise addons.AddOnError("Dafür gibt es keine Brücke.")
-    if not isinstance(daten, dict):
-        raise addons.AddOnError("Es fehlen die Einstellungen.")
-    einschalten = daten.get("an") is True
-    ready = bridge_mod.ready_problem(settings, messenger, session.ultra) if einschalten else ""
-    try:
-        neu = bridge_mod.set_config(settings, messenger, daten, ready=ready)
-    except bridge_mod.BridgeError as exc:
-        raise addons.AddOnError(str(exc)) from exc
-    from aquaticy import messenger_native
-
-    if messenger_native.linked(settings, messenger):
-        _native_hub(session).ensure_running()
-        if neu["an"]:
-            return "Gespeichert. Die Brücke ist an. Schreib jetzt: Aquaticy antwortet sofort."
-        return "Gespeichert. Die Brücke ist aus."
-    runner = _bridge_runner(session)
-    if neu["an"]:
-        runner.ensure_running()
-        runner.wake()
-        return ("Gespeichert. Die Brücke ist an. Schreib erst, wenn „bereit“ dasteht: "
-                "Beim ersten Blick merkt sie sich nur, was schon im Chat steht.")
-    runner.wake()
-    return "Gespeichert. Die Brücke ist aus."
 
 
 def addon_action(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
@@ -3921,33 +2615,23 @@ def addon_action(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
         return {"ok": False, "error": "Unbekannte Aktion."}, 400
     try:
         addon = addons.get(addon_id)
-        if action in _RESTARTS_WORKSHOP and addon.programm and session.busy():
-            return {"ok": False, "error": (
-                "Gerade arbeitet Aquaticy noch — die virtual machine muss dafür neu starten. "
-                "Bitte gleich noch einmal."
-            )}, 409
         hinweis = ""
-        qr_token = ""
         if action == "install":
-            addons.install(settings, addon.id, session.ultra,
-                           on_done=lambda: session.reload(workshop=True))
-            if not addon.programm:
-                session.reload(workshop=True)
-            hinweis = "Wird installiert …" if addon.programm else "Installiert und eingeschaltet."
+            addons.install(settings, addon.id, session.ultra)
+            session.reload()
+            hinweis = "Installiert und eingeschaltet."
         elif action == "uninstall":
-            if addon.programm:
-                session.reload(workshop=True)
             if addon.id in addons.MODEL_ADDONS:
                 _forget_model_key(session, addon.id)
                 forget_strong_models(session.settings().data_dir)
             addons.uninstall(session.settings(), addon.id)
-            session.reload(workshop=True)
+            session.reload()
             hinweis = ("Entfernt. Der Schlüssel ist gelöscht."
                        if addon.id in addons.MODEL_ADDONS
-                       else "Deinstalliert — Programm und Anmeldung sind gelöscht.")
+                       else "Deinstalliert — die Anmeldung ist gelöscht.")
         elif action in ("enable", "disable"):
             addons.set_enabled(settings, addon.id, action == "enable", session.ultra)
-            session.reload(workshop=True)
+            session.reload()
             hinweis = "Eingeschaltet." if action == "enable" else "Ausgeschaltet."
         elif action == "token":
             if addon.login != "token":
@@ -3956,112 +2640,22 @@ def addon_action(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
             session.reload()
             hinweis = f"Angemeldet als {ergebnis['who']}." + (
                 f" {ergebnis['warning']}" if ergebnis["warning"] else "")
-        elif action == "login":
-            hinweis, qr_token = _addon_login(session, addon)
-        elif action == "login_done":
-            with session._owner._qr_state_lock:
-                if payload.get("token"):
-                    name, token, until = session._owner._qr_login
-                    if (not session.ultra or name != addon.id or until <= time.monotonic()
-                            or not same_secret(str(payload["token"]), token)):
-                        raise addons.AddOnError("Die Anmeldung ist abgelaufen. Öffne sie erneut.")
-                addons.mark_login(settings, addon.id, "angemeldet")
-                if session._owner._qr_login[0] == addon.id:
-                    session._owner._qr_login = ("", "", 0.0)
-            hinweis = "Gemerkt: angemeldet."
         elif action == "logout":
-            if addon.programm:
-                session.reload(workshop=True)
             addons.logout(session.settings(), addon.id)
-            session.reload(workshop=True)
-            hinweis = "Abgemeldet." + (
-                " Entferne die virtual machine auf dem Handy auch unter „Verknüpfte Geräte“."
-                if addon.login == "qr" else "")
+            session.reload()
+            hinweis = "Abgemeldet."
         elif action == "rights":
             neu = addons.set_rights(settings, addon.id, payload.get("rechte"))
             hinweis = "Gespeichert: " + addons.rights_text(addon.id, neu) + "."
-        elif action == "bridge":
-            hinweis = _bridge_action(session, settings, addon.id, payload.get("bruecke"))
         else:
             feeds = addons.set_feeds(settings, payload.get("feeds") or [])
             session.reload()
             hinweis = f"{len(feeds)} Feeds gespeichert."
-        if action in ("uninstall", "disable", "logout"):
-            from aquaticy import bridge as bridge_mod
-
-            if addon.id in bridge_mod.MESSENGERS:
-                bridge_mod.set_config(session.settings(), addon.id, {"an": False})
     except addons.AddOnError as exc:
         return {"ok": False, "error": str(exc)}, 400
     except Exception as exc:
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}, 500
-    antwort = {"ok": True, "message": hinweis, **addons_view(session)}
-    if action == "login":
-        antwort["qr_token"] = qr_token
-    return antwort, 200
-
-
-COWORKER_ACTIONS = frozenset({
-    "create", "message", "approve", "reject", "pause", "resume", "wake", "rules", "edit",
-    "delete", "seen", "reset_notes", "preferences", "messenger",
-})
-
-
-def _coworker_scheduler(session: Any) -> Any:
-    """Der Taktgeber, der die Coworker dieses Kontos weckt."""
-    konto = getattr(session, "account", None)
-    if konto is None:
-        return COWORKER_SCHEDULER
-    with _SCHEDULER_LOCK:
-        return USER_COWORKERS.get(konto.id)
-
-
-def coworkers_view(session: Any, *, badge_only: bool = False) -> dict[str, Any]:
-    """Was der Browser von den Coworkern sieht -- ohne ein einziges Geheimnis."""
-    from aquaticy import coworker as coworker_mod
-    from aquaticy.coworker_context import connection_key
-
-    plan = session.plan
-    erlaubt = plan in coworker_mod.MAX_COWORKERS
-    antwort: dict[str, Any] = {"allowed": True, "autonomous_allowed": erlaubt,
-                               "plan": plan, "badge": 0}
-    settings = session.settings()
-    store = coworker_mod.CoworkerStore(settings.db_path)
-    antwort["badge"] = store.unseen()
-    if badge_only:
-        antwort["working"] = any(coworker_mod.is_running(store.db_path, cw.id)
-                                 for cw in store.all())
-        return antwort
-    antwort.update({
-        "max": coworker_mod.MAX_COWORKERS.get(plan, 0),
-        "max_scheduled": coworker_mod.MAX_SCHEDULED,
-        "vm": coworker_mod.vm_possible(settings, session.ultra),
-        "categories": coworker_mod.catalog(session.ultra),
-        "avatars": list(coworker_mod.AVATARS),
-        "connections": coworker_mod.connections(settings, session.ultra),
-        "min_sleep": coworker_mod.MIN_SLEEP_MINUTES.get(plan, 15),
-        "daily": coworker_mod.DAILY_RUNS.get(plan, 0),
-        "coworkers": [{**coworker_mod.view(store, cw),
-                       "home_approval_valid": bool(cw.ha_binding) and cw.ha_binding ==
-                       connection_key(settings)} for cw in store.all()],
-    })
-    return antwort
-
-
-def _coworker_insult(konto: Any, text: str, wo: str) -> str:
-    """Ai-guard: eine Beleidigung in Aufgabe oder Nachricht zaehlt wie im Chat."""
-    if AIGUARD is None or konto is None:
-        return ""
-    from aquaticy.aiguard import demeaning_request, insult_level
-
-    stufe = insult_level(text) or demeaning_request(text)
-    if not stufe:
-        return ""
-    AIGUARD.record_incident(konto.id, "beleidigung", stufe, chat=wo,
-                            detail="Beleidigung an einen Coworker (erkannt)",
-                            enforce=not getattr(konto, "ultra", False))
-    return ("Das schicke ich nicht weiter — Ai-guard hat darin eine Beleidigung oder den "
-            "Auftrag erkannt, jemanden herabzusetzen.")
+    return {"ok": True, "message": hinweis, **addons_view(session)}, 200
 
 
 def _json_int(wert: Any) -> int:
@@ -4069,463 +2663,6 @@ def _json_int(wert: Any) -> int:
     if isinstance(wert, bool) or (isinstance(wert, float) and not wert.is_integer()):
         raise ValueError("Gib eine ganze Zahl ein.")
     return int(wert)
-
-
-def coworker_image(payload: dict[str, Any], settings: Settings) -> tuple[str, str]:
-    """Nimmt das Vergleichsbild eines Bildauftrags entgegen.
-
-    Es landet im privaten Datenordner des Kontos -- derselbe Ort, an dem
-    auch geprueftes Bildmaterial liegt. Zurueck kommt (Kennung, Fehler);
-    genau eines von beiden ist gefuellt.
-    """
-    from aquaticy.media import save_snapshot
-
-    try:
-        data = base64.b64decode(str(payload.get("image_data") or ""), validate=True)
-    except (ValueError, binascii.Error):
-        return "", "Das Bild konnte nicht gelesen werden."
-    if not data:
-        return "", "Für die Bildsuche fehlt das Bild."
-    if not looks_like_image(data) or blocked_upload(str(payload.get("image_name") or "")):
-        return "", ("Das Bildformat stimmt nicht: Es gehen nur echte PNG-, JPEG-, "
-                    "GIF- oder WebP-Bilder.")
-    if len(data) > MAX_UPLOAD_BYTES:
-        return "", (
-            f"Das Bild ist zu groß (erlaubt sind "
-            f"{MAX_UPLOAD_BYTES // 1_000_000} MB)."
-        )
-    try:
-        return save_snapshot(settings.data_dir, data, image_mime(data), keep=True), ""
-    except (OSError, ValueError):
-        return "", "Dieses Bildformat wird nicht unterstützt (JPEG, PNG, WebP, GIF)."
-
-
-def coworker_action(payload: dict[str, Any], konto: Any, *,
-                    session: Any = None) -> tuple[dict[str, Any], int]:
-    """Anlegen, schreiben, freigeben, pausieren -- alles aus der Coworker-Uebersicht.
-
-    Returns: (Antwort, HTTP-Status).
-    """
-    from aquaticy import coworker as coworker_mod
-    from aquaticy.agent import new_session_id
-    from aquaticy.cache import Cache
-
-    if session is None:
-        session = SESSION.current() if isinstance(SESSION, SessionProxy) else SESSION
-    if konto is None:
-        konto = getattr(session, "account", None)
-    if AIGUARD is not None and konto is not None and AIGUARD.is_banned(
-            user_id=konto.id) is not None:
-        return {"ok": False, "error": "Während einer Sperre arbeiten keine Coworker."}, 403
-    action = str(payload.get("action") or "").strip().lower()
-    if action not in COWORKER_ACTIONS:
-        return {"ok": False, "error": "Unbekannte Aktion."}, 400
-    settings = session.settings()
-    store = coworker_mod.CoworkerStore(settings.db_path)
-    takt = _coworker_scheduler(session)
-    hinweis = ""
-    try:
-        if action == "create":
-            name = str(payload.get("name") or "")
-            aufgabe = str(payload.get("goal") or "")
-            nein = _coworker_insult(konto, f"{name}\n{aufgabe}", "coworker")
-            if nein:
-                return {"ok": False, "error": nein}, 400
-            chat = new_session_id()
-            timing = payload.get("schedule") or {}
-            if not isinstance(timing, dict):
-                raise coworker_mod.CoworkerError("Der Zeitplan muss ein Objekt sein.")
-            if not timing and session.plan not in coworker_mod.MAX_COWORKERS:
-                return {"ok": False, "error": "Dauerhafte Coworker gibt es mit Pro und Ultra."}, 403
-
-            timing = {k: v for k, v in timing.items() if k not in ("image_id", "image_note")}
-            image_id, saved = "", False
-            try:
-                if (timing.get("kind") in ("visual", "image")
-                        and not selected_vision_model(settings)):
-                    raise coworker_mod.CoworkerError(
-                        "Die Bildbeobachtung braucht ein Vision-Modell unter Modelle und "
-                        "Verbindungen im Chat.")
-                if timing.get("kind") == "image":
-                    image_id, error = coworker_image(payload, settings)
-                    if error:
-                        raise coworker_mod.CoworkerError(error)
-                    timing["image_id"] = image_id
-                kollege: Any = store.add(name, aufgabe, avatar=str(payload.get("avatar") or ""),
-                                         plan=session.plan, chat=chat, schedule=timing)
-                saved = True
-
-                store.set_preferences(kollege.id, {k: payload[k] for k in (
-                    "sharing_chats", "sharing_coworkers", "notes_limit") if k in payload})
-                kollege = store.get(kollege.id)
-            except (ValueError, TypeError, OverflowError):
-                if saved:
-                    delete_coworker(store, kollege.id, settings)
-                raise
-            finally:
-                if image_id and not saved:
-                    from aquaticy.media import delete_snapshot
-
-                    with contextlib.suppress(OSError, ValueError):
-                        delete_snapshot(settings.data_dir, image_id)
-
-            with contextlib.suppress(Exception):
-                Cache(settings.db_path, settings.cache_ttl_hours).add_history(
-                    chat, coworker_mod.chat_title(kollege),
-                    f"Hallo, ich bin {kollege.name}. Ich kümmere mich ab jetzt um:\n\n"
-                    f"> {kollege.goal}\n\nMeine Meldungen erscheinen hier und in der "
-                    "Coworker-Übersicht. Bevor ich etwas verändere, frage ich — so, wie "
-                    "du es in meinen Regeln einstellst. Schreiben kannst du mir in der "
-                    "Coworker-Übersicht; hier im Chat antwortet dir Aquaticy wie sonst auch "
-                    "— mit meinen Meldungen im Blick.", {"coworker": kollege.id})
-            hinweis = f"{kollege.name} fängt gleich an."
-        else:
-            try:
-                nummer = _json_int(payload.get("id"))
-            except (TypeError, ValueError, OverflowError):
-                return {"ok": False, "error": "Keine gültige Kennung."}, 400
-            kollege = store.get(nummer)
-            if kollege is None:
-                return {"ok": False, "error": "Diesen Coworker gibt es nicht."}, 404
-            if action == "message":
-                text = coworker_mod._clean_text(payload.get("text"), coworker_mod.MAX_MESSAGE)
-                if not text:
-                    return {"ok": False, "error": "Schreib erst etwas."}, 400
-                nein = _coworker_insult(konto, text, f"coworker:{kollege.id}")
-                if nein:
-                    return {"ok": False, "error": nein}, 400
-                store.add_log(kollege.id, "nachricht", text)
-                hinweis = (f"{kollege.name} liest es gleich." if kollege.enabled else
-                           f"{kollege.name} ist pausiert und liest es, sobald es weitergeht.")
-            elif action in ("approve", "reject"):
-                try:
-                    anfrage = _json_int(payload.get("action_id"))
-                except (TypeError, ValueError, OverflowError):
-                    return {"ok": False, "error": "Keine gültige Anfrage."}, 400
-                entschieden = store.decide(kollege.id, anfrage, action == "approve")
-                if entschieden is None:
-                    return {"ok": False, "error": "Diese Anfrage ist schon entschieden."}, 409
-                if action == "approve":
-                    def ausfuehren() -> None:
-                        try:
-                            banned = AIGUARD is not None and konto is not None and \
-                                AIGUARD.is_banned(user_id=konto.id) is not None
-                            fresh_plan = (_plan_of(konto.id, konto) if konto is not None
-                                          else session.plan)
-                            if banned:
-                                ok, ergebnis = False, "Während einer Sperre laufen keine Aktionen."
-                            else:
-                                ok, ergebnis = coworker_mod.run_action(
-                                    store, entschieden, session.settings(), fresh_plan == "ultra")
-                        except Exception as exc:
-                            ok, ergebnis = False, f"Fehler: {type(exc).__name__}"
-                        try:
-                            store.finish_action(entschieden["id"], ok, ergebnis)
-                            store.add_log(kollege.id, "aktion",
-                                          ("Erledigt: " if ok else "Hat nicht geklappt: ")
-                                          + entschieden["summary"], seen=True)
-                        except sqlite3.Error:
-                            coworker_mod.LOG.exception("Coworker: Ergebnis nicht gespeichert")
-                        if takt is not None:
-                            takt.wake()
-
-                    threading.Thread(target=ausfuehren, name="aquaticy-coworker-aktion",
-                                     daemon=True).start()
-                    hinweis = "Erlaubt — wird ausgeführt."
-                else:
-                    store.add_log(kollege.id, "aktion",
-                                  "Abgelehnt: " + entschieden["summary"], seen=True)
-                    hinweis = "Abgelehnt."
-            elif action in ("pause", "resume"):
-                store.set_enabled(kollege.id, action == "resume")
-                hinweis = "Pausiert." if action == "pause" else "Geht weiter."
-            elif action == "wake":
-                if not kollege.enabled:
-                    return {"ok": False, "error": "Erst fortsetzen, dann wecken."}, 400
-                store.wake(kollege.id, "vom Nutzer geweckt")
-                hinweis = f"{kollege.name} legt gleich los."
-            elif action == "rules":
-                store.set_rules(kollege.id, payload.get("rules"), settings=settings,
-                                ultra=session.ultra)
-                hinweis = "Regeln gespeichert."
-            elif action == "edit":
-                neuer_name = payload.get("name")
-                neue_aufgabe = payload.get("goal")
-                nein = _coworker_insult(konto, f"{neuer_name or ''}\n{neue_aufgabe or ''}",
-                                        f"coworker:{kollege.id}")
-                if nein:
-                    return {"ok": False, "error": nein}, 400
-                if "interval_seconds" in payload and (
-                    type(payload["interval_seconds"]) is not int
-                    or payload["interval_seconds"] not in coworker_mod.INTERVAL_SECONDS
-                ):
-                    raise ValueError("Wähl einen der angebotenen Rhythmen.")
-                store.update(kollege.id, name=None if neuer_name is None else str(neuer_name),
-                             goal=None if neue_aufgabe is None else str(neue_aufgabe),
-                             avatar=None if payload.get("avatar") is None
-                             else str(payload.get("avatar")),
-                             interval_seconds=payload.get("interval_seconds"))
-                hinweis = "Gespeichert."
-            elif action == "preferences":
-                store.set_preferences(kollege.id, payload, settings=settings, ultra=session.ultra)
-                hinweis = "Einstellungen gespeichert."
-            elif action == "messenger":
-                if not isinstance(payload.get("enabled"), bool):
-                    return {"ok": False, "error": "Wähle an oder aus."}, 400
-                store.set_messenger_orders(kollege.id, payload["enabled"])
-                hinweis = (f"{kollege.name} nimmt Aufträge aus deinem eigenen WhatsApp- und "
-                           "Signal-Chat an." if payload["enabled"] else
-                           f"{kollege.name} nimmt keine Aufträge per Messenger mehr an.")
-            elif action == "reset_notes":
-                store.reset_notes(kollege.id)
-                hinweis = f"Die Notizen von {kollege.name} sind gelöscht."
-            elif action == "delete":
-                delete_coworker(store, kollege.id, settings)
-                coworker_mod.stop_boxes(settings.data_dir, kollege.id)
-                hinweis = f"{kollege.name} ist gelöscht. Sein Chat bleibt."
-            else:
-                store.mark_seen(kollege.id)
-    except (ValueError, TypeError, OverflowError) as exc:
-        return {"ok": False, "error": str(exc)}, 400
-    except sqlite3.Error:
-        return {"ok": False, "error": "Das ließ sich nicht speichern. Bitte versuch es gleich "
-                "noch einmal."}, 500
-    if takt is not None and action in ("create", "message", "wake", "resume"):
-        takt.wake()
-    return {"ok": True, "message": hinweis, **coworkers_view(session)}, 200
-
-
-def workshop_busy(session: Any) -> bool:
-    sessions = session.chat_sessions() if hasattr(session, "chat_sessions") else [session]
-    return any(chat.has_running_chat() for chat in sessions)
-
-
-def _addon_login(session: Any, addon: Any) -> tuple[str, str]:
-    """Oeffnet das Programm in der virtual machine -- anmelden tut sich der Nutzer selbst."""
-    from aquaticy import addons
-    from aquaticy import sandbox as werkstatt
-
-    settings = session.settings()
-    if addon.login != "qr":
-        raise addons.AddOnError(f"{addon.name} braucht keine Anmeldung in der virtual machine.")
-    ok, warum = addons.usable(addon, settings, session.ultra)
-    if not ok:
-        raise addons.AddOnError(warum)
-    if not addons.active(settings, addon.id, session.ultra):
-        raise addons.AddOnError(f"{addon.name} ist nicht installiert oder ausgeschaltet.")
-    box = werkstatt.shared(settings)
-    if workshop_busy(session):
-        raise addons.AddOnError("Ein Chat läuft gerade. Warte, bis er fertig ist.")
-    with session._owner._qr_lock:
-        qr_token = secrets.token_urlsafe(24)
-        with session._owner._qr_state_lock:
-            session._owner._qr_login = (addon.id, qr_token, time.monotonic() + 600)
-            session._owner._qr_restarts.clear()
-        try:
-            fertig = box.desktop("open", addons.APP_OF[addon.id], timeout=90)
-        except Exception:
-            with session._owner._qr_state_lock:
-                if session._owner._qr_login[1] == qr_token:
-                    session._owner._qr_login = ("", "", 0.0)
-            raise
-    if fertig.returncode != 0:
-        with session._owner._qr_state_lock:
-            if session._owner._qr_login[1] == qr_token:
-                session._owner._qr_login = ("", "", 0.0)
-        raise addons.AddOnError(
-            f"{addon.name} ließ sich nicht öffnen: "
-            + (fertig.stderr.decode("utf-8", "replace").strip() or "keine Meldung")[:300]
-        )
-    return (
-        f"{addon.name} ist offen. Scanne den QR-Code im Anmeldefenster mit deinem Handy "
-        "und drück dann „Ich bin angemeldet“."
-    ), qr_token
-
-
-def native_view(session: Any, messenger: str, *, image: bool = True) -> dict[str, Any]:
-    """Der Stand der direkten Kopplung -- mit dem QR-Code als Bild, solange er gebraucht wird."""
-    from aquaticy import messenger_native as nat
-    from aquaticy.messenger_login import render_qr
-
-    hub = _native_hub(session)
-    ok, hinweis = hub.available(messenger)
-    status = hub.status(messenger)
-    bild = None
-    if image and status.state == nat.QR and status.qr:
-        with contextlib.suppress(Exception):
-            bild = render_qr(status.qr)
-    return {"id": messenger, "available": ok, "hinweis": hinweis, "state": status.state,
-            "who": status.who, "error": status.error, "image": bild,
-            "linked": bool(hub.transport(messenger).store.linked(messenger))}
-
-
-NATIVE_ACTIONS = frozenset({"status", "link", "unlink", "cancel"})
-
-
-def native_action(session: Any, payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """Koppeln ohne virtual machine: QR-Code zeigen, Stand abfragen, trennen (12.7.8 Terra).
-
-    Der QR-Code ist der Kopplungscode des Messengers selbst -- er bleibt im Speicher dieses
-    Servers, geht nie an ein Modell und wird nicht gespeichert.
-    """
-    if not session.ultra:
-        return {"ok": False, "error": "Das gibt es nur mit einem Ultra-Konto."}, 403
-    from aquaticy import bridge as bridge_mod
-    from aquaticy import messenger_native as nat
-
-    messenger = str(payload.get("id") or "").strip().lower()
-    aktion = str(payload.get("action") or "").strip().lower()
-    if messenger not in nat.MESSENGERS or aktion not in NATIVE_ACTIONS:
-        return {"ok": False, "error": "Unbekannte Aktion."}, 400
-    hub = _native_hub(session)
-    try:
-        if aktion == "link":
-            hub.link(messenger)
-        elif aktion == "cancel":
-            hub.cancel(messenger)
-        elif aktion == "unlink":
-            hub.unlink(messenger)
-            with contextlib.suppress(Exception):
-                bridge_mod.set_config(session.settings(), messenger, {"an": False})
-    except RuntimeError as exc:
-        return {"ok": False, "error": scrub_error(str(exc))}, 400
-    except Exception as exc:
-        return {"ok": False, "error": scrub_error(f"{type(exc).__name__}: {exc}")[:300]}, 500
-    antwort = {"ok": True, **native_view(session, messenger)}
-    if aktion == "unlink":
-        antwort["message"] = ("Getrennt. Entferne Aquaticy am Handy auch unter „Verknüpfte "
-                              "Geräte“.")
-    return antwort, 200
-
-
-CRASH_MARKERS = ("absturz", "crash")
-MAX_BROWSER_RESTARTS = 1
-
-
-def browser_crashed(window: dict[str, Any], after: dict[str, Any]) -> bool:
-    """Zeigt das Fenster die Absturzseite des Browsers ("Absturzmelder", "Tab Crashed")?"""
-    titel = f"{window.get('titel') or ''} {after.get('aktiv') or ''}".casefold()
-    return any(marke in titel for marke in CRASH_MARKERS)
-
-
-def restart_browser(box: Any, app: str) -> None:
-    """Schliesst den vorderen, abgestuerzten Browser und startet ihn neu.
-
-    Strg+Q geht an das vordere Fenster: Wer das ruft, hat vorher geprueft, dass es der
-    Messenger ist -- sonst schlosse es ein anderes Programm des Nutzers.
-    """
-    box.desktop("key", "ctrl+q", start=False, timeout=10)
-    time.sleep(3)
-    box.desktop("open", app, start=False, timeout=90)
-
-
-def front_is_messenger(window: dict[str, Any], after: dict[str, Any], name: str) -> bool:
-    """Ist nach dem Bildschirmfoto der Messenger das vordere Fenster?
-
-    Ist der Titel des vorderen Fensters bekannt, muss er der des Messengers sein. Meldet der
-    Fenstermanager keinen Titel, entscheidet die Klasse; fehlt auch die, geht es weiter: Das
-    Bild verlaesst den Server ohnehin nur als frisch gezeichneter, echter Kopplungscode
-    dieses Messengers, nie als Ausschnitt vom Bildschirm.
-    """
-    from aquaticy import addons
-
-    titel = str(after.get("aktiv") or "")[:200]
-    if titel:
-        return titel == str(window.get("titel") or "")
-    klasse = str(after.get("aktiv_klasse") or "").casefold()
-    return addons.messenger_of(klasse, "") == name if klasse else True
-
-
-def addon_qr(session: Any, payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """Kurzlebige, kontogebundene QR-Anmeldung. Gibt nie ein ganzes Bildschirmfoto heraus."""
-    from aquaticy import addons
-    from aquaticy import sandbox as werkstatt
-    from aquaticy.messenger_login import qr_image
-
-    if not session.ultra:
-        return {"error": "Das gibt es nur mit einem Ultra-Konto."}, 403
-    owner = session._owner
-
-    def valid() -> bool:
-        name, token, until = owner._qr_login
-        return bool(token and until > time.monotonic() and payload.get("id") == name
-                    and same_secret(str(payload.get("token") or ""), token))
-
-    if payload.get("close") is True:
-        with owner._qr_state_lock:
-            if not valid():
-                return {"error": "Die Anmeldung ist abgelaufen. Öffne sie erneut."}, 409
-            owner._qr_login = ("", "", 0.0)
-            return {"ok": True}, 200
-    if not owner._qr_lock.acquire(blocking=False):
-        return {"error": "Einen Moment …"}, 429
-    try:
-        with owner._qr_state_lock:
-            if not valid():
-                return {"error": "Die Anmeldung ist abgelaufen. Öffne sie erneut."}, 409
-            name = owner._qr_login[0]
-        settings = session.settings()
-        if name not in ("whatsapp", "signal") or not addons.active(settings, name, session.ultra):
-            return {"error": "Das Add-on ist nicht eingeschaltet."}, 403
-        if workshop_busy(session):
-            return {"error": "Ein Chat läuft gerade. Warte, bis er fertig ist."}, 409
-        box = werkstatt.shared(settings)
-        if not box.alive or not box.user_mode:
-            return {"error": "Die virtual machine läuft gerade nicht."}, 409
-
-        def windows() -> dict[str, Any]:
-            result = box.desktop("windows", start=False, timeout=10)
-            try:
-                info = json.loads(result.stdout) if result.returncode == 0 else {}
-            except ValueError:
-                return {}
-            return info if isinstance(info, dict) else {}
-
-        def nichts(grund: str) -> tuple[dict[str, Any], int]:
-            logging.getLogger("aquaticy.web").info("QR-Anmeldung %s: kein Bild (%s)", name, grund)
-            return {"ok": True, "image": None, "reason": grund}, 200
-
-        info = windows()
-        window = next((w for w in info.get("fenster", []) if isinstance(w, dict)
-                       and addons.messenger_of(str(w.get("klasse") or ""), "") == name), None)
-        if window is None:
-            return nichts("kein_fenster")
-        wid = str(window.get("id") or "")
-        if not re.fullmatch(r"0x[0-9a-fA-F]{1,10}", wid):
-            return nichts("kein_fenster")
-        if browser_crashed(window, {}):
-            token = str(payload.get("token") or "")
-            versuche = owner._qr_restarts.get(token, 0)
-            if versuche >= MAX_BROWSER_RESTARTS:
-                return nichts("abgestuerzt")
-            if (box.desktop("focus", wid, start=False, timeout=10).returncode != 0
-                    or not front_is_messenger(window, windows(), name)):
-                return nichts("nicht_vorn")
-            owner._qr_restarts[token] = versuche + 1
-            restart_browser(box, addons.APP_OF[name])
-            return nichts("neustart")
-        if box.desktop("focus", wid, start=False, timeout=10).returncode != 0:
-            return nichts("nicht_vorn")
-        shot = box.screenshot(start=False, quality=92)
-        after = windows()
-        if not front_is_messenger(window, after, name):
-            return nichts("nicht_vorn")
-        if workshop_busy(session):
-            return {"error": "Ein Chat läuft gerade. Warte, bis er fertig ist."}, 409
-        image = qr_image(shot, name)
-        with owner._qr_state_lock:
-            if not valid():
-                return {"error": "Die Anmeldung ist abgelaufen. Öffne sie erneut."}, 409
-        if image is None:
-            return nichts("kein_qr")
-        return {"ok": True, "image": image}, 200
-    except ImportError:
-        return {"error": "Die QR-Erkennung fehlt. Aktualisiere Aquaticy und starte den "
-                         "Server neu."}, 503
-    except Exception:
-        return {"error": "Der QR-Code lässt sich gerade nicht lesen. Versuch es erneut."}, 502
-    finally:
-        owner._qr_lock.release()
 
 
 INPUT_KEYS = frozenset({
@@ -4536,73 +2673,6 @@ INPUT_KEYS = frozenset({
 
 
 MAX_INPUT_CHARS = 1000
-
-
-def workshop_input(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """Der Nutzer bedient die virtual machine selbst: klicken, tippen, Tasten.
-
-    Das ist der Weg fuer Anmeldungen ("Login-Apps"): Passwoerter und Codes
-    tippt der Mensch, nicht Aquaticy. Deshalb laeuft das bewusst NICHT durch
-    die Pruefungen aus aquaticy/desktop.py -- die gelten fuer die KI. Und
-    deshalb wird der Text nirgends abgelegt: nicht im Verlauf, nicht im
-    Protokoll, nicht beim Modell. Er geht einmal an die virtual machine, fertig.
-    """
-    from aquaticy import sandbox as werkstatt
-    from aquaticy.desktop import HEIGHT, WIDTH
-
-    session = SESSION.current() if isinstance(SESSION, SessionProxy) else SESSION
-    if not session.ultra:
-        return {"ok": False, "error": "Der User mode gehört zu Ultra."}, 403
-    settings = session.settings()
-    if not getattr(settings, "vm_user_mode", False):
-        return {"ok": False, "error": "Der User mode ist aus."}, 400
-    box = werkstatt.shared(settings)
-    art = str(payload.get("art") or "").strip().lower()
-    if art == "open":
-        from aquaticy.desktop import URL_RE
-
-        adresse = str(payload.get("url") or "").strip()
-        if not URL_RE.match(adresse) or len(adresse) > 2000:
-            return {"ok": False, "error": "Bitte eine Adresse mit https:// (oder http://)."}, 400
-        try:
-            fertig = box.desktop("open", "browser", adresse, timeout=90)
-        except Exception as exc:
-            return {"ok": False, "error": f"Die virtual machine startet nicht: {exc}"}, 502
-        if fertig.returncode != 0:
-            return {"ok": False, "error": fertig.stderr.decode("utf-8", "replace")[:200]}, 400
-        return {"ok": True}, 200
-    if not box.alive or not box.user_mode:
-        return {"ok": False, "error": "Es läuft gerade keine virtual machine im User mode."}, 404
-    try:
-        if art == "click":
-            x, y = _json_int(payload.get("x")), _json_int(payload.get("y"))
-            if not (0 <= x < WIDTH and 0 <= y < HEIGHT):
-                return {"ok": False, "error": "Die Stelle liegt nicht auf dem Bildschirm."}, 400
-            args = ["click", str(x), str(y)]
-            if payload.get("double") is True:
-                args.append("--double")
-            fertig = box.desktop(*args, timeout=20, start=False)
-        elif art == "type":
-            text = str(payload.get("text") or "")
-            if not text or len(text) > MAX_INPUT_CHARS:
-                return {"ok": False, "error": f"1 bis {MAX_INPUT_CHARS} Zeichen."}, 400
-            fertig = box.desktop("type", stdin=text.encode("utf-8"), timeout=60, start=False)
-        elif art == "key":
-            taste = str(payload.get("key") or "")
-            if taste not in INPUT_KEYS:
-                return {"ok": False, "error": "Diese Taste gibt es hier nicht."}, 400
-            fertig = box.desktop("key", taste, timeout=20, start=False)
-        else:
-            return {"ok": False, "error": "art: open, click, type oder key."}, 400
-    except (TypeError, ValueError, OverflowError):
-        return {"ok": False, "error": "x und y bitte als Zahlen."}, 400
-    except Exception as exc:
-        return {"ok": False,
-                "error": f"Die virtual machine antwortet nicht: {type(exc).__name__}"}, 502
-    if fertig.returncode != 0:
-        meldung = fertig.stderr.decode("utf-8", "replace").strip()[:200]
-        return {"ok": False, "error": meldung or "Das hat nicht geklappt."}, 400
-    return {"ok": True}, 200
 
 
 def _prune_uploads(folder: Path) -> None:
@@ -4894,9 +2964,7 @@ class Handler(BaseHTTPRequestHandler):
         self._retry_after = 0
         route = self._route()
         client = self._client_ip()
-        weitergereicht = bool(getattr(self, "_cluster_user", ""))
-
-        gezaehlt = route not in STATIC_FILES and not weitergereicht
+        gezaehlt = route not in STATIC_FILES
         if gezaehlt and not ADDRESS_LIMIT.allow(client):
             self._zu_viele(ADDRESS_LIMIT.retry_after(client))
             return
@@ -4930,8 +2998,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": BANNED_MESSAGE, "code": "banned",
                             "ban": ban_info(sperre)}, 403)
                 return
-        if account is not None and self._cluster_dispatch(route, account, weitergereicht):
-            return
         previous = getattr(_REQUEST, "session", None)
         if account is not None:
             _REQUEST.session = SESSIONS.get(account)
@@ -4971,190 +3037,6 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 _REQUEST.session = previous
 
-    def _cluster_dispatch(self, route: str, account: Account, weitergereicht: bool) -> bool:
-        """Reicht die Anfrage an den Heimserver des Kontos weiter.
-
-        Returns: True, wenn hier nichts mehr zu tun ist (weitergereicht oder
-        abgewiesen); False, wenn dieser Server die Anfrage selbst bedient.
-        """
-        verbund = CLUSTER
-        if verbund is None or not verbund.joined:
-            return False
-        if weitergereicht:
-            if verbund.is_home(account.id):
-                start_user_scheduler(account)
-                return False
-
-            body = b'{"error": "Bitte gleich noch einmal."}'
-            self.send_response(409)
-            self.send_header(cluster.MOVED_HEADER, "moved")
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return True
-        if (route in CLUSTER_LOCAL or route in STATIC_FILES or route in LEGAL_ROUTES
-                or route in HOME_CA_ROUTES or route.startswith("/cluster/")):
-            return False
-
-        if not self._authorized():
-            self._deny()
-            return True
-        try:
-            body = self._read_body(MAX_BODY_BYTES)
-        except (BadRequest, TooLarge, TimeoutError) as exc:
-            self._reject_body(exc)
-            return True
-
-        direkt = self._client_ip()
-        try:
-            if verbund.forward(self, account.id, body, self._https(), direkt):
-                return True
-            if not verbund.is_home(account.id):
-                raise cluster.ClusterError("Dieses Konto hat einen anderen Heimserver.")
-        except Exception as exc:  # pragma: no cover
-            print(f"  [Verbund] Weiterleitung: {type(exc).__name__}: {exc}")
-            if self.responded:
-                self.close_connection = True
-                return True
-            if isinstance(exc, cluster.ForwardingError):
-                self._json({"error": str(exc)}, 503)
-                return True
-            self._json({"error": "Der Heimserver ist gerade nicht erreichbar. "
-                                 "Bitte versuche es später erneut."}, 503)
-            return True
-
-        self.rfile = io.BytesIO(body)
-        return False
-
-    def _cluster_route(self) -> None:
-        """/cluster/... -- Aufrufe anderer Server, nicht des Browsers."""
-        self.responded = False
-        verbund = CLUSTER
-        route = self._route()
-        direkt = str(self.client_address[0] if self.client_address else "")
-        if verbund is None or not verbund.enabled:
-            self._json({"error": "Kein Verbund."}, 404)
-            return
-        if self.command == "GET" and route == "/cluster/info":
-            if not CLUSTER_HELLO_LIMIT.allow(direkt):
-                self._json({"error": "Zu viele Anfragen."}, 429)
-                return
-            self._json(verbund.beacon())
-            return
-        if self.command != "POST":
-            self._json({"error": "unbekannter Pfad"}, 404)
-            return
-        if route == "/cluster/tunnel":
-            self._cluster_tunnel(verbund, direkt)
-            return
-        grenze = MAX_BODY_BYTES * 2 if route == "/cluster/proxy" else 4 * cluster.CHUNK
-        try:
-            daten = self._read_body(grenze)
-        except (BadRequest, TooLarge, TimeoutError) as exc:
-            self._reject_body(exc)
-            return
-        try:
-            if route == "/cluster/rpc":
-                self._send(200, verbund.handle_rpc(daten, direkt), "application/octet-stream")
-            elif route == "/cluster/proxy":
-                self._cluster_proxy(verbund, daten, direkt)
-            elif route in ("/cluster/hello", "/cluster/hello-status", "/cluster/hello-join"):
-                if not CLUSTER_HELLO_LIMIT.allow(direkt):
-                    self._json({"error": "Zu viele Anfragen."}, 429)
-                    return
-                try:
-                    from aquaticy.jsonutil import JsonDepthError, loads
-
-                    anfrage = loads(daten or b"{}")
-                except (JsonDepthError, RecursionError) as exc:
-                    raise BadRequest("Die Anfrage ist zu stark verschachtelt.") from exc
-                except ValueError:
-                    anfrage = {}
-                if not isinstance(anfrage, dict):
-                    anfrage = {}
-                handler = {"/cluster/hello": verbund.handle_hello,
-                           "/cluster/hello-status": verbund.hello_status,
-                           "/cluster/hello-join": verbund.hello_join}[route]
-                self._json(handler(anfrage, direkt))
-            else:
-                self._json({"error": "unbekannter Pfad"}, 404)
-        except BadRequest as exc:
-            self._reject_body(exc)
-        except (cluster.ClusterError, ValueError, RecursionError, binascii.Error) as exc:
-            if not self.responded:
-                self._json({"error": str(exc) if isinstance(exc, cluster.ClusterError)
-                            else "Ungültige Anfrage."}, 403)
-
-    def _cluster_tunnel(self, verbund: Any, direkt: str) -> None:
-        """Serverlast aufteilen: der Master will an den rpc-server dieses Servers.
-
-        Die Verbindung wird selbst zum Tunnel (aquaticy/sharding.py) und bleibt
-        offen, solange llama-server auf dem Master sie braucht.
-        """
-        from aquaticy import sharding
-
-        try:
-            daten = self._read_body(64 * 1024)
-        except (BadRequest, TooLarge, TimeoutError) as exc:
-            self._reject_body(exc)
-            return
-        try:
-            port = SHARDING.rpc_port() if SHARDING is not None else 0
-            sharding.serve_tunnel(self, verbund, port, daten, direkt)
-        except (cluster.ClusterError, ValueError, RecursionError, binascii.Error,
-                OSError) as exc:
-            if not self.responded:
-                with contextlib.suppress(OSError):
-                    self._json({"error": str(exc) if isinstance(exc, cluster.ClusterError)
-                                else "Kein Tunnel."}, 403)
-            self.close_connection = True
-
-    def _cluster_proxy(self, verbund: Any, daten: bytes, direkt: str) -> None:
-        """Heimserver: bedient eine weitergereichte Anfrage wie eine eigene.
-
-        Die ganze HTTP-Antwort -- Kopf und Inhalt, auch ein laufender Chat --
-        geht verschluesselt in Stuecken zurueck; der Eingang schreibt sie
-        unveraendert an den Browser.
-        """
-        from http.client import HTTPMessage
-
-        anfrage, nonce, key = verbund.open_proxy(daten, direkt)
-        salz = secrets.token_bytes(16)
-        roh = self.wfile
-        roh.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n"
-                  b"Cache-Control: no-store\r\nConnection: close\r\n"
-                  b"X-Aquaticy-Salt: " + base64.b64encode(salz) + b"\r\n\r\n")
-        roh.flush()
-        self.responded = True
-        strom = cluster.FrameWriter(roh, key, salz, f"stream:{nonce}")
-        kopf = HTTPMessage()
-        for eintrag in anfrage.get("h") or []:
-            if isinstance(eintrag, list) and len(eintrag) == 2:
-                kopf[str(eintrag[0])[:200]] = str(eintrag[1])[:8000]
-        koerper = base64.b64decode(str(anfrage.get("b") or ""))
-        kopf["Content-Length"] = str(len(koerper))
-        methode = str(anfrage.get("m", "GET")).upper()
-        ausfuehren = {"GET": self.do_GET, "POST": self.do_POST, "DELETE": self.do_DELETE,
-                      "HEAD": self.do_HEAD}.get(methode)
-        self.command, self.path, self.headers = methode, str(anfrage.get("p", "/")), kopf
-        self.rfile = io.BytesIO(koerper)
-        self.client_address = (str(anfrage.get("ip", "")), 0)
-        self._cluster_user = str(anfrage["u"])
-        self._cluster_https = bool(anfrage.get("https"))
-
-        self.wfile = cast(Any, strom)
-        try:
-            if ausfuehren is None:
-                self.send_response(405)
-                self.send_header("Content-Length", "0")
-                self.end_headers()
-            else:
-                ausfuehren()
-        finally:
-            strom.end()
-            self.wfile = roh
-            self.close_connection = True
 
     def _queue_header(self, name: str, wert: str) -> None:
         """Eine Kopfzeile fuer die naechste Antwort (etwa ein Cookie, 9.6.9 Luna)."""
@@ -5261,7 +3143,7 @@ class Handler(BaseHTTPRequestHandler):
     def _wants_page(self) -> bool:
         """Ruft ein Mensch die Adresse im Browser auf (statt die Seite per Skript)?"""
         route = self._route()
-        return (self.command in ("GET", "HEAD") and not route.startswith(("/api/", "/cluster/"))
+        return (self.command in ("GET", "HEAD") and not route.startswith("/api/")
                 and "text/html" in (self.headers.get("Accept") or ""))
 
     def _error(self, status: int, message: str = "") -> None:
@@ -5333,8 +3215,6 @@ class Handler(BaseHTTPRequestHandler):
     def _account(self) -> Account | None:
         if AUTH is None:
             return None
-        if getattr(self, "_cluster_user", ""):
-            return AUTH.account(self._cluster_user)
         return AUTH.session_account(self._cookie(AUTH_COOKIE), self._device(),
                                     self._client_ip())
 
@@ -5368,8 +3248,6 @@ class Handler(BaseHTTPRequestHandler):
     def _https(self) -> bool:
         """Laeuft die Verbindung verschluesselt -- direkt oder hinter einem
         eingetragenen Proxy, der "X-Forwarded-Proto: https" meldet (9.5.22)?"""
-        if getattr(self, "_cluster_user", ""):
-            return bool(getattr(self, "_cluster_https", False))
         if isinstance(self.connection, __import__("ssl").SSLSocket):
             return True
         direkt = str(self.client_address[0] if self.client_address else "")
@@ -5390,7 +3268,7 @@ class Handler(BaseHTTPRequestHandler):
         Ohne gesetztes TOKEN ist alles erlaubt; so bleibt der rein lokale
         Betrieb genauso einfach wie vorher.
         """
-        if not TOKEN or bool(getattr(self, "_cluster_user", "")):
+        if not TOKEN:
             return True
         return any(
             candidate and same_secret(candidate, TOKEN)
@@ -5449,58 +3327,18 @@ class Handler(BaseHTTPRequestHandler):
 
         return gelesen if isinstance(gelesen, dict) else {}
 
-    def _nur_heimnetz(self) -> bool:
-        """Mit eigener Domain (11.1) gilt dieser Eingang nur fuer Heimnetz, Tailscale
-        und den Rechner selbst. Von aussen geht es ueber die Domain -- verschluesselt.
-
-        Ohne diese Grenze waere Aquaticy auf einem Server mit oeffentlicher Adresse
-        (etwa einem gemieteten) unverschluesselt aus dem Internet erreichbar.
-
-        Returns: True, wenn die Anfrage abgewiesen wurde.
-        """
-        seite = WEBSITE
-        if (not LAN_ONLY or seite is None or getattr(self, "public_entry", False)
-                or getattr(self, "_cluster_user", "")):
-            return False
-        direkt = str(self.client_address[0] if self.client_address else "")
-        if cluster.lan_ip_ok(direkt):
-            return False
-        adresse = f"https://{seite.config.domain}/"
-        text = f"Von außen ist Aquaticy unter {adresse} erreichbar.".encode()
-        self.send_response(403)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("Content-Length", str(len(text)))
-        self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(text)
-        self.close_connection = True
-        return True
 
     def do_GET(self) -> None:
-        if self._nur_heimnetz():
-            return
-        if self._route().startswith("/cluster/") and not getattr(self, "_cluster_user", ""):
-            self._cluster_route()
-            return
         self._guarded(self._get)
 
     def do_POST(self) -> None:
-        if self._nur_heimnetz():
-            return
-        if self._route().startswith("/cluster/") and not getattr(self, "_cluster_user", ""):
-            self._cluster_route()
-            return
         self._guarded(self._post)
 
     def do_DELETE(self) -> None:
-        if self._nur_heimnetz():
-            return
         self._guarded(self._delete)
 
     def do_HEAD(self) -> None:
         """HEAD nur fuer das Logo (9.6.0) -- alles andere bleibt 405."""
-        if self._nur_heimnetz():
-            return
         if self._route() in STATIC_FILES:
             self._guarded(lambda: self._send_static(self._route()))
             return
@@ -5519,11 +3357,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         route = self._route()
         settings = SESSION.settings()
-        if route == "/api/coworkers":
-            value = (parse_qs(urlsplit(self.path).query).get("id") or [""])[0]
-            response, status = coworker_action({"action": "delete", "id": value}, self._account())
-            self._json(response, status)
-        elif route == "/api/memory":
+        if route == "/api/memory":
             frage = parse_qs(urlsplit(self.path).query)
             if not settings.memory_enabled:
                 self._json({"error": "Der Speicher ist abgeschaltet."}, 400)
@@ -5543,84 +3377,6 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._json({"error": "unbekannt"}, 404)
 
-    def _workshop_file(self) -> None:
-        """Reicht eine Datei aus der virtual machine heraus -- zum Herunterladen."""
-        from aquaticy import sandbox as werkstatt
-
-        wanted = (parse_qs(urlsplit(self.path).query).get("path") or [""])[0]
-        box = werkstatt.shared(SESSION.settings())
-        if not box.alive:
-            self._json({"error": "Die virtual machine läuft gerade nicht."}, 404)
-            return
-        try:
-            data = box.get_bytes(wanted)
-        except FileNotFoundError as exc:
-            self._json({"error": str(exc)}, 404)
-            return
-        except ValueError as exc:
-            self._json({"error": str(exc)}, 400)
-            return
-        except Exception as exc:  # pragma: no cover
-            self._json({"error": f"Die virtual machine antwortet nicht: {exc}"}, 502)
-            return
-        name = safe_name(wanted.rsplit("/", 1)[-1] or "datei")
-        self.send_response(200)
-
-        self.send_header("Content-Type", "application/octet-stream")
-        self.send_header("Content-Disposition", f'attachment; filename="{name}"')
-        self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(data)
-
-    def _workshop_screen(self) -> None:
-        """Der Bildschirm der virtual machine im User mode -- so, wie Aquaticy ihn sieht.
-
-        Startet nichts: laeuft keine virtual machine, gibt es auch kein Bild. Ein
-        Blick hinein soll keine Maschine hochfahren.
-        """
-        from aquaticy import sandbox as werkstatt
-
-        box = werkstatt.shared(SESSION.settings())
-        if not box.alive or not box.user_mode:
-            if "leise=1" in self.path:
-                self.send_response(204)
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                return
-            self._json({"error": "Es läuft gerade keine virtual machine im User mode."}, 404)
-            return
-        try:
-            data = box.screenshot(start=False)
-        except Exception as exc:  # pragma: no cover
-            self._json({"error": f"Kein Bildschirmfoto bekommen: {exc}"}, 502)
-            return
-        self.send_response(200)
-        self.send_header("Content-Type", "image/jpeg")
-        self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(data)
-
-    def _send_home_ca(self, route: str) -> None:
-        from aquaticy import homename
-
-        if route == "/aquaticy-ca.crt":
-            daten = homename.ca_certificate(HOME_TLS.data_dir)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/x-x509-ca-cert")
-            self.send_header("Content-Disposition", 'attachment; filename="aquaticy-ca.crt"')
-        else:
-            daten = homename.instructions_page().encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(daten)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(daten)
 
     def _send_static(self, route: str) -> None:
         """Eine feste Datei aus aquaticy/static -- mit Zwischenspeicher im Browser."""
@@ -5641,11 +3397,6 @@ class Handler(BaseHTTPRequestHandler):
         if self._route() in STATIC_FILES:
             self._send_static(self._route())
             return
-        if self._route() in HOME_CA_ROUTES and HOME_TLS is not None:
-            # 15.5.5: das oeffentliche CA-Zertifikat fuer https://aquaticy.local -- ohne
-            # Anmeldung (es ist oeffentlich), nie der Schluessel.
-            self._send_home_ca(self._route())
-            return
 
         ruecksprung = self._route() == "/google" and bool(self._cookie(GOOGLE_FLOW_COOKIE))
         if not ruecksprung and not self._authorized():
@@ -5656,15 +3407,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send_ui()
         elif route in LEGAL_ROUTES:
             self._send(200, legal_page(route), "text/html; charset=utf-8")
-        elif route == "/api/cluster":
-            verbund, status = cluster_view(SESSION.current())
-            self._json(verbund, status)
-        elif route == "/api/features":
-            self._json(feature_view(SESSION.current()))
         elif route == "/api/linked":
             self._json(linked_view(SESSION.current()))
-        elif route == "/api/upgrades":
-            self._json(upgrades_view(SESSION.current()))
+        elif route == "/api/plugins":
+            from aquaticy import plugins as plugin_mod
+
+            self._json({"commands": plugin_mod.commands(SESSION.settings(), SESSION.ultra)})
         elif route == "/api/auth/status":
             account = self._account()
             self._json(
@@ -5773,8 +3521,6 @@ class Handler(BaseHTTPRequestHandler):
                     "search_key_name": SEARCH_BACKEND_KEYS.get(settings.search_backend, ""),
                     "env_path": str(settings.env_path or DEFAULT_ENV_PATH),
                     "problems": settings.missing_requirements(),
-
-                    "ha_connected": bool(settings.ha_url and settings.ha_token),
                     "search_key_set": bool(settings.search_api_key),
 
                     "strong_model": (strong_models(1) or [{}])[0].get("id", ""),
@@ -5845,24 +3591,6 @@ class Handler(BaseHTTPRequestHandler):
             title = str(je_chat.get(wanted, {}).get("title") or entries[0].question).strip()
             self._json({"title": title, "markdown": chat_markdown(title, entries),
                         "filename": webview.export_filename(title)})
-        elif route == "/api/werkstatt":
-            from aquaticy import sandbox as werkstatt
-
-            box = werkstatt.shared(SESSION.settings())
-            self._json(
-                {
-                    "running": bool(box.alive),
-                    "status": box.status(),
-                    "usage_gb": box.usage_gb() if box.alive else 0.0,
-                    "disk_gb": box.disk_gb,
-                    "files": [
-                        {**datei, "size_text": webview.size_text(datei.get("bytes"))}
-                        for datei in (box.list_files() if box.alive else [])
-                    ],
-                }
-            )
-        elif route == "/api/werkstatt/datei":
-            self._workshop_file()
         elif route == "/api/addons":
             self._json(addons_view(SESSION.current() if isinstance(SESSION, SessionProxy)
                                    else SESSION))
@@ -5874,29 +3602,6 @@ class Handler(BaseHTTPRequestHandler):
             obergrenze = (max(int(get_settings().context_tokens or 0), NORMAL_CONTEXT_CAP)
                           if konto is not None and not SESSION.ultra else 0)
             self._json(context_view(einstellungen, modell, obergrenze))
-        elif route == "/api/vm":
-            from aquaticy import sandbox as werkstatt
-
-            einstellungen = SESSION.settings()
-            laufzeit = None
-            with contextlib.suppress(Exception):
-                laufzeit = werkstatt.runtime_cached()
-            self._json({
-                "internet": bool(getattr(einstellungen, "vm_internet", False)),
-                "lan": bool(getattr(einstellungen, "vm_lan", False)),
-                "ultra": bool(SESSION.ultra),
-                "runtime": laufzeit is not None,
-            })
-        elif route == "/api/plugins":
-            from aquaticy import plugins as plugin_mod
-
-            self._json({"commands": plugin_mod.commands(SESSION.settings(), SESSION.ultra)})
-        elif route == "/api/coworkers":
-            nur = (parse_qs(urlsplit(self.path).query).get("badge") or [""])[0] == "1"
-            sitzung = SESSION.current() if isinstance(SESSION, SessionProxy) else SESSION
-            self._json(coworkers_view(sitzung, badge_only=nur))
-        elif route == "/api/werkstatt/bildschirm":
-            self._workshop_screen()
         elif route == "/api/prefs":
             self._json(ui_state().read())
         elif route == "/api/models":
@@ -5921,16 +3626,6 @@ class Handler(BaseHTTPRequestHandler):
                      "note": "Ohne Sprachmodell und ohne Schlüssel", "source": "operator",
                      "source_label": ""}] + [m for m in alle
                                             if m.get("id") != standard_mod.MODEL_ID]
-            if SHARDING is not None and SHARDING.ready():
-                alle = [{"id": SPLIT_MODEL_ID, "label": SHARDING.label(), "kind": "Verbund",
-                         "note": f"Verteilt auf {SHARDING.servers()} Server",
-                         "source": "operator", "source_label": ""}] + [
-                    m for m in alle if m.get("id") != SPLIT_MODEL_ID]
-            if UPGRADE_DIR is not None:
-                from aquaticy import upgrading
-
-                current = SESSION.current() if isinstance(SESSION, SessionProxy) else SESSION
-                alle = upgrading.picker_entries(UPGRADE_DIR, alle, bool(current.ultra))
             antwort: dict[str, Any] = {
                 "models": alle,
 
@@ -5970,22 +3665,6 @@ class Handler(BaseHTTPRequestHandler):
                     if settings.quota is None else None
                 ),
             })
-        elif route == "/api/system":
-            if not SESSION.ultra:
-                self._json({"error": "Die Auslastungsanzeige gibt es nur mit Ultra."}, 403)
-                return
-            from aquaticy.system import snapshot
-
-            settings = SESSION.settings()
-            payload = snapshot(settings.data_dir)
-
-            if settings.memory_enabled:
-                payload["storage"] = storage_view(SESSION.memory().usage())
-            payload["gauges"] = system_gauges(payload)
-            if CLUSTER is not None and CLUSTER.joined:
-                with contextlib.suppress(Exception):
-                    payload["cluster"] = cluster_gauges(CLUSTER)
-            self._json(payload)
         elif route == "/api/notes":
             settings = SESSION.settings()
             cache = Cache(settings.db_path, settings.cache_ttl_hours)
@@ -6094,7 +3773,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 if not self._bot_gate(payload, geraet, neue_kennung):
                     return
-                konto_schluessel = "login:" + str(payload.get("email", "")).strip().lower()
+                konto_schluessel = "login:" + AUTH.login_key(str(payload.get("email", "")))
                 if LOGIN_FAILS.full(konto_schluessel):
                     self._json({"ok": False, "error": (
                         "Zu viele falsche Passwörter für dieses Konto. Bitte warte "
@@ -6107,7 +3786,7 @@ class Handler(BaseHTTPRequestHandler):
                     LOGIN_FAILS.allow(konto_schluessel)
                     BOT_FAILS.add(*self._bot_keys(geraet, neue_kennung))
                     self._json({"ok": False, "error": WRONG_LOGIN_SINGLE if AUTH.single
-                                else "E-Mail oder Passwort stimmt nicht."}, 401)
+                                else WRONG_LOGIN}, 401)
                     return
 
             if AIGUARD is not None:
@@ -6116,7 +3795,7 @@ class Handler(BaseHTTPRequestHandler):
                 if AIGUARD.is_banned(ip=self._client_ip()) is not None:
                     self._json({"ok": False, "error": BANNED_MESSAGE, "code": "banned"}, 403)
                     return
-            falsch = WRONG_LOGIN_SINGLE if AUTH.single else "E-Mail oder Passwort stimmt nicht."
+            falsch = WRONG_LOGIN_SINGLE if AUTH.single else WRONG_LOGIN
             if account is None:  # pragma: no cover
                 self._json({"ok": False, "error": falsch}, 401)
                 return
@@ -6136,8 +3815,6 @@ class Handler(BaseHTTPRequestHandler):
 
             with contextlib.suppress(Exception):
                 AUTH.note_device(account.id, geraet)
-            with contextlib.suppress(Exception):
-                start_user_scheduler(account)
             if (payload.get("learning_accepted") is True
                     and payload.get("learning_version") == LEGAL_VERSION
                     and (AIGUARD is None or AIGUARD.is_banned(
@@ -6160,16 +3837,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json_cookie({"ok": True}, AUTH_COOKIE, "", 0)
         elif route in ACCOUNT_ROUTES:
             self._account_action(route, self._read_json(limit=AUTH_BODY_BYTES))
-        elif route == "/api/cluster":
-            antwort, status = cluster_action(SESSION.current(),
-                                             self._read_json(limit=AUTH_BODY_BYTES))
-            self._json(antwort, status)
         elif route == "/api/linked":
             antwort, status = linked_action(self._read_json(limit=AUTH_BODY_BYTES))
-            self._json(antwort, status)
-        elif route == "/api/upgrades":
-            antwort, status = upgrades_action(SESSION.current(),
-                                              self._read_json(limit=AUTH_BODY_BYTES))
             self._json(antwort, status)
         elif route == "/api/learning":
             from aquaticy.learning import Learning
@@ -6209,8 +3878,7 @@ class Handler(BaseHTTPRequestHandler):
                 cache.rename_chat(selected.chat_id(), "Secure Pro")
                 self._json({"ok": True, "session_id": selected.chat_id()})
             else:
-                result, status = feature_action(SESSION.current(), payload)
-                self._json(result, status)
+                self._json({"error": "Unbekannte Aktion."}, 400)
         elif route == "/api/clear":
             selected, _ = SESSION.switch_chat()
             self._json({"ok": True, "current": selected.chat_id()})
@@ -6232,40 +3900,15 @@ class Handler(BaseHTTPRequestHandler):
                         **(art or {"kind": "chat", "mode": "normal"}),
                         "secure_pro": Cache(selected.settings().db_path).is_secure_chat(
                             selected.chat_id())})
-        elif route == "/api/ha":
-            if not SESSION.ultra:
-                self._json({"ok": False, "error": "Home Assistant gibt es nur mit Ultra."},
-                           403)
-                return
-            self._json(self._ha_probe(self._read_json()))
         elif route == "/api/probe":
             self._json(self._probe(self._read_json()))
         elif route == "/api/google":
             self._json(self._google(self._read_json()))
-        elif route == "/api/storage":
-            if not SESSION.ultra:
-                self._json({"ok": False,
-                            "error": "Die Lagerverwaltung gibt es nur mit Ultra."}, 403)
-                return
-            self._json(self._storage_probe(self._read_json()))
         elif route == "/api/addons":
             antwort, status = addon_action(self._read_json())
             self._json(antwort, status)
-        elif route == "/api/addons/qr":
-            antwort, status = addon_qr(SESSION.current(), self._read_json(limit=AUTH_BODY_BYTES))
-            self._json(antwort, status)
-        elif route == "/api/messenger/native":
-            antwort, status = native_action(
-                SESSION.current(), self._read_json(limit=AUTH_BODY_BYTES))
-            self._json(antwort, status)
-        elif route == "/api/werkstatt/eingabe":
-            antwort, status = workshop_input(self._read_json())
-            self._json(antwort, status)
         elif route == "/api/chat-edit":
             self._json(self._chat_edit(self._read_json()))
-        elif route == "/api/coworkers":
-            antwort, status = coworker_action(self._read_json(), self._account())
-            self._json(antwort, status)
         elif route == "/api/prefs":
             self._json(ui_state().write(self._read_json()))
         elif route == "/api/stop":
@@ -6488,46 +4131,6 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
             return {"ok": True, "removed": removed}
         return {"ok": False, "error": f"unbekannte Aktion '{action}'"}
 
-    def _storage_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Sucht die Lagerverwaltung im Netz oder testet eine eingetippte Adresse."""
-        from aquaticy.storage import Storage, StorageError, discover
-
-        settings = SESSION.settings()
-        url = str(payload.get("url", "")).strip()
-        if not url:
-            found = discover(settings.lan_subnet)
-            if not found:
-                return {
-                    "ok": False,
-                    "error": (
-                        "Nichts gefunden. Läuft die Lagerverwaltung? Sonst die Adresse "
-                        "von Hand eintragen, z.B. 192.168.1.5:3000."
-                    ),
-                }
-            return {"ok": True, "url": found[0], "found": found}
-
-        from aquaticy.storage import normalize_url
-
-        if not normalize_url(url):
-            return {"ok": False, "error": "Die Adresse ist ungültig."}
-
-        client = Storage(url, access="read")
-        try:
-            info = client.info()
-            rooms = client.rooms()
-        except StorageError as exc:
-            return {"ok": False, "error": str(exc)}
-        finally:
-            client.close()
-        items = sum(int(room.get("itemCount") or 0) for room in rooms)
-        return {
-            "ok": True,
-            "url": client.url,
-            "name": str(info.get("name") or "Lagerverwaltung"),
-            "version": str(info.get("version") or ""),
-            "rooms": len(rooms),
-            "items": items,
-        }
 
     def _google(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Verbindet, trennt oder meldet den Stand des Google-Kontos.
@@ -6697,64 +4300,6 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
                        "backend": backend},
         }
 
-    def _ha_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Sucht eine Instanz oder testet die eingetragenen Angaben.
-
-        Damit klappt die Einrichtung in der Oberflaeche genauso wie mit
-        `aquaticy connect-ha`: Knopf druecken, Adresse steht da, Token einfuegen,
-        Knopf druecken, fertig.
-        """
-        from aquaticy.homeassistant import HomeAssistant, HomeAssistantError, discover
-
-        if payload.get("action") == "discover":
-            try:
-                return {"ok": True, "found": discover()}
-            except Exception as exc:
-                return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
-
-        from aquaticy.homeassistant import normalize_url
-
-        settings = SESSION.settings()
-        url = str(payload.get("url") or settings.ha_url).strip()
-        eingetippt = str(payload.get("token") or "").strip()
-        token = eingetippt or settings.ha_token
-        if (not eingetippt and settings.ha_token and settings.ha_url
-                and normalize_url(url) != normalize_url(settings.ha_url)):
-            return {"ok": False, "error": (
-                "Für eine neue Adresse bitte den Token dazu eintragen — der "
-                "gespeicherte geht nur an die gespeicherte Adresse."
-            )}
-        if not url or not token:
-            return {"ok": False, "error": "Bitte trag die Adresse und den Zugangsschlüssel ein."}
-        if not normalize_url(url):
-            return {"ok": False, "error": "Die Adresse ist ungültig."}
-        client = HomeAssistant(url, token)
-        try:
-            hello = client.ping()
-            counts = client.domains()
-        except HomeAssistantError as exc:
-            return {"ok": False, "error": str(exc)}
-        gespeichert = False
-        if payload.get("save") and (eingetippt or normalize_url(url)
-                                    != normalize_url(settings.ha_url)):
-            neu = {"AQUATICY_HA_URL": client.url}
-            if eingetippt:
-                neu[HA_TOKEN_FIELD] = eingetippt
-            try:
-                save_values(neu)
-            except ValueError as exc:
-                return {"ok": False, "error": str(exc)}
-            gespeichert = True
-        return {
-            "ok": True,
-            "name": hello,
-            "url": client.url,
-            "entities": sum(counts.values()),
-            "domains": counts,
-            "saved": gespeichert,
-
-            "control": bool(SESSION.settings().ha_control),
-        }
 
     def _send_ui(self) -> None:
         """Liefert die Oberflaeche und legt das Zugangswort als Cookie ab.
@@ -6851,9 +4396,6 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
             except ValueError as exc:
                 self._json({"ok": False, "error": str(exc)}, 409)
                 return
-
-            with contextlib.suppress(Exception):
-                start_user_scheduler(konto)
             self._json({"ok": True})
             return
 
@@ -6877,10 +4419,8 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
 
     def _chat(self) -> None:
         """Fuehrt die Anfrage aus und streamt die Ereignisse als SSE."""
+        # 16.0.1 (Aquaticy-Test): Secure Pro beantwortet nur Fragen -- jedes Konto darf es.
         secure = Cache(SESSION.settings().db_path).is_secure_chat(SESSION.chat_id())
-        if secure and not host_feature_owner(SESSION.current()):
-            self._json({"error": "Nur der Besitzer kann den Secure-Pro-Chat nutzen."}, 403)
-            return
         kontingent = SESSION.settings().quota
 
         eigenes_modell = SESSION.settings().key_source(SESSION.settings().model) == "own"
@@ -6911,15 +4451,14 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
         wunsch: dict[str, Any] = {
             name: payload[name]
             for name in (
-                "mode", "effort", "structured", "recheck", "online", "sandbox", "agents",
-                "visual_sources"
+                "mode", "effort", "structured", "recheck", "online", "agents", "visual_sources"
             )
             if name in payload
         }
         if "structured" not in wunsch and "thinking" in payload:
             wunsch["structured"] = payload["thinking"]
         if secure:
-            wunsch.update(mode="normal", structured=False, recheck=False, sandbox=False,
+            wunsch.update(mode="normal", structured=False, recheck=False,
                           visual_sources=False, agents=1)
 
         if payload.get("image_mode") not in (None, False):
@@ -6943,7 +4482,6 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
         structured = bool(stand["structured"])
         recheck = bool(stand["recheck"])
         online = bool(stand["online"])
-        sandbox = bool(stand["sandbox"])
         agents = int(stand.get("agents", 12))
         visual_sources = bool(stand.get("visual_sources", False))
         agents = max(1, min(50 if mode == "pro" else 12, agents))
@@ -6952,16 +4490,6 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
             online = True
             visual_sources = False
 
-        vm_switch = False
-        if mode == "code" and sandbox:
-            konto_vorab = self._account()
-            if (konto_vorab is not None and not getattr(konto_vorab, "ultra", False)):
-                from aquaticy.aiguard import security_topic
-
-                if security_topic(message):
-                    mode, sandbox, online, vm_switch = "normal", False, True, True
-                    with contextlib.suppress(Exception):
-                        ui_state().write({"mode": "normal", "sandbox": False})
         if visual_sources and not selected_vision_model(SESSION.settings()):
             self._json(
                 {"error": "Webcams und Satellitenbilder brauchen ein bildfähiges "
@@ -7001,10 +4529,6 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
         if session.chat_id():
             lauf.chat = session.chat_id()
             lauf.add({"type": "chat", "session_id": session.chat_id()})
-        if vm_switch:
-            from aquaticy.aiguard import VM_SWITCH_MESSAGE
-
-            lauf.add({"type": "mode_switch", "mode": "normal", "text": VM_SWITCH_MESSAGE})
         if kontingent is not None:
             kontingent.begin()
         seen_done = threading.Event()
@@ -7073,7 +4597,6 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
                     recheck=recheck,
                     effort=effort,
                     online=online,
-                    sandbox=sandbox,
                     agents=agents,
                     visual_sources=visual_sources,
                 )
@@ -7177,9 +4700,19 @@ def lan_address() -> str:
     return "" if is_tailscale(address) else address
 
 
+_TAILSCALE_V4 = ipaddress.ip_network("100.64.0.0/10")
+_TAILSCALE_V6 = ipaddress.ip_network("fd7a:115c:a1e0::/48")
+
+
 def is_tailscale(address: str) -> bool:
     """Liegt *address* in einem der Tailscale-Adressbereiche?"""
-    return cluster.tailscale_ip_ok(address)
+    try:
+        ip = ipaddress.ip_address(str(address).split("%", 1)[0])
+    except ValueError:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return ip in _TAILSCALE_V4 or ip in _TAILSCALE_V6
 
 
 def tailscale_address() -> str:
@@ -7280,234 +4813,6 @@ def _warm_up_once() -> None:
     threading.Thread(target=_warm_up, daemon=True, name="aquaticy-warmup").start()
 
 
-def _cluster_load() -> dict[str, Any]:
-    """Wie viel dieser Server gerade zu tun hat -- fuer den Lastausgleich."""
-    with SESSIONS._lock:
-        sitzungen = list(SESSIONS._sessions.values())
-    laeufe = 0
-    for sitzung in [chat for s in sitzungen for chat in s.chat_sessions()]:
-        with contextlib.suppress(Exception):
-            buch = sitzung.runs
-            with buch._lock:
-                laeufe += sum(1 for lauf in buch._runs.values() if not lauf.done)
-    last: dict[str, Any] = {"runs": laeufe, "sessions": len(sitzungen)}
-    if SHARDING is not None:
-        with contextlib.suppress(Exception):
-            last["split"] = SHARDING.worker_status()
-    return last
-
-
-def _cluster_hardware() -> dict[str, Any]:
-    """Hardware und Auslastung dieses Rechners fuer den Verbund (11.3.2 Sol).
-
-    Der Master teilt danach ein, wer Modelle rechnet und wer nur die Website
-    bedient; die Auslastungsanzeige zeigt es fuer jeden Server.
-    """
-    from aquaticy.local_model import installed_models
-    from aquaticy.system import cpu_load, gpu_use, memory_use
-
-    cpu, ram, gpu = cpu_load(), memory_use(), gpu_use()
-    try:
-        modelle = len(installed_models(OLLAMA_URL()))
-    except Exception:
-        modelle = 0
-    return {"cores": cpu.get("cores"), "cpu_pct": cpu.get("percent"),
-            "ram_gb": ram.get("total_gb"), "ram_used_gb": ram.get("used_gb"),
-            "ram_pct": ram.get("percent"), "gpu": gpu.get("name", ""),
-            "vram_gb": gpu.get("total_gb"), "vram_used_gb": gpu.get("used_gb"),
-            "gpu_pct": gpu.get("percent"), "ollama_models": modelle}
-
-
-def _cluster_wants_models(user_id: str) -> bool:
-    """Rechnet dieses Konto mit lokalen Modellen? Dann gehoert es auf einen Modell-Server.
-
-    Aus der .env seines Profils (wie _profile_settings), sonst die Vorgabe des
-    Servers: Hauptmodell, Code-Modell, Agenten-Modell.
-    """
-    from aquaticy.local_model import local_name
-
-    if AUTH is None or AUTH.account(user_id) is None:
-        return False
-    try:
-        roh = read_env_file(AUTH.profile_dir(user_id) / ".env")
-    except Exception:
-        roh = {}
-    vorgabe = get_settings()
-    for feld, attr in (("AQUATICY_MODEL", "model"), ("AQUATICY_CODE_MODEL", "code_model"),
-                       ("AQUATICY_SUBAGENT_MODEL", "subagent_model")):
-        modell = str(roh.get(feld) or getattr(vorgabe, attr, "") or "").strip()
-        if modell and (local_name(modell) or modell == SPLIT_MODEL_ID):
-            return True
-    return False
-
-
-def _cluster_release(user_id: str) -> bool:
-    """Gibt ein Konto an einen anderen Server ab -- nur, wenn hier nichts laeuft."""
-    with SESSIONS._lock:
-        sitzung = SESSIONS._sessions.get(user_id)
-    if sitzung is not None:
-        for chat in sitzung.chat_sessions():
-            with contextlib.suppress(Exception), chat.runs._lock:
-                if any(not lauf.done for lauf in chat.runs._runs.values()):
-                    return False
-    konto = AUTH.account(user_id) if AUTH is not None else None
-    if konto is not None:
-        forget_account_runtime(konto)
-    return True
-
-
-def _cluster_adopt(user_id: str) -> None:
-    konto = AUTH.account(user_id) if AUTH is not None else None
-    if konto is not None:
-        start_user_scheduler(konto)
-
-
-def _cluster_restart() -> None:
-    """Nach dem Beitritt: einmal neu starten, damit alles die Daten des Verbunds liest."""
-    print("  [Verbund] Starte neu, um die Daten des Verbunds zu laden ...", flush=True)
-    _CLUSTER_RESTART.set()
-    if SERVER is not None:
-        SERVER.shutdown()
-
-
-def cluster_view(session: Any) -> tuple[dict[str, Any], int]:
-    """Der Verbund fuer die Dev settings -- nur fuer Ultra."""
-    if not getattr(session, "ultra", False):
-        return {"error": "Der Server-Verbund gehört zu Ultra.", "locked": True}, 403
-    if CLUSTER is None:
-        return {"error": "Der Verbund ist hier nicht verfügbar.", "enabled": False}, 200
-    return _cluster_view_full(), 200
-
-
-def _cluster_view_full() -> dict[str, Any]:
-    """Der Verbund samt "Serverlast aufteilen" (10.2.0 Luna)."""
-    antwort = CLUSTER.view()
-    if SHARDING is not None:
-        with contextlib.suppress(Exception):
-            antwort["split"] = SHARDING.view()
-    return antwort
-
-
-def upgrades_view(session: Any) -> dict[str, Any]:
-    """Auto-Upgrading (10.0 Luna): die Startmeldung fuer jedes Konto, der Stand fuer Ultra."""
-    if UPGRADE_DIR is None:
-        return {"available": False, "notice": None}
-    from aquaticy import upgrading
-
-    konto = getattr(getattr(session, "account", None), "id", "") or ""
-    antwort: dict[str, Any] = {"available": True,
-                               "notice": upgrading.launch_notice(UPGRADE_DIR, konto)}
-    if getattr(session, "ultra", False):
-        antwort["ultra"] = upgrading.view(UPGRADE_DIR)
-    return antwort
-
-
-def upgrades_action(session: Any, payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """Gesehen (jedes Konto); Schalter, Training, Upgraden, Ueberspringen und
-    Zuruecksetzen (nur Ultra -- geprueft hier, nicht im Browser)."""
-    if UPGRADE_DIR is None:
-        return {"error": "Auto-Upgrading läuft nur mit der Weboberfläche."}, 400
-    from aquaticy import upgrading
-
-    aktion = str(payload.get("action", ""))
-    konto = getattr(getattr(session, "account", None), "id", "") or ""
-    try:
-        if aktion == "seen":
-            upgrading.mark_seen(UPGRADE_DIR, konto, str(payload.get("id", "")))
-            return {"ok": True}, 200
-        if not getattr(session, "ultra", False):
-            return {"error": "Auto-Upgrading steuert nur ein Ultra-Konto.", "locked": True}, 403
-        base = str(payload.get("base", ""))
-        if aktion == "enable":
-            from aquaticy.local_model import installed_models
-
-            an = payload.get("on") is True
-            lokal = installed_models(OLLAMA_URL()) if an else []
-            upgrading.set_enabled(UPGRADE_DIR, an, lokal)
-            if an and UPGRADER is not None:
-                UPGRADER.run_now()
-        elif aktion == "train":
-            if not upgrading.load(UPGRADE_DIR)["enabled"]:
-                return {"error": "Schalte Auto-Upgrading zuerst ein."}, 400
-            if UPGRADER is not None:
-                UPGRADER.run_now()
-        elif aktion == "upgrade":
-            upgrading.upgrade(UPGRADE_DIR, base)
-        elif aktion == "skip":
-            upgrading.skip(UPGRADE_DIR, base, upgrading.OllamaBackend(OLLAMA_URL()))
-        elif aktion == "rollback":
-            upgrading.rollback(UPGRADE_DIR, base, str(payload.get("version", "")))
-        else:
-            return {"error": "Unbekannte Aktion."}, 400
-    except upgrading.UpgradeError as exc:
-        return {"error": str(exc)}, 400
-    return {"ok": True, "ultra": upgrading.view(UPGRADE_DIR)}, 200
-
-
-def OLLAMA_URL() -> str:
-    """Die Ollama-Adresse des Betreibers (fuer Auto-Upgrading)."""
-    from aquaticy.system import ollama_base
-
-    return ollama_base(get_settings())
-
-
-def cluster_action(session: Any, payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """Schalten, einladen, Code bestaetigen, entfernen, verlassen -- nur Ultra."""
-    if not getattr(session, "ultra", False):
-        return {"error": "Der Server-Verbund gehört zu Ultra.", "locked": True}, 403
-    if CLUSTER is None:
-        return {"error": "Der Verbund ist hier nicht verfügbar."}, 400
-    aktion = str(payload.get("action", ""))
-    try:
-        if aktion == "enable":
-            CLUSTER.set_enabled(bool(payload.get("on")))
-        elif aktion == "invite":
-            adresse = str(payload.get("address", "")).strip()
-            port = cluster.parse_port(payload.get("port", DEFAULT_PORT))
-            if not CLUSTER.enabled:
-                return {"error": "Schalte den Server-Verbund zuerst ein."}, 400
-            CLUSTER.invite(adresse, port)
-        elif aktion == "confirm":
-            CLUSTER.confirm(str(payload.get("id", "")), str(payload.get("code", "")))
-        elif aktion == "remove":
-            if not CLUSTER.is_master:
-                return {"error": "Entfernen kann nur der Master."}, 403
-            CLUSTER.remove(str(payload.get("node", "")))
-        elif aktion == "failover":
-            if not CLUSTER.is_master:
-                return {"error": "Konten übernehmen kann nur der Master."}, 403
-            CLUSTER.failover(str(payload.get("node", "")))
-        elif aktion == "leave":
-            CLUSTER.leave()
-        elif aktion == "split":
-            if not CLUSTER.is_master:
-                return {"error": "Die Serverlast teilt nur der Master auf."}, 403
-            an = payload.get("on") is True
-            modell = str(payload.get("model") or "").strip()
-            if an:
-                from aquaticy.sharding import ollama_models
-
-                if modell not in {m["name"] for m in ollama_models(OLLAMA_URL())}:
-                    return {"error": "Dieses Modell gibt es in Ollama auf dem Master nicht."}, 400
-            CLUSTER.set_split(an, modell)
-            if SHARDING is not None:
-                SHARDING.wake()
-        elif aktion == "split-restart":
-            if not CLUSTER.is_master:
-                return {"error": "Neu verteilen kann nur der Master."}, 403
-            if not CLUSTER.split_on:
-                return {"error": "Schalte „Serverlast aufteilen“ zuerst ein."}, 400
-            if SHARDING is not None:
-                SHARDING.request_restart()
-        else:
-            return {"error": "Unbekannte Aktion."}, 400
-    except cluster.ClusterError as exc:
-        return {"error": str(exc)}, 400
-    except (OSError, ValueError) as exc:
-        return {"error": f"Der andere Server ist nicht erreichbar ({type(exc).__name__})."}, 502
-    return _cluster_view_full(), 200
-
-
 BACKUP_PORTS = 20
 _PORT_BELEGT = {98, 48, 10048, 13, 10013}
 
@@ -7515,8 +4820,7 @@ _PORT_BELEGT = {98, 48, 10048, 13, 10013}
 def port_candidates(port: int) -> list[int]:
     """Der eingestellte Port und dahinter die Ersatz-Ports.
 
-    Den UDP-Port des Server-Verbunds laesst die Liste aus, damit sich beides
-    nicht verwechseln laesst. Port 0 heisst "irgendeiner" -- dann nur der.
+    Port 0 heisst "irgendeiner" -- dann nur der.
     """
     port = int(port)
     if port == 0:
@@ -7525,8 +4829,7 @@ def port_candidates(port: int) -> list[int]:
     kandidat = port
     while len(out) <= BACKUP_PORTS and kandidat < 65535:
         kandidat += 1
-        if kandidat != cluster.DISCOVERY_PORT:
-            out.append(kandidat)
+        out.append(kandidat)
     if port < 1024 and DEFAULT_PORT not in out:
         out.append(DEFAULT_PORT)
     return out
@@ -7656,156 +4959,6 @@ class PublicHandler(Handler):
     def _https(self) -> bool:
         return True
 
-    def _origin_ok(self) -> bool:
-        """Wie sonst -- und die eigene Domain zaehlt auch dann, wenn der Tunnel
-        den Host umschreibt. Fremde Seiten kommen weiter nicht durch."""
-        if super()._origin_ok():
-            return True
-        herkunft = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
-        if herkunft in {"cross-site", "same-site"} or WEBSITE is None:
-            return False
-        origin = (self.headers.get("Origin") or "").strip().lower()
-        return origin == f"https://{WEBSITE.config.domain}"
-
-    def _cluster_route(self) -> None:
-        self.responded = False
-        self._json({"error": "unbekannter Pfad"}, 404)
-
-
-class _TLSServer(AquaticyServer):
-    """HTTPS fuer den Tunnel-Eingang.
-
-    Der TLS-Handschlag laeuft im Faden der Verbindung, nicht in der Schleife,
-    die Verbindungen annimmt -- ein haengender Client hielte sonst alle auf.
-    """
-
-    def __init__(self, address: tuple[str, int], handler: Any, context: Any) -> None:
-        self.context = context
-        super().__init__(address, handler)
-
-    def _reject_overload(self, request: Any) -> None:
-        return
-
-    def _serve_connection(self, request: Any, client_address: Any) -> None:
-        import ssl
-
-        try:
-            request.settimeout(15)
-            request = self.context.wrap_socket(request, server_side=True)
-            request.settimeout(None)
-        except (ssl.SSLError, OSError):
-            with contextlib.suppress(OSError):
-                request.close()
-            return
-        super()._serve_connection(request, client_address)
-
-
-class _HomeTLSServer(_TLSServer):
-    """HTTPS-Eingang im Heimnetz: derselbe Handler wie der normale -- dieselbe Anmeldung."""
-
-
-def _start_home_https(host: str, data_dir: Path, http_port: int) -> None:
-    """Startet https://aquaticy.local und https://<rechner>.ts.net (15.5.5).
-
-    Nur wenn Aquaticy im Heimnetz erreichbar ist (--lan oder Hintergrund). Nichts davon darf
-    den Start kosten: ohne Zertifikat bleibt es bei der normalen Adresse.
-    """
-    global HOME_TLS, HOME_SERVER, HOME_ANNOUNCER
-    from aquaticy import homename
-
-    if not is_public_host(host) or not homename.enabled():
-        return
-    adressen = [a for a in (lan_address(), tailscale_address()) if a]
-    server = None
-    try:
-        tls = homename.HomeTLS(data_dir, adressen)
-        wunsch = homename.port()
-        kontext = tls.load(wunsch)
-        letzter: OSError | None = None
-        server = None
-        for kandidat in port_candidates(wunsch):
-            try:
-                server = _HomeTLSServer((host, kandidat), Handler, kontext)
-                break
-            except OSError as exc:
-                if exc.errno not in _PORT_BELEGT:
-                    raise
-                letzter = exc
-        if server is None:
-            raise letzter or OSError("Kein freier Port gefunden.")
-        if server.server_address[1] != wunsch:
-            server.context = tls.load(server.server_address[1])
-    except Exception as exc:
-        if server is not None:
-            server.server_close()
-        print(f"  [HTTPS] nicht gestartet: {type(exc).__name__}: {exc}", flush=True)
-        return
-    threading.Thread(target=server.serve_forever, name="aquaticy-https", daemon=True).start()
-    HOME_TLS, HOME_SERVER = tls, server
-    ansage = homename.Announcer()
-    if ansage.start(lan_address(), server.server_address[1]):
-        HOME_ANNOUNCER = ansage
-    else:
-        tls.notes.append(ansage.reason)
-    for url, note in tls.urls:
-        print(f"  {url} ({note})", flush=True)
-    for note in tls.notes:
-        print(f"  [HTTPS] {note}", flush=True)
-    print(f"  Zertifikat fürs Heimnetz: http://{lan_address() or '<IP>'}:{http_port}"
-          "/zertifikat – einmal je Gerät vertrauen.", flush=True)
-
-
-def _stop_home_https() -> None:
-    global HOME_TLS, HOME_SERVER, HOME_ANNOUNCER
-    if HOME_ANNOUNCER is not None:
-        HOME_ANNOUNCER.stop()
-        HOME_ANNOUNCER = None
-    if HOME_SERVER is not None:
-        with contextlib.suppress(Exception):
-            HOME_SERVER.shutdown()
-            HOME_SERVER.server_close()
-        HOME_SERVER = None
-    HOME_TLS = None
-
-
-def bind_public(context: Any, port: int) -> ThreadingHTTPServer:
-    """Der Tunnel-Eingang: nur 127.0.0.1, nur HTTPS, auf *port* oder dem naechsten freien."""
-    letzter: OSError | None = None
-    for kandidat in port_candidates(port):
-        try:
-            return _TLSServer(("127.0.0.1", kandidat), PublicHandler, context)
-        except OSError as exc:
-            if exc.errno not in _PORT_BELEGT:
-                raise
-            letzter = exc
-    raise letzter or OSError("Kein freier Port gefunden.")
-
-
-def _start_website(data_dir: Path) -> tuple[Any, Any]:
-    """Startet Tunnel-Eingang und Website, wenn eine Domain eingerichtet ist.
-
-    Returns: (Website, Eingang) -- oder (None, None). Nichts davon darf den
-    Start kosten: ohne Website laeuft Aquaticy eben im Heimnetz.
-    """
-    from aquaticy import website
-
-    try:
-        seite = website.from_settings(data_dir)
-    except website.WebsiteError as exc:
-        print(f"  [Website] {exc}", flush=True)
-        return None, None
-    if seite is None:
-        return None, None
-    try:
-        eingang = bind_public(seite.tls(), seite.config.public_port)
-    except Exception as exc:
-        print(f"  [Website] Eingang nicht gestartet: {type(exc).__name__}: {exc}", flush=True)
-        return None, None
-    threading.Thread(target=eingang.serve_forever, name="aquaticy-public", daemon=True).start()
-    seite.start(eingang.server_address[1])
-    print(f"  Website:    https://{seite.config.domain}/ (über Cloudflare)", flush=True)
-    return seite, eingang
-
 
 class AlreadyRunning(RuntimeError):
     """Ein anderes Aquaticy arbeitet schon mit diesem Datenordner (9.6.9 Luna)."""
@@ -7878,19 +5031,8 @@ def serve(
     sperre = DataDirLock(get_settings().data_dir)
     try:
         _serve(host, port, open_browser, token)
-    except BaseException:
-        _stop_schedulers()
-        raise
     finally:
         sperre.release()
-    if _CLUSTER_RESTART.is_set():
-        import sys
-
-        with contextlib.suppress(Exception):
-            sys.stdout.flush()
-            sys.stderr.flush()
-        os.execv(sys.executable, [sys.executable, "-c", "from aquaticy.cli import main; main()",
-                                 *sys.argv[1:]])
 
 
 CODE_CHAT_ONLY = "Das ist ein Code-Chat. Für Normal oder Pro startest du einen neuen Chat."
@@ -7937,184 +5079,44 @@ def auth_banner(store: AuthStore) -> list[str]:
 
 
 def _serve(host: str, port: int, open_browser: bool, token: str) -> None:
-    global AUTH, TOKEN
+    global AUTH, TOKEN, AIGUARD, SERVER
 
-    _CLUSTER_RESTART.clear()
     TOKEN = token
     data_dir = get_settings().data_dir
     code = pro_code_for(data_dir)
+    from aquaticy.aiguard import guard_for
     from aquaticy.auth import ultra_code_for
 
     ultra = ultra_code_for(data_dir)
     einzeln = not bool(getattr(get_settings(), "accounts", False))
     AUTH = AuthStore(data_dir, code, ultra, single=einzeln)
-    global AIGUARD
-    from aquaticy.aiguard import guard_for
-
     AIGUARD = guard_for(data_dir)
     for zeile in auth_banner(AUTH):
         print(zeile)
-
-    try:
-        from aquaticy.sandbox import sweep
-
-        threading.Thread(target=sweep, daemon=True).start()
-    except Exception:  # pragma: no cover
-        pass
-
-    try:
-        global COWORKER_SCHEDULER
-        from aquaticy import coworker as coworker_mod
-
-        COWORKER_SCHEDULER = coworker_mod.Scheduler(SESSION.settings, plan=lambda: "ultra")
-        COWORKER_SCHEDULER.start()
-        for account in AUTH.active_accounts():
-            start_user_scheduler(account)
-
-        with contextlib.suppress(Exception):
-            _bridge_runner(DEFAULT_SESSION).ensure_running()
-    except Exception:  # pragma: no cover
-        pass
-    try:
-        server = bind_server(host, port)
-    except BaseException:
-        _stop_schedulers()
-        raise
+    server = bind_server(host, port)
     if server.server_address[1] != port:
         print(f"  Aquaticy läuft auf Port {server.server_address[1]}.")
         for address, note in addresses_for(host, server.server_address[1], token):
             print(f"  {address} ({note})")
     port = server.server_address[1]
-    global SERVER, CLUSTER, UPGRADE_DIR, UPGRADER, SHARDING
     research_stop: threading.Event | None = None
     research_worker: threading.Thread | None = None
-    from aquaticy.secure_pro import Watcher
-
-    def security_notice(text: str) -> bool | None:
-        """Warnung an WhatsApp/Signal. None: kein Messenger gekoppelt (dann nur der Chat).
-
-        15.5.5: alert_owner statt notify_owner -- Warnungen gehen auch raus, wenn der Chat
-        ueber den Messenger aus ist. Vorher zaehlten sie still als zugestellt.
-        """
-        if AUTH is None or not AUTH.single:
-            return None
-        owner = AUTH.ensure_owner_ultra()
-        if owner is None or _native_paused(owner):
-            return None
-        hub = _native_hub(SESSIONS.get(owner))
-        hub.ensure_running()
-        if not hub.owner_channels():
-            return None
-        return bool(hub.alert_owner(text))
-
-    def security_report(text: str) -> bool:
-        """Wichtiges aus Secure Pro erscheint im Secure-Pro-Chat (14.1.3 Luna)."""
-        from aquaticy.agent import new_session_id
-
-        if AUTH is None or not AUTH.single:
-            return False
-        owner = AUTH.ensure_owner_ultra()
-        if owner is None or _native_paused(owner):
-            return False
-        settings = SESSIONS.get(owner).settings()
-        cache = Cache(settings.db_path, settings.cache_ttl_hours)
-        chat = cache.latest_secure_chat()
-        if not chat:
-            chat = new_session_id()
-            cache.mark_secure_chat(chat)
-            cache.rename_chat(chat, "Secure Pro")
-        from aquaticy.secure_pro import SIGNATURE
-
-        inhalt = text.removeprefix(SIGNATURE + "\n")
-        cache.add_history(chat, "🛡 Secure Pro · Meldung", inhalt, {"secure_report": True},
-                          mode="normal")
-        with contextlib.suppress(Exception):
-            cache.mark_unread(chat, reason="secure")
-        return True
-
-    global SECURE_WATCHER
-    security_watcher = Watcher(data_dir, security_notice, security_report)
-    SECURE_WATCHER = security_watcher
-
     try:
         from aquaticy.learning import Learning
         from aquaticy.research import start_cleanup
 
         research_stop, research_worker = start_cleanup(Learning(data_dir).research)
         SERVER = server
-
-        from aquaticy import upgrading
-        from aquaticy.local_model import installed_models
-
-        UPGRADE_DIR = data_dir
-        UPGRADER = upgrading.Trainer(
-            data_dir,
-            lambda: Learning(data_dir).confirmed_facts(upgrading.MAX_FACTS, metadata=True),
-            lambda: upgrading.OllamaBackend(OLLAMA_URL()),
-            lambda: installed_models(OLLAMA_URL()),
-            manifest=lambda: Learning(data_dir).upgrade_manifest())
-        UPGRADER.start()
-
-        try:
-            frage = cluster.TerminalPrompt()
-            CLUSTER = cluster.Cluster(data_dir, host=host, port=port, version=VERSION_LABEL,
-                                      hooks=cluster.Hooks(load=_cluster_load,
-                                                          release=_cluster_release,
-                                                          adopt=_cluster_adopt,
-                                                          restart=_cluster_restart, ask=frage,
-                                                          hardware=_cluster_hardware,
-                                                          wants_models=_cluster_wants_models))
-            frage.cluster = CLUSTER
-            CLUSTER.start()
-
-            from aquaticy import sharding
-
-            SHARDING = sharding.Manager(
-                CLUSTER, OLLAMA_URL, lambda: int(get_settings().context_tokens or 0))
-            SHARDING.start()
-            if CLUSTER.joined:
-                rolle = "Master" if CLUSTER.is_master else "Mitglied"
-                print(f"  Verbund:    {rolle}, {len(CLUSTER.members())} Server")
-        except Exception as exc:  # pragma: no cover
-            print(f"  [Verbund] nicht gestartet: {type(exc).__name__}: {exc}")
-            CLUSTER = None
-        global WEBSITE, PUBLIC_SERVER, LAN_ONLY
-        WEBSITE, PUBLIC_SERVER = _start_website(data_dir)
-        LAN_ONLY = WEBSITE is not None
-        _start_home_https(host, data_dir, port)
         if open_browser:
             local = urls_for(host, port, token)[-1]
             threading.Timer(0.6, lambda: webbrowser.open(local)).start()
-        security_watcher.start()
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        security_watcher.stop()
-        SECURE_WATCHER = None
         server.server_close()
-        if PUBLIC_SERVER is not None:
-            with contextlib.suppress(Exception):
-                PUBLIC_SERVER.shutdown()
-                PUBLIC_SERVER.server_close()
-            PUBLIC_SERVER = None
-        if WEBSITE is not None:
-            WEBSITE.stop()
-            WEBSITE = None
-        _stop_home_https()
-        LAN_ONLY = False
         if research_stop is not None and research_worker is not None:
             research_stop.set()
             research_worker.join(timeout=6)
-        if SHARDING is not None:
-            SHARDING.stop()
-            SHARDING = None
-        if CLUSTER is not None:
-            CLUSTER.stop()
-        if UPGRADER is not None:
-            UPGRADER.stop()
-        UPGRADER = None
-        UPGRADE_DIR = None
-        _stop_schedulers()
         TOKEN = ""
         AUTH = None

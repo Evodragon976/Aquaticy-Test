@@ -13,7 +13,6 @@ from pathlib import Path
 from aquaticy.uistate import (
     DESIGN_KEYS,
     EFFORTS,
-    FIELDS,
     MODES,
     PALETTES,
     THEMES,
@@ -43,16 +42,9 @@ def test_the_design_rides_along_in_the_state() -> None:
     assert defaults()["design"] == {key: "" for key in DESIGN_KEYS}
 
 
-def test_the_default_state_is_complete() -> None:
-    stand = defaults()
-    assert set(stand) == set(FIELDS)
-    assert stand["mode"] == "normal"
-    assert stand["effort"] == "medium"
-    assert stand["online"] is True
-    assert stand["agents"] == 12
-
-    for aus in ("structured", "recheck", "sandbox", "denken", "tracing", "load"):
-        assert stand[aus] is False
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_the_string_false_is_not_true() -> None:

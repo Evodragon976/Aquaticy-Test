@@ -70,7 +70,6 @@ def _reply(content: str = "", tool_calls: list[Any] | None = None) -> SimpleName
     )
 
 
-
 def test_every_rule_names_its_legal_basis_and_an_alternative() -> None:
     assert len(RULES) == 11
     assert len(BY_ID) == len(RULES), "jede Kennung nur einmal"
@@ -106,7 +105,6 @@ def test_the_system_text_stays_short() -> None:
     assert len(rules_prompt()) < 2_400
 
 
-
 def test_a_clear_yes_and_a_clear_no_are_read() -> None:
     assert parse_verdict(ERLAUBT).allowed
     nein = parse_verdict(NEIN_NAME)
@@ -127,7 +125,6 @@ def test_an_unknown_rule_still_counts_as_no() -> None:
 )
 def test_no_clear_answer_is_no_answer(roh: str) -> None:
     assert parse_verdict(roh) is None
-
 
 
 def test_the_fast_model_asks_first_and_the_main_model_steps_in(
@@ -257,7 +254,6 @@ def test_a_tool_call_is_judged_with_its_occasion() -> None:
     assert "find_profiles" in prompt and "Wer liefert Fahrradteile?" in prompt
 
 
-
 def test_a_refused_request_starts_nothing(
     pruefer, monkeypatch: pytest.MonkeyPatch, settings: Settings
 ) -> None:
@@ -336,7 +332,6 @@ def test_switched_on_the_rules_are_in_the_system_text(settings: Settings) -> Non
     assert agent.guard is agent.toolbox.guard, "Anfrage und Werkzeuge an derselben Stelle"
 
 
-
 def test_a_refused_tool_call_does_not_run(
     pruefer, monkeypatch: pytest.MonkeyPatch, settings: Settings
 ) -> None:
@@ -382,7 +377,6 @@ def test_a_guard_without_topic_still_judges(pruefer, settings: Settings) -> None
     assert "(unbekannt)" in gestellt.gefragt[0][0]
 
 
-
 def test_subagents_get_the_rules_behind_their_role_and_before_the_task(
     monkeypatch: pytest.MonkeyPatch, settings: Settings
 ) -> None:
@@ -404,7 +398,6 @@ def test_subagents_get_the_rules_behind_their_role_and_before_the_task(
     gesehen.clear()
     run_subagents(["AUFTRAG-XY"], settings, parallel=1)
     assert "Rechtsrahmen" not in gesehen[0]
-
 
 
 @pytest.mark.parametrize("roh", ["", "true", "an", "True ", "jaa", "1", "irgendwas"])
@@ -496,70 +489,9 @@ def test_the_form_shows_the_switch_and_the_rules(sitzung: web.ChatSession) -> No
     json.dumps(overview)
 
 
-
-def test_a_refused_job_switches_itself_off(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Dieselbe Frage wird beim naechsten Takt wieder abgelehnt -- ohne
-    Abschalten liefe der Auftrag ewig ins selbe Nein."""
-    from aquaticy import coworker_schedule as jobs
-
-    class Abgelehnt:
-        def __init__(self, settings: Any, cache: Any = None) -> None:
-            self.session_id = "c"
-            self.toolbox = SimpleNamespace(settings=settings, untrusted_seen=False)
-
-        def ask(self, frage: str, **kwargs: Any) -> Any:
-            return SimpleNamespace(answer="Das mache ich nicht.", guarded="name")
-
-        def close(self) -> None: ...
-
-    monkeypatch.setattr("aquaticy.agent.Agent", Abgelehnt)
-    monkeypatch.setattr("aquaticy.cache.Cache", lambda *a, **k: None)
-    store = jobs.JobStore(tmp_path / "j.db")
-    job = store.add("Eine Frage")
-    with store._connect() as conn:
-        conn.execute("UPDATE coworkers SET next_wake = 1 WHERE id = ?", (job.id,))
-    settings = SimpleNamespace(db_path=tmp_path / "j.db", cache_ttl_hours=1)
-
-    assert jobs.run_job(store.get(job.id), settings)[0].startswith(jobs.GUARD_STATE)
-    assert jobs.Scheduler(lambda: settings).tick() == 1
-    danach = store.get(job.id)
-    assert not danach.enabled
-    assert danach.last_state == f"{jobs.GUARD_STATE}: name"
-
-
-def test_an_outage_is_not_a_refusal(
-    pruefer, monkeypatch: pytest.MonkeyPatch, settings: Settings, tmp_path: Path
-) -> None:
-    """Faellt das Pruefmodell nur kurz aus, bleibt ein Auftrag an: nicht
-    geprueft ist nicht abgelehnt."""
-    from aquaticy import coworker_schedule as jobs
-
-    pruefer(RuntimeError("weg"))
-    result = Agent(settings, cache=None).ask("Eine Anfrage", stream=False)
-    assert result.error == guardrails.UNAVAILABLE and not result.guarded
-
-    class Ausfall:
-        def __init__(self, settings: Any, cache: Any = None) -> None:
-            self.session_id = "c"
-            self.toolbox = SimpleNamespace(settings=settings, untrusted_seen=False)
-
-        def ask(self, frage: str, **kwargs: Any) -> Any:
-            return result
-
-        def close(self) -> None: ...
-
-    monkeypatch.setattr("aquaticy.agent.Agent", Ausfall)
-    monkeypatch.setattr("aquaticy.cache.Cache", lambda *a, **k: None)
-    store = jobs.JobStore(tmp_path / "j.db")
-    job = store.add("Eine Frage")
-    with store._connect() as conn:
-        conn.execute("UPDATE coworkers SET next_wake = 1 WHERE id = ?", (job.id,))
-    ziel = SimpleNamespace(db_path=tmp_path / "j.db", cache_ttl_hours=1)
-    assert jobs.Scheduler(lambda: ziel).tick() == 1
-    danach = store.get(job.id)
-    assert danach.enabled and danach.last_state == guardrails.UNAVAILABLE
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_a_refusal_reaches_the_browser_through_the_real_session(

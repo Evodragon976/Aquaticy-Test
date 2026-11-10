@@ -93,8 +93,6 @@ def test_the_slider_minimum_is_accepted_by_the_server(monkeypatch, tmp_path) -> 
     assert unten <= sicht["min"] and oben >= sicht["max"]
 
 
-
-
 SCHWACH = {"cores": 4, "cpu_pct": 30, "ram_gb": 8, "ram_used_gb": 3, "ram_pct": 37,
            "ollama_models": 0}
 STARK = {"cores": 16, "cpu_pct": 10, "ram_gb": 64, "ram_used_gb": 20, "ram_pct": 31,
@@ -131,108 +129,9 @@ def staerken(tmp_path):
     return a, b
 
 
-def test_the_master_gives_models_to_the_strong_server_and_web_to_the_weak(staerken) -> None:
-    a, b = staerken
-    assert a.roles() == {a.node_id: "website", b.node_id: "modelle"}
-    assert a.assign("lokal-1") == b.node_id, "lokale Modelle nur auf den Modell-Server"
-    assert a.assign("web-1") == a.node_id, "Website-Arbeit zuerst auf den schwachen"
-
-
-def test_the_strong_server_takes_a_bit_of_website_when_the_weak_is_busy(staerken) -> None:
-    import time as zeit
-
-    a, b = staerken
-    for nummer in range(6):
-        a.homes[f"web-alt-{nummer}"] = a.node_id
-        a._activity[f"web-alt-{nummer}"] = zeit.time()
-    assert a.least_loaded("web-neu") == b.node_id
-
-    for nummer in range(6):
-        a.homes[f"lokal-alt-{nummer}"] = b.node_id
-        a._activity[f"lokal-alt-{nummer}"] = zeit.time()
-    assert a.least_loaded("lokal-neu") == b.node_id
-
-
-def test_a_local_model_account_on_the_weak_server_moves(staerken) -> None:
-    import time as zeit
-
-    a, b = staerken
-    a._set_home("lokal-7", a.node_id)
-    a._activity["lokal-7"] = zeit.time()
-    assert a.misplaced("lokal-7", a.node_id)
-    assert a.assign("lokal-7") == b.node_id
-    assert not a.misplaced("lokal-7", b.node_id)
-
-
-def test_without_any_model_server_everything_stays_as_before(tmp_path) -> None:
-    from aquaticy import cluster
-
-    hw = cluster.hardware(SCHWACH)
-    assert cluster.model_power(hw) == 0.0
-    assert cluster.model_power(cluster.hardware(STARK)) > 0
-
-    assert cluster.model_power(cluster.hardware({**STARK, "ollama_models": 0})) == 0.0
-
-
-@pytest.mark.parametrize("kaputt", [float("nan"), float("inf"), -5, "16", None, True, 10 ** 30])
-def test_hardware_from_another_server_is_checked(kaputt) -> None:
-    from aquaticy import cluster
-
-    hw = cluster.hardware({key: kaputt for key in STARK} | {"gpu": "<b>x</b>" * 50})
-    assert all(v == 0 for k, v in hw.items() if k != "gpu")
-    assert len(hw["gpu"]) == 80
-    assert cluster.hardware("kein dict")["cores"] == 0
-
-
-def test_the_load_display_shows_every_server(staerken, monkeypatch) -> None:
-    from aquaticy import web
-
-    a, b = staerken
-    a.assign("lokal-1")
-    server = web.cluster_gauges(a)
-    assert [s["role"] for s in server] == ["website", "modelle"]
-    stark = server[1]
-    assert stark["role_label"] == "Modelle und etwas Website" and stark["accounts"] == 1
-    assert [g["name"] for g in stark["gauges"]] == ["Prozessor", "Arbeitsspeicher",
-                                                     "Grafikkarte"]
-    assert "RTX 4090" in stark["gauges"][2]["sub"]
-    assert server[0]["self"] and server[0]["master"]
-
-    a.last_ok[b.node_id] = 0
-    assert web.cluster_gauges(a)[1]["gauges"] == [] and not web.cluster_gauges(a)[1]["alive"]
-
-
-def test_the_system_endpoint_carries_the_cluster_for_ultra(client, session,  # noqa: F811
-                                                           staerken, monkeypatch) -> None:
-    import json
-
-    from aquaticy import web
-
-    a, _ = staerken
-    monkeypatch.setattr(web, "CLUSTER", a)
-    monkeypatch.setattr(type(session), "ultra", property(lambda self: True))
-    _, body = client("GET", "/api/system")
-    assert [s["role"] for s in json.loads(body)["cluster"]] == ["website", "modelle"]
-
-
-def test_the_web_hooks_know_local_model_accounts(tmp_path, monkeypatch) -> None:
-    from aquaticy import web
-    from aquaticy.auth import AuthStore
-
-    store = AuthStore(tmp_path, "ABCDEFGH1", "Abcdefgh1234!x")
-    konto = store.register("x@example.org", "ein-sicheres-passwort", "normal",
-                           terms_accepted=True, terms_version="1")
-    monkeypatch.setattr(web, "AUTH", store)
-    monkeypatch.setattr(web, "get_settings", lambda: web.Settings(
-        model="mistral/mistral-large-latest", data_dir=tmp_path))
-    assert not web._cluster_wants_models(konto.id)
-    profil = store.profile_dir(konto.id)
-    profil.mkdir(parents=True, exist_ok=True)
-    (profil / ".env").write_text("AQUATICY_MODEL=ollama_chat/qwen3:8b\n", encoding="utf-8")
-    assert web._cluster_wants_models(konto.id)
-    assert not web._cluster_wants_models("gibt-es-nicht")
-    hw = web._cluster_hardware()
-    assert hw["cores"] >= 1 and "ollama_models" in hw
+# 16.0.1 (Aquaticy-Test): 8 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_a_burst_of_connections_does_not_stall() -> None:

@@ -2,26 +2,19 @@
 
 import base64
 import json
-import os
 import shutil
 import sqlite3
-import time
 from contextlib import contextmanager
-from datetime import datetime
-from types import SimpleNamespace
-from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
 from selectolax.parser import HTMLParser
 
 from aquaticy import (
-    coworker_schedule,
     export,
     extract,
     google,
     local_model,
-    messenger_modes,
     news,
     places,
     queries,
@@ -121,21 +114,9 @@ def test_f11_programming_languages_with_punctuation_select_the_code_route(text):
     assert router.kategorie(text) == "code"
 
 
-def test_f12_unicode_model_names_are_distinguished_when_switching(monkeypatch):
-    monkeypatch.setattr('aquaticy.system.available_models', lambda s: [
-        {"id": "ollama_chat/模型一", "label": "模型一"},
-        {"id": "ollama_chat/模型二", "label": "模型二"}])
-    state = {}
-    decision = SimpleNamespace(trusted=True)
-    settings = SimpleNamespace(route=lambda model: ("", False))
-    messenger_modes.command("switch", "模型一", decision, settings, state, [])
-    assert state.get("model") == "ollama_chat/模型一"
-
-
-def test_f13_an_incomplete_max_command_does_not_change_the_mode():
-    state = {"pro": False}
-    reply = messenger_modes.command("max", "", SimpleNamespace(trusted=True), None, state, [])
-    assert "Frage" in reply and state == {"pro": False}
+# 16.0.1 (Aquaticy-Test): 4 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_f14_invalid_sizes_do_not_crash_the_file_list():
@@ -181,23 +162,6 @@ def test_f21_fusing_searches_does_not_mutate_reusable_input_results():
     assert result[0].rank == 1 and source.rank == 8 and source.source_domain == ""
 
 
-@pytest.mark.skipif(not hasattr(time, "tzset"), reason="tzset fehlt")
-def test_f22_minute_rhythms_do_not_pause_an_extra_hour_at_dst_end():
-    previous = os.environ.get('TZ')
-    try:
-        os.environ['TZ'] = 'Europe/Berlin'
-        time.tzset()
-        now = datetime(2026, 10, 25, 2, 59, 30,
-                       tzinfo=ZoneInfo('Europe/Berlin'), fold=0).timestamp()
-        assert coworker_schedule.next_time('minutes1', 8, 0, 0, now) == now + 30
-    finally:
-        if previous is None:
-            os.environ.pop('TZ', None)
-        else:
-            os.environ['TZ'] = previous
-        time.tzset()
-
-
 def test_f23_explicit_currency_codes_override_an_ambiguous_dollar_symbol():
     assert extract.parse_price("CAD $12.50") == ("12.50", "CAD")
 
@@ -220,17 +184,6 @@ def test_duplicate_search_metadata_can_still_supply_a_better_snippet():
     short = SearchResult(url='https://a.example', title='A', snippet='short')
     detailed = SearchResult(url='https://a.example', title='A', snippet='a much longer snippet')
     assert queries.fuse([[short, detailed]], 1)[0].snippet == 'a much longer snippet'
-
-
-def test_correct_values_and_independent_messenger_modes_are_preserved(tmp_path):
-    state = uistate.UIState(tmp_path / 'settings.db')
-    assert state.write({'agents': 4, 'theme': 'dark'}) == state.read()
-    assert state.read()['agents'] == 4
-    assert router.kategorie('Erkläre Musik') == 'recherche'
-    assert messenger_modes._name('Qwen-3:8b') == 'qwen38b'
-    assert places._address({'addr:street': 'Weg', 'addr:place': 'Dorf',
-                            'addr:housenumber': '4'}) == 'Weg 4'
-    assert extract._is_product({'@type': ['Thing', 'Product']})
 
 
 def test_optional_null_coordinates_still_use_an_available_center(monkeypatch):

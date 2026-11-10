@@ -212,7 +212,6 @@ def header_view(
     *,
     strong_model: str = "",
     strong_code_model: str = "",
-    ha_connected: bool = False,
     problems: list[str] | None = None,
 ) -> dict[str, Any]:
     """Was oben steht: das Modell, das wirklich antwortet, und die Statuszeile.
@@ -232,9 +231,7 @@ def header_view(
     auto = bool(getattr(settings, "auto_model", False)) and modus == "normal"
     name = modell.split("/")[-1] if modell else ""
     teile = [str(getattr(settings, "location", "") or "") or "kein Ortsfilter"]
-    if modus == "code" and stand.get("sandbox"):
-        teile.append("virtual machine")
-    elif modus != "code" and stand.get("online") is False:
+    if modus != "code" and stand.get("online") is False:
         teile.append("ohne Web")
     if modus != "code" and stand.get("visual_sources"):
         teile.append("Webcams & Satelliten")
@@ -246,8 +243,6 @@ def header_view(
         teile.append("4 Prüfer" if modus == "pro" else "gegenprüfen")
     if str(stand.get("effort") or "medium") != "medium":
         teile.append(f"Denktiefe {stand.get('effort')}")
-    if ha_connected:
-        teile.append("Zuhause verbunden")
     if getattr(settings, "memory_enabled", False):
         teile.append("Speicher an")
     return {

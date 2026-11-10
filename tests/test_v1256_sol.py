@@ -19,7 +19,6 @@ from pathlib import Path
 import httpx
 import pytest
 
-from aquaticy import coworker as cw
 from aquaticy import preferences, web
 from aquaticy.agent import GOOGLE_DIRECT_PROMPT, Agent
 from aquaticy.config import Settings
@@ -42,7 +41,6 @@ TERMIN = {"summary": "Zahnarzt", "start": "2026-11-02T10:00:00"}
 ENTWURF = {"subject": "Hallo", "body": "Text", "to": "anna@example.org"}
 
 
-
 @pytest.mark.parametrize(("scopes", "erwartet"), [
     ([], None),
     (LESEN, (False, False)),
@@ -55,7 +53,6 @@ ENTWURF = {"subject": "Hallo", "body": "Text", "to": "anna@example.org"}
 def test_granted_rights_are_read_from_the_scopes(scopes: list[str],
                                                  erwartet: tuple[bool, bool] | None) -> None:
     assert granted_write(scopes) == erwartet
-
 
 
 def _kasten(settings: Settings, scopes: list[str], *, direct: bool = False, write: bool = True,
@@ -100,7 +97,6 @@ def _kasten(settings: Settings, scopes: list[str], *, direct: bool = False, writ
     return kasten, gefragt, anfragen
 
 
-
 def test_read_only_rights_are_explained_before_anything_is_sent(settings: Settings) -> None:
     kasten, gefragt, anfragen = _kasten(settings, LESEN)
     fehler = kasten.call("calendar_add", dict(TERMIN))["error"]
@@ -134,7 +130,6 @@ def test_with_the_switch_off_nothing_is_created(settings: Settings) -> None:
     kasten, _, anfragen = _kasten(settings, ALLES, write=False)
     assert "nur lesen" in kasten.call("calendar_add", dict(TERMIN))["error"]
     assert anfragen == []
-
 
 
 def test_with_the_switch_no_question_is_asked(settings: Settings) -> None:
@@ -207,62 +202,9 @@ def test_resetting_the_flag_clears_both_kinds(settings: Settings) -> None:
     assert kasten._untrusted_hard
 
 
-
-def _coworker(settings: Settings, regel: str):
-    store = cw.CoworkerStore(settings.db_path)
-    mitarbeiter = store.add("Kalender", "Trage Termine ein.", plan="pro")
-    store.set_rules(mitarbeiter.id, {"kalender": regel, "mail": regel}, settings=settings,
-                    ultra=False)
-    return store, mitarbeiter, cw.Session(store=store, cw=store.get(mitarbeiter.id), vm=False,
-                                          plan="pro")
-
-
-def test_a_coworker_may_write_with_the_switch(settings: Settings) -> None:
-    kasten, _, _ = _kasten(settings, ALLES, direct=False)
-    _, _, sitzung = _coworker(settings, "fragen")
-    assert sitzung.gate(kasten, "calendar_add", dict(TERMIN))["wartet_auf_freigabe"]
-    settings.google_direct = True
-    assert sitzung.gate(kasten, "calendar_add", dict(TERMIN)) is None
-    assert sitzung.gate(kasten, "mail_draft", dict(ENTWURF)) is None
-    kasten.untrusted_seen = True
-    assert sitzung.gate(kasten, "calendar_add", dict(TERMIN))["wartet_auf_freigabe"]
-
-
-def test_a_blocked_coworker_stays_blocked(settings: Settings) -> None:
-    kasten, _, _ = _kasten(settings, ALLES, direct=True)
-    _, _, sitzung = _coworker(settings, "sperren")
-    assert sitzung.gate(kasten, "calendar_add", dict(TERMIN))["gesperrt"]
-
-
-def test_a_coworker_with_the_rule_allow_no_longer_fails_on_a_question(
-        settings: Settings) -> None:
-    """Fund: Das Tor ließ die Aktion durch, der Werkzeugkasten fragte -- und im Coworker
-    sitzt niemand, der antworten kann."""
-    kasten, gefragt, _ = _kasten(settings, ALLES, direct=False)
-    kasten.ask_handler = None
-    _, _, sitzung = _coworker(settings, "erlauben")
-    kasten.coworker_write_ok = lambda tool: sitzung.write_ok(kasten, tool)
-    assert sitzung.gate(kasten, "calendar_add", dict(TERMIN)) is None
-    assert kasten.call("calendar_add", dict(TERMIN))["created"] is True
-    assert gefragt == []
-
-
-def test_a_coworker_with_the_rule_ask_still_cannot_write_alone(settings: Settings) -> None:
-    kasten, _, _ = _kasten(settings, ALLES, direct=False)
-    kasten.ask_handler = None
-    _, _, sitzung = _coworker(settings, "fragen")
-    kasten.coworker_write_ok = lambda tool: sitzung.write_ok(kasten, tool)
-    assert "niemand" in kasten.call("calendar_add", dict(TERMIN))["note"]
-
-
-def test_the_allow_rule_does_not_hold_after_foreign_text(settings: Settings) -> None:
-    kasten, _, _ = _kasten(settings, ALLES, direct=False)
-    kasten.ask_handler = None
-    _, _, sitzung = _coworker(settings, "erlauben")
-    kasten.coworker_write_ok = lambda tool: sitzung.write_ok(kasten, tool)
-    kasten.untrusted_seen = True
-    assert "niemand" in kasten.call("calendar_add", dict(TERMIN))["note"]
-
+# 16.0.1 (Aquaticy-Test): 5 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_the_model_cannot_turn_the_switch_on() -> None:

@@ -115,7 +115,6 @@ def test_an_old_flag_does_not_make_a_pattern(tmp_path) -> None:
     assert guard.is_banned(user_id="u1") is None
 
 
-
 def test_github_repo_with_dot_segments_is_refused() -> None:
     from aquaticy.addons import github_call
 
@@ -191,14 +190,9 @@ def test_duckduckgo_parsing() -> None:
         == "https://x.de/?q=a%26b"
 
 
-@pytest.mark.parametrize(("eingabe", "erwartet"), [
-    ("http://nas.local/homeassistant", "http://nas.local:8123/homeassistant"),
-    ("ha.local:abc", ""), ("192.168.1.5", "http://192.168.1.5:8123"),
-])
-def test_home_assistant_address(eingabe: str, erwartet: str) -> None:
-    from aquaticy.homeassistant import normalize_url
-
-    assert normalize_url(eingabe) == erwartet
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 @pytest.mark.parametrize(("wort", "teil"), [
@@ -229,16 +223,6 @@ def test_a_whole_fetch_has_a_deadline() -> None:
     client = httpx.Client(timeout=2)
     assert netguard._gesamtfrist(client, httpx.USE_CLIENT_DEFAULT) == 30.0
     assert netguard._gesamtfrist(client, httpx.Timeout(20)) == 80.0
-
-
-
-def test_price_limits_ignore_units() -> None:
-    from aquaticy.coworker_schedule import price_condition_met
-
-    class P:
-        price = "59,90"
-
-    assert price_condition_met("Rucksack bis 17 Zoll unter 80 Euro", [P()]) is True
 
 
 def test_markdown_export_escapes_link_text() -> None:

@@ -109,34 +109,9 @@ def test_the_strongest_model_is_looked_up_once_even_in_parallel(
     assert len(aufrufe) == 1
 
 
-def test_the_workshop_is_not_warmed_without_isolation(
-    settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("aquaticy.sandbox.find_runtime", lambda: None)
-    a = Agent(settings, cache=None, toolbox=Toolbox(settings, cache=None))
-    faden = a._warm_workshop()
-    assert faden is not None
-    faden.join(5)
-    assert a.toolbox._sandbox_box is None
-
-
-def test_looking_for_docker_never_blocks_the_turn(
-    settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Fund 9.5.18: `docker info` lief im Haupt-Faden -- bei jeder Code-Nachricht."""
-    gestartet = threading.Event()
-
-    def langsam() -> None:
-        gestartet.set()
-        time.sleep(0.5)
-
-    monkeypatch.setattr("aquaticy.sandbox.find_runtime", langsam)
-    a = Agent(settings, cache=None, toolbox=Toolbox(settings, cache=None))
-    vorher = time.monotonic()
-    faden = a._warm_workshop()
-    assert time.monotonic() - vorher < 0.2, "der Turn wartet nicht auf docker info"
-    assert faden is not None and gestartet.wait(2)
-    faden.join(5)
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_a_hanging_model_lookup_does_not_block_a_second_caller(
@@ -161,8 +136,6 @@ def test_a_hanging_model_lookup_does_not_block_a_second_caller(
     freigabe.set()
     erster.join(5)
     assert a._strongest_model() == "mistral/mistral-large-latest"
-
-
 
 
 _ALTE_KONTEN = """
@@ -251,8 +224,6 @@ def test_a_database_broken_by_9517_is_repaired(tmp_path: Any) -> None:
     assert store.session_account(token, "dev", "203.0.113.9") is not None
 
 
-
-
 @pytest.mark.parametrize("name", [
     "shell.php\x00.jpg", "shell.php .png", "shell.php.", "ｓｈｅｌｌ.ｐｈｐ", "x.jsp;.png",
     "a.php%00.jpg", "C:\\temp\\y.PHTML", "a.jsp/", "bild.png.Php5", "a.php::$DATA",
@@ -279,8 +250,6 @@ def test_the_image_type_comes_from_the_bytes_not_the_browser() -> None:
     assert image_mime(b"RIFF\x00\x00\x00\x00WEBPVP8 ") == "image/webp"
     assert image_mime(b"\xff\xd8\xff\xe0") == "image/jpeg"
     assert image_mime(b"<?php echo 1; ?>") == ""
-
-
 
 
 def _liste_statt_objekt() -> Any:

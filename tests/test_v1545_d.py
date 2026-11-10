@@ -2,11 +2,10 @@
 
 import ipaddress
 from email.message import Message
-from types import SimpleNamespace
 
 import pytest
 
-from aquaticy import homeassistant, metering, secure_network, web
+from aquaticy import metering, web
 
 
 def test_f033_proxy_chains_resolve_the_client_beyond_trusted_intermediate_proxies(monkeypatch):
@@ -51,35 +50,9 @@ class _Socket:
         return self.chunks.pop(0) if self.chunks else b''
 
 
-@pytest.mark.parametrize(('port', 'chunks', 'expected'), [
-    (22, [b'SS', b'H-2.0-OpenSSH_9.9\r\n'], 'SSH-2.0-OpenSSH_9.9'),
-    (80, [b'HT', b'TP/1.1 200 OK\r\nServer: Example\r\n\r\n'], 'HTTP antwortet'),
-])
-def test_f038_fragmented_tcp_responses_are_read_to_the_protocol_boundary(
-        monkeypatch, port, chunks, expected):
-    monkeypatch.setattr(secure_network.lan, 'check_host',
-                        lambda *args, **kwargs: SimpleNamespace(ports=[port]))
-    monkeypatch.setattr(secure_network.socket, 'create_connection',
-                        lambda *args, **kwargs: _Socket(chunks))
-    result = secure_network.inspect('192.168.1.0/24', '192.168.1.2')
-    text = str(result.get('ssh_banner', '')) + ' '.join(result['observations'])
-    assert expected in text
-
-
-def test_f039_ssh_identification_can_follow_a_legal_pre_identification_notice(monkeypatch):
-    monkeypatch.setattr(secure_network.lan, 'check_host',
-                        lambda *args, **kwargs: SimpleNamespace(ports=[22]))
-    monkeypatch.setattr(secure_network.socket, 'create_connection',
-                        lambda *args, **kwargs: _Socket([
-                            b'Authorized access only\r\nSSH-2.0-OpenSSH_9.9\r\n']))
-    result = secure_network.inspect('192.168.1.0/24', '192.168.1.2')
-    assert result.get('ssh_banner') == 'SSH-2.0-OpenSSH_9.9'
-
-
-@pytest.mark.parametrize('data', [['brightness', 1], 'brightness=1', True])
-def test_f040_invalid_home_assistant_parameters_do_not_turn_into_another_action(data):
-    with pytest.raises(homeassistant.HomeAssistantError):
-        homeassistant.check_call('light', 'turn_on', 'light.room', data)
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 @pytest.mark.parametrize('usage', [

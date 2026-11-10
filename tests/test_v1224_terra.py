@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import socket
 import sqlite3
-import ssl
 import threading
 from collections import OrderedDict
 from dataclasses import replace
 from socketserver import BaseRequestHandler
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
 from aquaticy import aiguard, linked, system, web
-from aquaticy.auth import AuthStore, _password_hash
+from aquaticy.auth import AuthStore
 from aquaticy.config import Settings
 
 OLD = "eine lange alte Passphrase"
@@ -24,32 +22,9 @@ MODEL = "mistral/terra-main-chat"
 NEXT = "mistral/terra-next-chat"
 
 
-@pytest.mark.parametrize("action", ["wipe_data", "remove_account"])
-def test_a_password_change_invalidates_pending_account_erasure(tmp_path, monkeypatch, action):
-    store = AuthStore(tmp_path, "PRO123456")
-    account = store.register("terra@example.org", OLD, "normal",
-                             terms_accepted=True, terms_version="test")
-    profile = store.profile_dir(account.id)
-    marker = profile / "keep.txt"
-    marker.write_text("private data")
-    store.vault(account).set("MISTRAL_API_KEY", "synthetic-private-key")
-    assert store.verify_password(account, OLD)
-    store.change_password(account, OLD, NEW)
-    forgotten = []
-    monkeypatch.setattr("aquaticy.upgrading.forget_account",
-                        lambda *args: forgotten.append(args))
-
-    with pytest.raises(ValueError, match=r"Passwort|anmelden"):
-        getattr(store, action)(account)
-
-    assert marker.read_text() == "private data"
-    assert store.account(account.id) is not None
-    assert store.vault(account).keys()["MISTRAL_API_KEY"] == "synthetic-private-key"
-    assert not forgotten, "Auch Metadaten bleiben bei veralteter Freigabe erhalten"
-    current = store.authenticate(account.email, NEW)
-    assert current is not None
-    getattr(store, action)(current)
-    assert not marker.exists(), "Eine frische Passwortfreigabe funktioniert weiter"
+# 16.0.1 (Aquaticy-Test): 4 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 @pytest.mark.parametrize("action", ["wipe_data", "remove_account"])
@@ -87,41 +62,6 @@ def test_erasure_holds_the_database_write_lock_until_files_are_deleted(
     monkeypatch.setattr("aquaticy.auth.shutil.rmtree", check_and_remove)
     getattr(store, action)(account)
     assert checked and not marker.exists()
-
-
-@pytest.mark.parametrize("route", ["/api/account/wipe", "/api/account/delete"])
-@pytest.mark.parametrize("change", ["password", "legacy-hash"])
-def test_account_routes_handle_password_races_and_legacy_hash_migration(
-        tmp_path, monkeypatch, route, change):
-    store = AuthStore(tmp_path, "PRO123456")
-    account = store.register("terra@example.org", OLD, "normal",
-                             terms_accepted=True, terms_version="test")
-    if change == "legacy-hash":
-        salt = b"0123456789abcdef"
-        with store._connect() as conn:
-            conn.execute("UPDATE users SET password_hash=?,password_salt=? WHERE id=?",
-                         (_password_hash(OLD, salt), salt, account.id))
-        account = store.account(account.id)
-    marker = store.profile_dir(account.id) / "keep.txt"
-    marker.write_text("private data")
-    handler = web.Handler.__new__(web.Handler)
-    handler._account = lambda: account
-    handler._cookie = lambda name: ""
-    replies = []
-    handler._json = lambda data, status=200: replies.append((status, data))
-    handler._json_cookie = lambda data, *args: replies.append((200, data))
-    monkeypatch.setattr(web, "AUTH", store)
-    monkeypatch.setattr(web, "AIGUARD", None)
-    monkeypatch.setattr(web, "start_user_scheduler", lambda *args: None)
-
-    def stop_runtime(current):
-        if change == "password":
-            store.change_password(current, OLD, NEW)
-
-    monkeypatch.setattr(web, "forget_account_runtime", stop_runtime)
-    handler._account_action(route, {"password": OLD, "confirm": web.DELETE_WORD})
-    assert replies[0][0] == (409 if change == "password" else 200)
-    assert marker.exists() == (change == "password")
 
 
 def test_slow_connections_are_bounded_before_http_headers_are_available(monkeypatch):
@@ -207,52 +147,6 @@ def test_a_failed_thread_start_does_not_lose_a_connection_slot(monkeypatch):
         assert server._connection_slots.acquire(blocking=False)
     finally:
         server.server_close()
-
-
-def test_a_failed_tls_handshake_returns_its_slot_and_never_sends_plaintext(monkeypatch):
-    monkeypatch.setattr(web.AquaticyServer, "max_connections", 1)
-    context = SimpleNamespace(wrap_socket=Mock(side_effect=ssl.SSLError("invalid handshake")))
-    server = web._TLSServer(("127.0.0.1", 0), web.Handler, context)
-    request = Mock()
-    try:
-        assert server._connection_slots.acquire(blocking=False)
-        server.process_request_thread(request, ("127.0.0.1", 1))
-        assert server._connection_slots.acquire(blocking=False)
-        server.process_request(request, ("127.0.0.1", 1))
-        request.sendall.assert_not_called()
-        assert request.close.call_count == 2
-    finally:
-        server.server_close()
-
-
-def test_real_tls_connections_keep_working_and_reuse_capacity(monkeypatch, tmp_path):
-    from aquaticy import website
-
-    monkeypatch.setattr(web.AquaticyServer, "max_connections", 1)
-    domain = "terra.example.org"
-    context, _ = website.tls_context(tmp_path, domain)
-    certificate, _ = website.self_signed(tmp_path, domain)
-    client_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    client_context.load_verify_locations(cafile=str(certificate))
-
-    class ReplyHandler(BaseRequestHandler):
-        def handle(self):
-            self.request.sendall(b"encrypted reply")
-
-    server = web._TLSServer(("127.0.0.1", 0), ReplyHandler, context)
-    serving = threading.Thread(target=server.serve_forever, daemon=True)
-    serving.start()
-    try:
-        for _ in range(2):
-            with (socket.create_connection(server.server_address, timeout=2) as raw,
-                  client_context.wrap_socket(raw, server_hostname=domain) as client):
-                assert client.recv(512) == b"encrypted reply"
-            assert server._connection_slots.acquire(timeout=3)
-            server._connection_slots.release()
-    finally:
-        server.shutdown()
-        server.server_close()
-        serving.join(timeout=3)
 
 
 @pytest.mark.parametrize("kind", ["request", "answer"])

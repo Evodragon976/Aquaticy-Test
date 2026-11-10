@@ -6,8 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aquaticy import config, extract, github_write, memory_auto, voice
-from tests.test_bridge_native import Werkstatt
+from aquaticy import config, extract, memory_auto, voice
 
 
 def test_f040_local_parallelism_cannot_exceed_the_number_of_planned_agents(settings):
@@ -49,36 +48,14 @@ def test_f044_reported_first_person_speech_is_not_saved_as_the_users_own_fact(te
     assert memory_auto.extract(text) == []
 
 
-def test_f045_failed_read_receipts_can_be_retried(tmp_path):
-    case = Werkstatt(tmp_path)
-    msg = case.nachricht()
-    attempts = []
-
-    def read(message):
-        attempts.append(message)
-        if len(attempts) == 1:
-            raise OSError('temporary connection failure')
-
-    transport = SimpleNamespace(mark_read=read)
-    case.antwort._mark_read(msg, transport)
-    case.antwort._mark_read(msg, transport)
-    assert len(attempts) == 2
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
-def test_f046_rejected_senders_do_not_write_the_deduplication_database(tmp_path):
-    case = Werkstatt(tmp_path, wer='selbst')
-    calls = []
-    reason, _, _ = case.antwort._screen(case.nachricht(),
-                                      {'an': True, 'wer': 'selbst'},
-                                      lambda: calls.append(True) or True)
-    assert reason.startswith('abgelehnt')
-    assert calls == []
-
-
-@pytest.mark.parametrize('scheme', ['postgresql', 'mysql', 'https'])
-def test_f047_credentials_embedded_in_connection_urls_cannot_be_pushed(scheme):
-    text = f'DATABASE_URL="{scheme}://user:ActualPrivatePass234@database.example/db"'
-    assert github_write.secret_problem('settings.env', text.encode())
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_f048_jsonld_properties_obey_the_product_specification_limit():

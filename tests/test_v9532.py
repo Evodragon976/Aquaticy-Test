@@ -492,7 +492,7 @@ def test_switches_save_at_once_and_forms_use_checkboxes() -> None:
     html = _seite()
     assert "async function sofortSpeichern(schalter)" in html
     assert 'feld.matches("input.schalter[name]")' in html
-    assert '<input type="checkbox" id="cw-task-struktur" checked>' in html
+    # 16.0.1 (Aquaticy-Test): das Formular der Coworker (cw-task-struktur) gibt es nicht mehr.
 
 
 def test_no_browser_alert_or_confirm_is_left() -> None:

@@ -2,26 +2,13 @@
 
 import base64
 import io
-import os
-import shlex
 import struct
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from aquaticy import (
-    auth,
-    botguard,
-    cli,
-    google,
-    local_model,
-    secure_defense,
-    secure_nmap,
-    secure_packets,
-    storage,
-)
+from aquaticy import auth, botguard, cli, google, local_model
 from aquaticy.agent import Agent
 
 
@@ -98,24 +85,9 @@ def _tcp_frame(*, seq=123, vlan=False):
     return header + tags + ip + tcp
 
 
-def test_f068_packet_inspection_handles_double_tagged_vlan_ethernet_frames():
-    record = secure_packets.parse_frame(_tcp_frame(vlan=True))
-    assert record is not None and record['t'] == 'tcp' and record['dport'] == 22
-
-
-def test_f069_host_level_nmap_vulnerability_scripts_are_reported():
-    xml = '''<nmaprun><host><address addrtype="ipv4" addr="192.168.1.20"/>
-    <hostscript><script id="smb-vuln-ms17-010"
-    output="VULNERABLE: SMB issue CVE-2017-0143"/></hostscript></host></nmaprun>'''
-    events = secure_nmap.events(secure_nmap.parse(xml))
-    assert any(e['kind'] == 'vulnerability' and 'CVE-2017-0143' in e['text'] for e in events)
-
-
-def test_f070_subnet_nmap_results_disclose_that_vulnerability_scripts_were_not_run(monkeypatch):
-    monkeypatch.setattr(secure_nmap.shutil, 'which', lambda *a: '/fake/nmap')
-    monkeypatch.setattr(secure_nmap, '_execute', lambda *a: '<nmaprun/>')
-    result = secure_nmap.run('192.168.1.0/24', ['192.168.1.0/24'])
-    assert result['mode'] == 'dienste' and result['requested_mode'] == 'schwachstellen'
+# 16.0.1 (Aquaticy-Test): 9 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_f071_login_rate_limits_do_not_grow_without_bound_under_new_client_keys(monkeypatch):
@@ -153,13 +125,6 @@ def test_f073_image_descriptions_mark_their_content_as_untrusted(settings, monke
     assert agent.toolbox.untrusted_seen
 
 
-def test_f074_local_inventory_clients_bypass_environment_proxies(monkeypatch):
-    options = []
-    monkeypatch.setattr(storage.httpx, 'Client', lambda **kw: options.append(kw) or object())
-    storage.Storage('http://inventory.local:3000')
-    assert options and options[0].get('trust_env') is False
-
-
 @pytest.mark.parametrize('answer', ['It is blue, not red.', 'The prototype is blue.', 'Nicht rot.'])
 def test_f075_vision_probes_do_not_accept_substrings_or_negated_colour_names(monkeypatch, answer):
     import litellm
@@ -168,64 +133,9 @@ def test_f075_vision_probes_do_not_accept_substrings_or_negated_colour_names(mon
     assert local_model.verify_vision('ollama_chat/vision:latest')[0] is False
 
 
-def test_f076_tcp_retransmissions_do_not_count_as_fresh_password_attempts():
-    repeated = secure_packets.parse_frame(_tcp_frame())
-    assert repeated is not None
-    assert not any(e['kind'] == 'brute_force' for e in secure_packets.analyze(
-        [repeated] * 30, '192.168.1.0/24'))
-    fresh = [secure_packets.parse_frame(_tcp_frame(seq=i)) for i in range(30)]
-    assert any(e['kind'] == 'brute_force' for e in secure_packets.analyze(
-        fresh, '192.168.1.0/24'))
-
-
-def test_f077_malware_traffic_from_the_monitored_server_is_still_inspected():
-    record = {'t': 'tcp', 'src': '192.168.1.20', 'dst': '8.8.8.8', 'sport': 40000,
-              'dport': 4444, 'syn': True, 'ack': False}
-    assert any(e['kind'] == 'malware' for e in secure_packets.analyze(
-        [record], '192.168.1.0/24', own=frozenset({'192.168.1.20'})))
-
-
 def _fake_command(directory: Path, name: str, body: str):
     file = directory / name
     file.write_text('#!/bin/sh\n' + body + '\n')
     file.chmod(0o755)
 
 
-def test_f078_an_inactive_ufw_is_not_reported_as_an_effective_firewall(tmp_path):
-    log = tmp_path / 'actions'
-    _fake_command(tmp_path, 'id', 'echo 1000')
-    _fake_command(tmp_path, 'sudo', '[ "$1" != -n ] || shift; exec "$@"')
-    _fake_command(tmp_path, 'ufw', 'if [ "$1" = status ]; then echo "Status: inactive"; '
-                  'else echo inactive-rule >> "$AQUATICY_TEST_ACTIONS"; fi')
-    _fake_command(tmp_path, 'firewall-cmd', 'exit 1')
-    _fake_command(tmp_path, 'iptables', 'echo effective-rule >> "$AQUATICY_TEST_ACTIONS"')
-    result = secure_defense.build('block_port', host='192.168.1.20', port=4444,
-                                  subnet='192.168.1.0/24')
-    run = subprocess.run(['/bin/sh', '-c', result['command']], capture_output=True,
-                         env=dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ['PATH'],
-                                  AQUATICY_TEST_ACTIONS=str(log)), check=False)
-    actions = log.read_text() if log.exists() else ''
-    assert run.returncode != 0 or 'effective-rule' in actions
-    assert 'inactive-rule' not in actions
-
-
-def test_f079_windows_defense_commands_stop_when_a_powershell_command_fails():
-    built = secure_defense.build('stop_service', system='windows', host='192.168.1.20',
-                                 service='ExampleService', subnet='192.168.1.0/24')
-    script = shlex.split(built['command'])[-1]
-    assert 'Set-Variable -Name ErrorActionPreference -Value Stop' in script
-
-
-def test_f080_root_ssh_sessions_can_apply_defense_without_sudo(tmp_path):
-    log = tmp_path / 'actions'
-    _fake_command(tmp_path, 'id', 'echo 0')
-    _fake_command(tmp_path, 'sudo', 'exit 127')
-    _fake_command(tmp_path, 'ufw', 'exit 1')
-    _fake_command(tmp_path, 'firewall-cmd', 'exit 1')
-    _fake_command(tmp_path, 'iptables', 'echo blocked >> "$AQUATICY_TEST_ACTIONS"')
-    built = secure_defense.build('block_port', host='192.168.1.20', port=4444,
-                                 subnet='192.168.1.0/24')
-    run = subprocess.run(['/bin/sh', '-c', built['command']], capture_output=True,
-                         env=dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ['PATH'],
-                                  AQUATICY_TEST_ACTIONS=str(log)), check=False)
-    assert run.returncode == 0 and log.read_text().strip() == 'blocked'

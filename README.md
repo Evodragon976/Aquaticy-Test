@@ -1,8 +1,8 @@
-# Aquaticy AI 16.0.0
+# Aquaticy AI 16.0.1
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
-Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser
-und auf dem Handy – auf Wunsch auch unter deiner eigenen Domain.
+Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
+auf dem Handy und auf Vercel.
 
 ```
 $ aquaticy
@@ -33,6 +33,22 @@ $ aquaticy
 
 ---
 
+## Neu in 16.0.1
+
+Aufgeräumt und Fehler behoben, nur in Aquaticy-Test.
+
+- **Anmelden mit Nutzername:** Im Kontensystem geht die Anmeldung jetzt auch mit dem
+  Nutzernamen, nicht nur mit der E-Mail-Adresse. So kommen auch Konten aus der Zeit des
+  Einzelkontos wieder rein. Fehlversuche zählen für Name und E-Mail gemeinsam.
+- **Secure Pro auf Vercel:** Der Chat war im Kontensystem gesperrt. Jetzt kann ihn jedes Konto
+  nutzen.
+- **Befehle im Chat:** Die Vorschläge für `/wetter`, `/github`, `/code-review` … fehlten auf
+  Vercel. Sie sind wieder da.
+- **Kleiner:** Alles, was es seit 16.0.0 nicht mehr gibt, ist auch aus dem Code raus:
+  virtual machine, Messenger, Server-Verbund, Auto-Upgrading, Coworker, Heimnetz, Home Assistant,
+  Lager, eigene Domain und das Docker-Abbild. Das sind über 30 Module weniger.
+- **GitHub** liest nur noch. Ändern brauchte die virtual machine.
+
 ## Neu in 16.0.0
 
 Diese Fassung gibt es nur in Aquaticy-Test. Sie ist für Vercel gebaut.
@@ -62,20 +78,14 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 - [Installation im Detail](#installation-im-detail)
 - [Benutzung im Terminal](#benutzung-im-terminal)
 - [Die Weboberfläche](#die-weboberfläche)
-- [Eigene Website mit Domain](#eigene-website-mit-domain)
 - [Konten: Normal, Pro und Ultra](#konten-normal-pro-und-ultra)
 - [Add-ons](#add-ons)
-- [Virtual machine und User mode](#virtual-machine-und-user-mode)
 - [Speicher](#speicher)
-- [Coworker](#coworker)
 - [Gmail und Kalender](#gmail-und-kalender)
-- [Zuhause: Heimnetz, Home Assistant, Lager](#zuhause-heimnetz-home-assistant-lager)
-- [Gemeinsames Lernen und Auto-Upgrading](#gemeinsames-lernen-und-auto-upgrading)
-- [Server-Verbund und Serverlast aufteilen](#server-verbund-und-serverlast-aufteilen)
+- [Gemeinsames Lernen](#gemeinsames-lernen)
 - [Sicherheit, Rechts-Leitplanken und Ai-guard](#sicherheit-rechts-leitplanken-und-ai-guard)
 - [Modelle und Anbieter](#modelle-und-anbieter)
 - [Suche](#suche)
-- [Im Container](#im-container)
 - [Konfiguration](#konfiguration)
 - [Konten verwalten (Betreiber)](#konten-verwalten-betreiber)
 - [Entwicklung](#entwicklung)
@@ -104,12 +114,10 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 **Arbeitsweisen** (links in der Seitenleiste, unter dem Logo)
 - **Normal:** ein Gespräch. Gesucht wird, wenn es nötig ist.
 - **Pro:** für große Fragen. Das stärkste Modell, bis zu 50 Helfer. Dauert länger, ist genauer.
-- **Code:** schreibt Code und probiert ihn in einer abgeschotteten **virtual machine** aus.
+- **Code:** schreibt und erklärt Code. Ausgeführt wird er nicht.
 
 **Oberfläche**
 - Terminal, Browser und Handy, jeweils passend aufgebaut.
-- **Eigene Website:** mit deiner Domain über Cloudflare, mit Zertifikat. Am Router musst du
-  nichts freigeben.
 - **Design:** Hell, Dunkel oder wie das System. Standard (grün), Schlicht oder eigene Farben.
   Auto-Scroll beim Schreiben an oder aus.
 - **Spracheingabe:** 🎤 neben dem Senden-Knopf. Sprechen, und das Gesagte geht als Frage los.
@@ -117,22 +125,14 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 - Chats durchsuchen, umbenennen und exportieren (HTML, Markdown, CSV).
 
 **Extras**
-- **Coworker:** feste Zeitpläne und Beobachtungen für alle, dauerhafte Aufgaben mit
-  Pro und Ultra. Sie lesen Gmail, Kalender und GitHub, melden Ergebnisse und fragen, bevor sie etwas ändern.
 - **Add-ons:** **NVIDIA NIM** und **Mistral** (die einzigen Modelle mit API-Schlüssel), GitHub,
-  Wetter, RSS-Feeds, Tagesschau, Wikipedia, Währungsrechner, Feiertage, WhatsApp Web, Signal,
-  Blender. Dazu die Plugins **Code-Review** und **Security-Review**. Die Dienste
+  Wetter, RSS-Feeds, Tagesschau, Wikipedia, Währungsrechner, Feiertage. Dazu die Plugins **Code-Review** und **Security-Review**. Die Dienste
   und Plugins haben im Chat einen Befehl: `/code-review`, `/github`, `/wetter` …
 - **Speicher:** merkt sich, was länger gilt. Verschlüsselt und jederzeit einsehbar.
-- **Zeitpläne und Beobachtungen:** direkt in Coworker, für alle Konten.
 - **Gmail und Kalender:** lesen, Termine anlegen, Entwürfe schreiben. Verschickt wird nichts.
-- **Zuhause** (Ultra): Heimnetz, Home Assistant, Lagerverwaltung.
-- **Eigene Dienste zuerst:** Fragst du nach deinen Mails, Terminen, Lichtern oder deinem
-  Lager, sieht Aquaticy dort nach und sucht nicht im Internet. Ist der Dienst nicht
+- **Eigene Dienste zuerst:** Fragst du nach deinen Mails oder Terminen, sieht Aquaticy dort nach und sucht nicht im Internet. Ist der Dienst nicht
   verbunden, sagt es dir, wo du ihn verbindest.
 - **KI-Bilder** und **automatische Modellwahl**.
-- **Server-Verbund** (Ultra): bis zu 10 Server. Sie teilen sich die Nutzer oder rechnen
-  gemeinsam an einem großen Modell.
 
 **Stabil im Betrieb**
 - Port belegt? Aquaticy nimmt den nächsten freien.
@@ -150,9 +150,9 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/jonasenriklaumen-a11y/Aquaticy-Ai.git
 cd Aquaticy-Ai
 uv tool install --force --reinstall .
-aquaticy --version            # 16.0.0
+aquaticy --version            # 16.0.1
 
-# 2. Ollama automatisch prüfen/einrichten, dann Modell, Suche und Domain
+# 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup
 
 # 3. Loslegen – im Terminal …
@@ -170,9 +170,7 @@ aquaticy web
 |---|---|---|---|
 | Modell in der Cloud (Mistral, NVIDIA NIM) | 1 Kern | 1 GB | 1 GB |
 | + Seiten mit echtem Browser | 2 Kerne | 2 GB | 2 GB |
-| + virtual machine (Code-Modus, Add-ons) | 2 Kerne | 4 GB | 10 GB |
 | Lokales Modell mit Ollama | 4 Kerne | 8 GB (GPU empfohlen) | 10 GB |
-| Großes Modell, auf mehrere Server verteilt | je Server 4 Kerne | zusammen etwa Modellgröße + 15 % | Modell auf dem Master |
 
 `aquaticy setup` fragt:
 
@@ -181,7 +179,6 @@ aquaticy web
 | Ollama | Vorhandene Installation verwenden, sonst installieren; laufende Dienste bleiben unverändert | für lokale Modelle; Cloudbetrieb mit `--no-ollama` |
 | KI-Anbieter | Mistral oder NVIDIA NIM (den Schlüssel verknüpfst du danach in der Weboberfläche unter Add-ons) · oder lokal mit [Ollama](https://ollama.com), ohne Schlüssel | ja |
 | Suchmaschine | nichts – die offene Suche braucht keinen Schlüssel | nein |
-| Eigene Domain | eine Domain bei Cloudflare und ein API-Token ([so geht's](#eigene-website-mit-domain)) | nein |
 
 Aquaticy testet alles, bevor es speichert. Die Einstellungen liegen in
 `~/.config/aquaticy/.env` und sind nur für dich lesbar.
@@ -282,8 +279,7 @@ aquaticy install-model --yes                                  # ohne Rückfragen
 > `aquaticy install-model` schreibt es richtig.
 
 Wird der Grafikspeicher knapp (`model runner has unexpectedly stopped`), bietet Aquaticy ein
-kleineres Modell an. Von Hand: `ollama ps`, `ollama stop <modell>`. Ist ein Modell für einen
-Rechner zu groß, verteilt es ein [Server-Verbund](#serverlast-aufteilen) auf mehrere.
+kleineres Modell an. Von Hand: `ollama ps`, `ollama stop <modell>`.
 
 ### Vercel
 
@@ -330,9 +326,9 @@ Zwei Dinge musst du dafür beachten:
 - Lass den Blob-Speicher mit dem Projekt verbunden. Ohne ihn speichert Aquaticy nichts, und
   beim nächsten Kaltstart ist alles weg.
 
-**Was auf Vercel fehlt.** Coworker nach Zeitplan, Plugins und lokale Modelle. Das braucht einen
-Rechner, der dauerhaft läuft. Virtual machine, WhatsApp und Signal, Server-Verbund,
-Auto-Upgrading und Zuhause & Netz gibt es in Aquaticy-Test seit 16.0.0 gar nicht mehr. Puffert
+**Was auf Vercel fehlt.** Lokale Modelle. Das braucht einen Rechner mit Ollama. Virtual
+machine, WhatsApp und Signal, Server-Verbund, Auto-Upgrading, Coworker und Zuhause & Netz gibt
+es in Aquaticy-Test gar nicht mehr (seit 16.0.0 und 16.0.1). Puffert
 Vercel die Antwort, kommt sie erst am Stück. Eine Antwort darf höchstens so lange dauern, wie
 Vercel eine Funktion laufen lässt. Laufen mehrere Instanzen gleichzeitig, gewinnt die zuletzt
 gespeicherte Sicherung. Die Datenbanken von Vercel (Postgres, Supabase) und die Edge Config
@@ -389,8 +385,7 @@ aquaticy --download-images                        # Bilder beim Export mitspeich
 aquaticy setup                  # Ersteinrichtung
 aquaticy config                 # aktive Einstellungen prüfen
 aquaticy web                    # Weboberfläche starten
-aquaticy web --lan              # ohne eigene Domain: auch im Heimnetz und über Tailscale
-aquaticy website                # eigene Domain: Stand zeigen (setup, remove)
+aquaticy web --lan              # auch im Heimnetz und über Tailscale
 aquaticy search "cafés köln"    # nur suchen, ohne KI
 aquaticy fetch https://…        # nur eine Seite lesen, ohne KI
 aquaticy history                # frühere Recherchen
@@ -398,15 +393,9 @@ aquaticy export html -n 3       # letzte 3 Recherchen exportieren
 aquaticy notes                  # Merkzettel (--delete N löscht)
 aquaticy cache                  # Zwischenspeicher (--clear leert ihn)
 aquaticy install-model          # lokales Modell einrichten
-aquaticy install-vm             # Podman für die virtual machine einrichten
-aquaticy install-messenger      # WhatsApp und Signal direkt verbinden (ohne virtual machine)
 aquaticy install-browser        # echter Browser für schwierige Seiten
 aquaticy account                # dein Konto (ohne Kontensystem): anlegen, Passwort neu setzen
 aquaticy google                 # Gmail und Kalender verbinden (--aendern: auch schreiben)
-aquaticy connect-ha             # Home Assistant verbinden
-aquaticy lan                    # Geräte im eigenen Netz
-aquaticy sandbox                # wie abgeschottet Aquaticy gerade läuft
-aquaticy cluster                # Server-Verbund: Stand, Anfragen mit yes/no beantworten
 aquaticy list                   # Konten mit Kürzel (#…), Geräten, Nutzung, Ai-guard
 aquaticy remove "name"          # Konto samt Daten löschen (--yes ohne Rückfrage)
 aquaticy ban "name"             # Konto, IP-Adresse oder Kürzel ("#1a2b3c4d") sperren
@@ -425,12 +414,8 @@ aquaticy version
 aquaticy web
 ```
 
-Wo Aquaticy erreichbar ist, hängt davon ab, ob du eine eigene Domain eingerichtet hast:
-
-| | ohne Domain | mit Domain |
-|---|---|---|
-| `aquaticy web` | nur auf diesem Rechner | Heimnetz, Tailscale **und** Domain |
-| `aquaticy web --lan` | Heimnetz und Tailscale | wie oben |
+`aquaticy web` läuft nur auf diesem Rechner. `aquaticy web --lan` öffnet es auch fürs
+Heimnetz und für Tailscale.
 
 Beim Start stehen alle Adressen im Terminal.
 
@@ -480,8 +465,8 @@ zeigt, was darin passiert ist. Fehler und Sperren bleiben sichtbar. „↻ Erneu
 die Frage noch einmal.
 
 **Modellauswahl** (gleich nach 📎 Anhängen):
-- **Modelle:** Mistral und NVIDIA NIM, lokal, verbesserte Fassungen aus dem Auto-Upgrading
-  und das **Verbund-Modell**. Es steht nur da, was wirklich antwortet: ein Cloud-Modell nur mit
+- **Modelle:** Aquaticy Standard (ohne Sprachmodell), Mistral, NVIDIA NIM und lokale Modelle.
+  Es steht nur da, was wirklich antwortet: ein Cloud-Modell nur mit
   Schlüssel, ein lokales nur, wenn es in Ollama installiert ist. Die Liste fragt Ollama bei jedem
   Öffnen neu; `aquaticy web` zeigt beim Start, welche Modelle Ollama hat, und startet Ollama,
   wenn das eingestellte Modell lokal ist.
@@ -498,15 +483,13 @@ die Frage noch einmal.
 - **⚡ Aufwand:** Denktiefe Low, Medium oder High und die Zahl der Helfer (Normal und Code
   1–12, Pro 1–50).
 - **⚙ Weitere Einstellungen:** Websuche, Webcams und Satellitenbilder, Denken, Strukturieren,
-  Gegenprüfen. Im Code-Modus: Code in der virtual machine ausprobieren, darunter (Ultra) ob sie
-  Internet hat.
+  Gegenprüfen.
 
 **Einstellungen** speichern sich selbst. Schalter sofort, Textfelder beim Verlassen. Was nur
 Ultra darf, trägt ein 🔒.
 - **Konto:** Name, E-Mail, Kontotyp, Nutzung, Abmelden. **Sicherheit** mit deinen Geräten,
   Passwort ändern, überall sonst abmelden. **Daten und Konto löschen**.
-- Dazu: Gemeinsames Lernen, virtual machine, Speicher, Mitlesen,
-  Auslastung (Ultra), Nutzung, Gmail & Kalender, Zuhause & Netz (Ultra), Suche,
+- Dazu: Gemeinsames Lernen, Speicher, Nutzung, Gmail & Kalender, Secure Pro, Suche,
   Ort & Sprache, Helfer & Grenzen, **Dev settings** (Ultra).
 
 **Auf dem Handy** wird die Kopfzeile nach dem Senden mit einer kurzen Animation kompakter.
@@ -522,56 +505,6 @@ bleibt stehen, wo du liest) und Sprache. Das gilt auf jedem Gerät.
 
 ---
 
-## Eigene Website mit Domain
-
-Mit eigener Domain wird Aquaticy eine richtige Website, zum Beispiel
-`https://chat.example.de`. Die Verbindung läuft über einen **Cloudflare-Tunnel**. Er baut
-sich von innen nach außen auf. Am Router gibst du nichts frei.
-
-**Was du brauchst:**
-1. Eine Domain, die bei Cloudflare liegt (die Nameserver zeigen auf Cloudflare).
-2. Ein API-Token. Leg es an unter
-   [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) mit
-   diesen Rechten:
-   - Zone → Zone → Lesen
-   - Zone → DNS → Bearbeiten
-   - Konto → Cloudflare Tunnel → Bearbeiten
-
-**Einrichten:**
-
-```bash
-aquaticy setup            # Schritt 5 fragt nach Domain und Token
-# oder nur die Website:
-aquaticy website setup
-```
-
-Aquaticy erledigt den Rest:
-- legt den Tunnel an und trägt die Domain dafür ein,
-- holt ein **Zertifikat von Let's Encrypt** und erneuert es selbst,
-- lädt `cloudflared` von GitHub, nur mit veröffentlichter Prüfsumme.
-
-**Starten:** `aquaticy web`. Danach ist Aquaticy erreichbar
-- unter deiner Domain,
-- im Heimnetz (z. B. `http://192.168.1.20:8765`),
-- über Tailscale (z. B. `http://100.81.120.100:8765`).
-
-`aquaticy website` zeigt den Stand. `aquaticy website remove` löscht Tunnel und DNS-Eintrag bei
-Cloudflare und trägt die Domain aus.
-
-**Sicherheit:**
-- Besucher aus dem Internet kommen über einen eigenen Eingang an. Er hört nur auf `127.0.0.1`.
-- Dort zählt die echte Adresse des Besuchers (von Cloudflare). Grenzen für Anfragen und
-  Anmeldeversuche greifen also auch hier.
-- Der Server-Verbund ist von außen nicht erreichbar.
-- Cookies gehen nur verschlüsselt raus (`Secure`, HSTS).
-- `cloudflared` prüft das Zertifikat von Aquaticy immer gegen deine Domain.
-- Das Tunnel-Token steht nie auf der Befehlszeile. Andere Nutzer des Rechners sehen es nicht.
-- Token und Schlüssel liegen in Dateien, die nur du lesen kannst.
-
-Ohne Domain bleibt alles wie bisher: `aquaticy web` läuft nur auf diesem Rechner, `--lan`
-öffnet es fürs Heimnetz.
-
----
 
 ## Konten: Normal, Pro und Ultra
 
@@ -617,17 +550,11 @@ Schlägt Installation oder Start fehl, meldet Setup den Fehler und lädt kein Mo
 
 | | Normal | Pro | Ultra |
 |---|---|---|---|
-| Recherche, Chat, Code-Modus, Add-ons ohne virtual machine | ✔ | ✔ | ✔ |
-| Coworker | – | bis zu 2 | bis zu 5, mit eigener virtual machine |
+| Recherche, Chat, Code-Modus, Add-ons | ✔ | ✔ | ✔ |
 | Nutzung je 5-Stunden-Sitzung | 300.000 Token | 533.333 Token | unbegrenzt |
 | Nutzung je Woche | 2 Mio. Token | 4 Mio. Token | unbegrenzt |
-| Auslastungsanzeige | – | – | ✔ |
-| Heimnetz, Home Assistant, Lagerverwaltung | – | – | ✔ |
-| User mode, virtual machine „Plus“, virtual-machine-Add-ons | – | – | ✔ |
-| Internet für die virtual machine (Code-Modus) | – | – | ✔ |
 | Eigene Adressen für Modell und Suche | – | – | ✔ |
 | Rechts-Leitplanken abschaltbar (nur fürs eigene Konto) | – | – | ✔ |
-| Auto-Upgrading und Server-Verbund steuern | – | – | ✔ |
 | Ai-guard | sperrt | sperrt | warnt nur |
 | Code zum Anlegen | – | 9 Zeichen | 14 Zeichen |
 
@@ -669,51 +596,9 @@ ist gegen gestohlene Datenbanken und Sicherungen und gegen andere Konten.
 
 ## Add-ons
 
-*Im Chat unter Modelle und Verbindungen → Add-ons oder unter Einstellungen → virtual machine → Add-ons.* Jedes Add-on lässt sich
+*Im Chat unter Modelle und Verbindungen → Add-ons oder unter Einstellungen → Add-ons.* Jedes Add-on lässt sich
 installieren, an- und ausschalten und entfernen. Anbieter und Schlüssel verwaltest du im jeweiligen Add-on. Anmelden musst du dich selbst –
 Aquaticy kennt keine Passwörter. Unter **Rechte** stellst du ein, was Aquaticy damit darf.
-
-Für WhatsApp, Signal und Blender baut Aquaticy den Desktop beim ersten Installieren.
-Die Bauvorlage und Hilfsprogramme sind auch im Python-Paket enthalten. Ein Git-Projektordner
-ist dafür nicht nötig. Docker oder Podman und eine Internetverbindung werden benötigt.
-
-**Empfohlen: ohne virtual machine.** In der Karte von WhatsApp Web und Signal steht **Ohne
-virtual machine verbinden** (nur Ultra). Aquaticy wird wie ein weiteres Gerät an dein Handy
-gekoppelt: ein Klick auf „Verbinden“, ein QR-Code im Fenster, scannen, fertig. Es läuft kein
-Browser und keine virtual machine. Die Teile dafür richtet Aquaticy mit ein:
-
-- **WhatsApp:** Das Paket neonize ist bei der Installation von Aquaticy schon dabei (Linux mit
-  x86-64 oder ARM64, macOS, Windows). Auf Linux und macOS braucht es noch die Bibliothek
-  `libmagic`.
-- **Signal:** Das Programm [signal-cli](https://github.com/AsamK/signal-cli) lädt Aquaticy
-  selbst von GitHub, nur mit der veröffentlichten SHA-256-Prüfsumme. Auf Linux mit x86-64 geht
-  das ohne Java, sonst braucht signal-cli ein Java ab Version 21. Auf Windows richtest du es
-  selbst ein (Pfad in `AQUATICY_SIGNAL_CLI`).
-- **Wann das passiert:** Das Docker-Abbild bringt alles fertig mit. Sonst fragt
-  `aquaticy setup` am Ende und `aquaticy web` beim Start einmal im Terminal. Du siehst jeden
-  Befehl vorher. Nach einem Nein fragt Aquaticy nicht wieder. Jederzeit nachholen:
-  `aquaticy install-messenger` (mit `--yes` ohne Rückfrage). Nur `libmagic` braucht
-  Verwalterrechte (`sudo`). Aus dem Browser installiert Aquaticy nichts.
-
-Beides sind inoffizielle Wege. Die Sitzungsdaten liegen unverschlüsselt im Ordner deines Kontos
-(`messenger/`, nur für den Benutzer lesbar). „Trennen“ löscht sie. Entferne Aquaticy danach
-am Handy unter „Verknüpfte Geräte“.
-
-**Ältere Methode über die virtual machine:** Bei WhatsApp Web und Signal öffnet „Anmelden“ ein
-eigenes Fenster mit dem QR-Code.
-Scanne ihn mit der Handy-App und bestätige danach „Ich bin angemeldet“.
-Der Code wird lokal erkannt, nicht an ein KI-Modell geschickt und nicht im Chat gespeichert.
-Beim Schließen wird die Anzeige geleert. Die Anmeldung läuft nach zehn Minuten ab.
-Aquaticy liest auch dichte Codes (WhatsApp) und zeichnet sie scharf neu. Zeigt das Fenster
-keinen Code, steht dort der Grund: Fenster noch zu, ein anderes Fenster vorn oder noch kein
-Code auf dem Bildschirm. Nach etwa zehn Sekunden ohne Code gibt es „Bildschirm selbst
-bedienen“: Du siehst den Bildschirm der virtual machine und meldest dich dort selbst an.
-Stürzt Firefox ab („Der Tab ist gerade abgestürzt“), startet Aquaticy ihn einmal neu. Die
-virtual machine im User mode bekommt dafür mindestens 2 GB Speicher und 2 Kerne (mehr, wenn
-du mehr eingestellt hast). Firefox schickt keine Absturzberichte an Mozilla.
-Du musst die virtual machine dafür nicht selbst bedienen.
-Aktuelle WhatsApp-Codes mit `wa.me/settings/linked_devices` werden ebenso erkannt wie ältere Codes.
-Bei kurzen Verbindungsfehlern versucht das Anmeldefenster es automatisch erneut.
 
 ### KI-Modelle: NVIDIA NIM und Mistral
 
@@ -721,8 +606,8 @@ Die beiden stehen ganz oben unter Add-ons. Sie sind der **einzige Ort** in Aquat
 sich ein API-Schlüssel eintragen lässt. In vier Schritten:
 
 1. **„Installieren“** beim Add-on NVIDIA NIM oder Mistral.
-2. **„Mit Google“, „Mit E-Mail“** (bei Mistral auch Apple und Microsoft) öffnet die Seite des
-   Anbieters. Dort meldest du dich selbst an.
+2. **„Schlüssel bei … holen“** öffnet die Seite des Anbieters, auf der es den Schlüssel gibt.
+   Dort meldest du dich selbst an.
 3. Einen **API-Schlüssel erstellen** und kopieren.
 4. In Aquaticy **„Einfügen“** oder einfügen und **„Verknüpfen“**.
 
@@ -749,133 +634,11 @@ nimmt die Lösung an oder schickt sie zurück, bis zu drei Runden.
 | 📚 Wikipedia | Begriffe nachschlagen, mit Link (Deutsch/Englisch) | keine |
 | 💱 Währungsrechner | Tageskurse der EZB für gut 30 Währungen | keine |
 | 📅 Feiertage | gesetzliche Feiertage weltweit, auch je Bundesland | keine |
-| 💬 WhatsApp Web | Chats lesen, Antworten vorbereiten. Senden nur nach deinem Ja. Dazu die [Messenger-Brücke](#mit-aquaticy-per-whatsapp-oder-signal-schreiben) | QR-Code |
-| 🔵 Signal | wie WhatsApp, mit Signal Desktop | QR-Code |
-| 🧊 Blender | 3D-Modelle bauen und rendern in der virtual machine | keine |
 | 🔍 Code-Review | prüft Code auf typische Fehler, gerade bei KI-Code | keine |
 | 🛡️ Security-Review | sucht Sicherheitslücken nach OWASP und zeigt die Lösung | keine |
 
-WhatsApp, Signal und Blender laufen in der virtual machine und brauchen den User mode
-(Ultra). Die Tagesschau ist nur für den privaten Gebrauch. Aquaticy hält die erlaubten 60
+Die Tagesschau ist nur für den privaten Gebrauch. Aquaticy hält die erlaubten 60
 Abrufe pro Stunde ein.
-
-### Mit Aquaticy per WhatsApp oder Signal schreiben
-
-Die **Messenger-Brücke** (nur Ultra, `aquaticy/bridge.py`) lässt dich mit Aquaticy chatten wie
-auf der Website. Du schreibst eine Nachricht, Aquaticy antwortet im selben Chat. Die Antwort
-beginnt mit `[Aquaticy]`.
-
-**Voraussetzungen, direkt gekoppelt (empfohlen):** nur die Kopplung (siehe oben) und Ultra.
-Dann schaltest du unter dem Add-on **Mit Aquaticy schreiben** ein. Aquaticy antwortet sofort.
-Die Nachrichten kommen mit der echten Nummer des Absenders an (`aquaticy/bridge_native.py`).
-Freigegebene Nummern gelten deshalb nur mit Landesvorwahl (`+49 151 …`); Namen und Nummern wie
-`0151 …` passen nie. Nachrichten, die älter als fünf Minuten sind, beantwortet Aquaticy nicht.
-
-**Voraussetzungen, über den Bildschirm:** User mode an, Add-on installiert und angemeldet, im
-Add-on „Lesen und schreiben“, ein Vision-Modell. Dann schaltest du unter dem Add-on **Mit
-Aquaticy schreiben** ein. Schreib erst, wenn „Bereit“ dasteht: Beim ersten Blick merkt sich
-Aquaticy nur, was schon im Chat steht.
-
-Seit **12.8.9 Terra** prüft Aquaticy die Messenger-Freigabe direkt vor dem Versand erneut.
-Bei geänderten Freigaben oder einer Kontosperre verwirft es die laufende Antwort.
-Auch Fehlermeldungen zählen zur Antwortgrenze. Abgelehnte Befehle fremder Kontakte
-verdrängen keine Modelleinstellungen anderer Chats.
-
-Seit **12.8.9 So** prüft auch `/export` die aktuellen Rechte und die Ablaufzeit des Verlaufs.
-Die Desktop-Brücke berücksichtigt Gruppenbeschränkungen auch direkt vor dem Versand.
-Der Zahlungsdatenfilter prüft vollständige Coworker-Meldungen,
-einschließlich Titel und aufbereiteter Texte.
-Der PDF-Leser wurde gegen bekannte Endlosschleifen und übermäßigen Speicherverbrauch aktualisiert.
-
-Seit **12.9.9 Luna** verlangen deutsche Antworten ausdrücklich echte Umlaute und ß.
-Namen, Zitate, URLs und Code behalten ihre Schreibweise.
-
-Im Setup kannst du den Hintergrundbetrieb der Weboberfläche wählen.
-Wenn du zustimmst, startet die Weboberfläche nach der Einrichtung direkt.
-Mit `aquaticy web --background` schaltest du ihn auch für einen einzelnen Start ein.
-Der Hintergrundbetrieb nutzt automatisch Heimnetz und Tailscale wie `aquaticy web --lan`.
-Beim Start werden die lokale IP-Adresse und die verfügbare Tailscale-Adresse angezeigt.
-Tailscale muss dafür verbunden sein.
-Mit `--host 127.0.0.1` beschränkst du den Zugriff auf diesen Rechner.
-Strg+C schließt dann die Terminalanzeige. Aquaticy läuft als eigener Prozess weiter.
-Die Prozessnummer und das private Protokoll werden beim Start angezeigt.
-Beende diesen Prozess im Betriebssystem, um Aquaticy vollständig anzuhalten.
-Nach dem Herunterfahren musst du Aquaticy selbst wieder starten.
-`aquaticy web --foreground` startet ausdrücklich im Vordergrund.
-
-Beim Start von Chat oder Weboberfläche prüft Aquaticy den Projekt-Branch auf Updates.
-Neue Versionen werden automatisch installiert und anschließend gestartet.
-Die Updateprüfung braucht Git und eine Internetverbindung.
-Bei lokalen Codeänderungen wird das Update ausgelassen. Bei Fehlern startet die vorhandene Version.
-
-**Messenger-Befehle (mobile):** `/switch` zeigt installierte Modelle und die Modelle der
-verfügbaren API-Schlüssel. `/switch Modell` wählt eines nur für diesen Messenger-Chat.
-Auch „wechsle bitte dein LLM“ öffnet die Auswahl. Mehrdeutige Namen werden nicht geraten.
-Normal sind höchstens vier Rechercheagenten aktiv, ohne Strukturieren und Gegenprüfen.
-`/pro` aktiviert Pro mit Mannschaft, Strukturieren und Gegenprüfen. `/normal` oder `/pro aus`
-schaltet zurück. Website-Einstellungen ändern sich dadurch nicht. Modellwechsel und Pro
-sind dem Besitzer und freigegebenen Nummern vorbehalten. `/help` kennzeichnet diese Befehle
-mit „mobile“. `/export` gibt den Verlauf dieses Messenger-Chats als Text aus. Lange Verläufe haben Seiten
-(`/export seite 2`).
-Datei- und Desktop-Befehle behalten ihre Grenzen und verweisen bei Bedarf auf die App.
-
-**Wer darf schreiben?**
-
-| Auswahl | Aquaticy antwortet in … |
-|---|---|
-| Nur mein eigener Chat | deinem Chat „Nachricht an dich selbst“ (Standard) |
-| Mein Chat und diese Nummern | zusätzlich bei den Nummern oder Namen, die du einträgst |
-| Alle Einzelchats | jedem Einzelchat |
-| Einzelchats und Gruppen | auch in Gruppen, dort nur bei „Aquaticy, …“ |
-
-**Was darf Aquaticy nutzen?** Je Dienst eine Stufe: Web und Rechnen, Home Assistant (lesen oder
-schalten), Gmail und Google Kalender (lesen oder ändern), GitHub (lesen), Lagerverwaltung
-(lesen oder ändern). Das gilt nur für dich und die freigegebenen Nummern. Alle anderen
-bekommen nur Web und Rechnen. Die Regeln stecken im Code, nicht im Prompt: Ein Werkzeug
-außerhalb der Auswahl läuft nie. Die Brücke geht nie weiter, als die App es erlaubt.
-
-**Wichtig zu wissen:**
-
-- Über den Bildschirm sieht Aquaticy den Messenger in der virtual machine. Antworten brauchen
-  dann 30 Sekunden bis 5 Minuten (einstellbar), und Aquaticy öffnet Chats. Andere sehen dann
-  „gelesen“. Die direkte Kopplung braucht das nicht.
-- **Gelesen und „schreibt …“ (direkt gekoppelt):** Sobald Aquaticy eine Nachricht annimmt, siehst
-  du die blauen Haken (WhatsApp) oder „gelesen“ (Signal). Während Aquaticy lädt, denkt oder
-  recherchiert, steht im Chat „schreibt …“. Das gilt nur für Nachrichten, auf die Aquaticy auch
-  antwortet. Wer abgelehnt wird, merkt nichts davon.
-- **Meldungen deiner Coworker (direkt gekoppelt):** Was ein Coworker meldet oder fragt, kommt
-  auch in deinen eigenen Chat „Nachricht an dich selbst“: `[Aquaticy] Coworker Ava`, darunter
-  die Nachricht. Bei Coworkern mit Zeitplan (etwa alle 2 Stunden) ist das jede Antwort. Auch
-  eine wartende Freigabe wird gemeldet; freigeben kannst du nur in der App. Das gilt, solange
-  die Brücke an ist. Höchstens 30 Meldungen je Stunde. Ist die Verbindung kurz weg, wartet die
-  Meldung bis zu eine Stunde. Zahlungsdaten sendet Aquaticy nie. Bedenke: Was der Coworker
-  meldet (etwa aus deinen Mails), geht so durch WhatsApp oder Signal.
-- **Befehle mit `/`** gehen im Messenger auch (`/help` zeigt sie). Für alle erlaubten Chats:
-  `/help`, `/clear` (Gespräch hier vergessen), `/location Ort` (Ortsfilter nur für diesen Chat)
-  und die eingeschalteten Plugins: `/code-review`, `/security-review` (Code hinter den Befehl
-  schreiben), `/wetter`, `/nachrichten`, `/wikipedia`, `/waehrung`, `/feiertage`. `/model` zeigt
-  das Modell (nur dir und freigegebenen Nummern). `/feeds` und `/github` gehen nur dort, wo der
-  Dienst freigegeben ist. `/memory`, `/notes`, `/history`, `/uploads` und `/forget` gehen nur in
-  deinem eigenen Chat. `/export`, `/image`, `/max`, `/blender` und die Messenger-Add-ons gehen
-  nur in der App. Ein Plugin muss in der App eingeschaltet sein.
-- Rückfragen sind in Messengern nicht möglich. Was eine Bestätigung braucht, lehnt Aquaticy
-  dort ab und verweist auf die App.
-- Emojis kann die virtual machine nicht tippen. Sie fehlen in den Antworten.
-- Messenger erlauben oft keine Programme, die für dich schreiben. Dein Konto könnte gesperrt
-  werden.
-- Über den Bildschirm ist eine Nummer sicherer als ein Name: Einen Namen kann sich bei Signal
-  jeder geben. Ein Titel mit „~“ davor (WhatsApp-Name eines Fremden) passt nie zu einem Namen.
-  Nummern zählen nur mit Landesvorwahl: Dieselben Endziffern gibt es in anderen Ländern.
-- Pro Stunde gibt es höchstens 40 Antworten. Läuft gerade ein Chat in der App oder ist das
-  Konto gesperrt, wartet die Brücke.
-- Ohne Add-on, Anmeldung oder Schreibrecht geht sie von selbst aus.
-
-**Meldungen und Nachrichten an dich (direkte Kopplung):**
-- „Schreib mir das auf WhatsApp“ im Chat: Aquaticy schickt die Nachricht in deinen eigenen
-  Chat, an niemanden sonst.
-- Secure Pro (Angriffe, Schwachstellen) und die Coworker melden sich in deinem eigenen Chat.
-  Ist „Mein Chat und diese Nummern“ gewählt, bekommen auch die eingetragenen Nummern die
-  Meldungen (nur mit Landesvorwahl, höchstens zehn).
 
 ### Plugins im Chat
 
@@ -901,43 +664,6 @@ die Korrektur gleich mitschreibt.
 
 ---
 
-## Virtual machine und User mode
-
-Die **virtual machine** ist ein abgeschotteter Rechner. Darin führt Aquaticy Code wirklich aus.
-
-| Größe | Kerne | Arbeitsspeicher | Platte |
-|---|---|---|---|
-| Normal | 2 | 3 GB | 4 GB |
-| Plus (Ultra) | 4 | 6 GB | 20 GB |
-
-Die Größe wählst du unter Einstellungen → virtual machine. Sie bleibt gespeichert und gilt ab
-der nächsten virtual machine.
-
-- Kein root, die Platte ist begrenzt.
-- **Netz:** Normal und Pro haben dort **kein Netz**. Rechnen und Dateien bearbeiten geht
-  trotzdem. **Ultra** schaltet das Internet selbst frei. Heimnetz, Router und der eigene Rechner
-  bleiben dann gesperrt – außer Ultra wählt **Auch ins lokale Netz**. Das Modell kann beides nicht
-  umschalten.
-- Ist sie an, führt Aquaticy Code dort aus, bevor es antwortet.
-- **Podman wird mit eingerichtet.** Fehlt Podman oder Docker, bietet `aquaticy web` beim Start
-  an, Podman zu installieren (Linux: Paketmanager mit sudo, macOS: Homebrew, Windows: winget;
-  dazu die Podman-Maschine). Jeder Befehl wird vorher gezeigt. Nach einem Nein fragt es nicht
-  wieder; `aquaticy install-vm` holt es jederzeit nach. Aus dem Browser lässt sich nichts
-  installieren – das entscheidet, wer am Rechner sitzt.
-- Angehängte Dateien liegen unter `eingang`. Alles Erstellte kannst du herunterladen.
-- 20 Minuten nach der letzten Nachricht wird die virtual machine gelöscht.
-
-Der **User mode** (Ultra) macht daraus einen kleinen Desktop mit Internet. Aquaticy sieht den
-Bildschirm, klickt und tippt wie ein Mensch. Absenden, Kaufen und Löschen nur nach deinem Ja.
-Passwörter, Zahlungsdaten, Captchas und „Alle akzeptieren“ fasst Aquaticy nie an. Einmal nötig
-(Betreiber):
-
-```bash
-docker build -f docker/workshop-desktop.Dockerfile -t aquaticy-werkstatt-desktop:local .
-```
-
----
-
 ## Speicher
 
 **Speicher.** Aquaticy merkt sich, was länger gilt: Wohnort, Vorlieben, laufende Vorhaben. Nur
@@ -952,79 +678,9 @@ jeden Eintrag und löschst ihn einzeln oder alle.
   Aquaticy das Geburtsdatum und rechnet das Alter jeden Tag neu aus.
 - „Wie heiße ich?“ beantwortet Aquaticy sofort in einem ganzen Satz („Du heißt Louis.“).
 - Je Sache gibt es einen Stand: „Ich bin nach Hamburg gezogen“ ersetzt Bremen.
-- Das Gedächtnis gilt im normalen Chat, in Pro, in Secure Pro und in deinem eigenen
-  WhatsApp/Signal-Chat. Im Code-Modus gibt es keins.
+- Das Gedächtnis gilt im normalen Chat, in Pro und in Secure Pro. Im Code-Modus gibt es keins.
 - Gesundheit, Religion, Politik, Sexualität, Passwörter und Nummern merkt Aquaticy nur auf
   ausdrückliche Bitte. „Merk dir das nicht“ verhindert das Merken, „Vergiss, dass …“ löscht.
-
----
-
-## Coworker
-
-*Seitenleiste → 🤝 Coworker*. Hier stehen alle Aufgaben: mit festem Zeitplan, als
-Beobachtung oder dauerhaft. Der bisherige separate Einstellungsbereich „Aufträge“ entfällt;
-vorhandene Aufgaben, Bilder, Termine und Chat-Verweise werden automatisch übernommen.
-
-**Feste Zeitpläne und Beobachtungen** gibt es für alle Konten (bis zu 20):
-
-- regelmäßig recherchieren – stündlich, täglich, wöchentlich, mit optionalem Strukturieren;
-- Kamera, Satellit oder Straße beobachten;
-- Preise beobachten;
-- ein Bild hochladen und nach einem Angebot dafür suchen, mit optionaler Quelladresse.
-
-Beobachtungen können bis zu minütlich oder durchgehend prüfen. Nur bei einem belegten Treffer
-erscheint ein neuer Chat mit Quelle und Prüfzeit; danach hält die Beobachtung an. Nur öffentliche
-Quellen, keine privaten Kameras oder Anmeldungen. Alle Läufe zählen ins Kontingent.
-
-**Dauerhafte Coworker** gibt es zusätzlich mit Pro (2) und Ultra (5). Sie übernehmen eine
-Aufgabe und entscheiden selbst, wann sie daran weiterarbeiten:
-
-- **Er arbeitet in Schritten, die ganze Zeit.** Nach jedem Schritt entscheidet er, wann er
-  wieder aufwacht. Mitten in der Arbeit nach wenigen Minuten, beim Warten erst morgen. Schreibst
-  du ihm, wacht er sofort auf.
-- **Er hat ein Gedächtnis.** Notizen, Aufgaben, Verläufe und Aktionsdaten liegen verschlüsselt
-  im Konto. Je Coworker sind 6.000, 12.000 oder 24.000 Zeichen einstellbar. Optional darf er
-  passende Auszüge aus normalen Chats und/oder Notizen anderer Coworker desselben Kontos lesen
-  und hilfreiche Fakten übernehmen. Beide Freigaben beginnen ausgeschaltet. Ausschalten beendet
-  neue Übernahmen; vorhandene Notizen kannst du separat löschen. Andere Konten bleiben getrennt.
-- **Mehr Emojis.** Bei der Erstellung stehen über 40 Bilder zur Auswahl.
-- **Er nutzt deine Verbindungen.** Gmail, Kalender, GitHub und die anderen Add-ons, mit
-  denselben Rechten wie im Chat.
-- **Er meldet sich.** Ergebnisse und Fragen stehen in der Übersicht und als eigener Chat. Das
-  Abzeichen zeigt, was neu ist.
-- **Er fragt, bevor er etwas ändert.** Für jede Art Aktion stellst du eine **Regel** ein:
-  *Erlauben*, *Fragen* oder *Sperren*. Das gilt für Termine, Mail-Entwürfe, Speicher und (Ultra)
-  Lager, Home Assistant und Heimnetz. Bei „Fragen“ siehst du genau, was passieren würde.
-  Ausgeführt wird genau das, vom Code und nicht noch einmal vom Modell. Hat er Webseiten oder
-  Mails gelesen, fragt er vor Änderungen auch bei „Erlauben“; ausgenommen sind die begrenzten,
-  ausdrücklich erlaubten Haus-Schaltaktionen.
-- **„Im Haus etwas schalten“ (Ultra).** „Erlauben“ steht direkt in dieser Regelzeile.
-  Es erlaubt `turn_on`/`turn_off` für einzelne Lichter, Schalter, Lüfter, Eingabeschalter und
-  Mediengeräte, auch nach gelesenen Inhalten. Keine Gruppen, Platzhalter oder Zusatzdaten.
-  Schlösser, Alarme, Garagentore, Skripte, Szenen und andere geschützte Aktionen brauchen
-  weiterhin eine einzelne Bestätigung. Schalten muss in der Verbindung eingeschaltet sein;
-  nach einem Token- oder Adresswechsel musst du erneut „Erlauben“ anklicken. „Fragen“ widerruft
-  die automatische Freigabe, „Sperren“ blockiert die Kategorie. Der separate Bereich mit
-  Geräte-Dauerfreigaben entfällt; alte Einzelfreigaben werden nicht automatisch ausgeweitet.
-- **Rhythmus unter „Aufgabe ändern“.** Wähle 30 Sekunden, 1, 5, 10 oder 20 Minuten, 1 oder
-  4 Stunden oder einmal täglich. Der Abstand zählt ab dem Ende des letzten Laufs; laufende
-  Arbeit und Warteschlange können ihn verlängern. „Automatisch“ bzw. „Bisheriger Zeitplan“
-  stellt die ursprüngliche Planung wieder her. Häufige Recherchen nutzen denselben Chat.
-  Tagesgrenzen, Kontingentpausen und der Schutz vor doppelten Läufen gelten weiterhin.
-- **Aufgeräumte Oberfläche.** Dekorative Emojis entfallen außerhalb von Coworkern; der
-  Coworker-Button hat keinen Handschlag mehr. Merkzettel erreichst du weiter über `/notes`,
-  der separate Button über Einstellungen entfällt.
-- **Ultra: eigener Rechner.** Jeder Coworker bekommt eine eigene virtual machine ohne Desktop.
-
-| | Pro | Ultra |
-|---|---|---|
-| Coworker | bis zu 2 | bis zu 5 |
-| Frühestens automatisch wieder wach nach | 15 Minuten | 5 Minuten |
-| Arbeitsschritte je Coworker und Tag | 48 | 288 |
-| Eigene virtual machine | – | ✔ (mit Docker oder Podman) |
-
-Coworker zählen ins Kontingent. Ist es leer, macht der Coworker weiter, sobald es sich
-zurücksetzt. Im Server-Verbund arbeitet er nur auf dem Heimserver seines Kontos.
 
 ---
 
@@ -1049,7 +705,7 @@ einzeln, und du kannst Haken abwählen. Ein Haken fehlt? Dann steht unter „Gma
 Haken. Das gilt auch, wenn du „Ändern erlaubt“ erst nach dem Verbinden einschaltest.
 
 **Ohne Rückfrage:** Mit **„Auf Befehl ohne Rückfrage ändern“** (`AQUATICY_GOOGLE_DIRECT`) trägt
-Aquaticy Termine ein und legt Entwürfe an, sobald du darum bittest, auch als Coworker-Aufgabe.
+Aquaticy Termine ein und legt Entwürfe an, sobald du darum bittest.
 Hat es Mails oder Webseiten gelesen, fragt es trotzdem. Dein eigener Kalender zählt dafür nicht.
 
 **Einrichten (einmal, etwa fünf Minuten):**
@@ -1070,55 +726,7 @@ löscht die Zugangsdaten.
 
 ---
 
-## Zuhause: Heimnetz, Home Assistant, Lager
-
-Nur mit **Ultra**.
-
-- **Heimnetz:** „Welche Geräte sind in meinem WLAN?“ Aquaticy schaut nur, ob etwas antwortet,
-  und nur in privaten Netzen (`10/8`, `172.16/12`, `192.168/16`, `100.64/10`). Im Terminal:
-  `aquaticy lan`.
-- **Home Assistant:** `aquaticy connect-ha` findet die Instanz. Aquaticy liest Zustände und
-  schaltet, wenn du es erlaubst. Schlösser, Alarm, Tore und Heizung fragen immer nach.
-  Mit **„Auf Befehl ohne Rückfrage schalten“** (`AQUATICY_HA_DIRECT`) schaltet Aquaticy Licht,
-  Steckdosen, Ventilatoren und Mediaplayer sofort, wenn du darum bittest, und auch als
-  Coworker-Aufgabe. Bei Lampen darf es Helligkeit und Farbe setzen. Das Modell kann den
-  Schalter nicht selbst umlegen. Hat Aquaticy Webseiten oder Mails gelesen, fragt es trotzdem.
-- **Lagerverwaltung:** Räume → Möbel → Artikel. Aquaticy sagt, wo etwas liegt und wie viel da
-  ist. Mit „Lesen und schreiben“ legt es auch an. Gelöscht wird nie.
-
-### HTTPS im Heimnetz und über Tailscale
-
-Mit `--lan` oder im Hintergrund ist Aquaticy auch unter `https://aquaticy.local:8443` und über
-Tailscale unter `https://<rechner>.<tailnet>.ts.net:8443` erreichbar.
-
-- **Tailscale:** echtes Zertifikat über `tailscale cert`. Schalte dafür im Tailnet „HTTPS
-  Certificates“ ein.
-- **Heimnetz:** Aquaticy hat eine eigene kleine Zertifizierungsstelle. Lade ihr Zertifikat
-  einmal je Gerät unter `/zertifikat` herunter und vertraue ihm. Es gilt nur für Namen im
-  Heimnetz, nie für Seiten im Internet.
-- `aquaticy.local` braucht mDNS: avahi (Linux) oder `pip install zeroconf`.
-- Anmeldung und Zugangswort gelten wie beim normalen Eingang.
-
-### nmap und ClamAV für Secure Pro einrichten
-
-Beides ist freiwillig. Secure Pro läuft auch ohne, prüft dann aber weniger.
-
-- **nmap** liest, welche Dienste ein Gerät im Heimnetz anbietet. `aquaticy secure-pro` bietet
-  an, nmap zu installieren (Linux mit apt). Sonst: `sudo apt install nmap` oder
-  `brew install nmap`. Danach schaltest du es ein: Einstellungen → Zuhause & Netz → Secure Pro.
-  nmap prüft nur Ziele im freigegebenen Heimnetz, mit festen Befehlen.
-- **ClamAV** sucht Malware, aber nur in einem Ordner, den du freigibst. Installiere es mit
-  `sudo apt install clamav` (oder `brew install clamav`) und hole die Virendaten mit
-  `sudo freshclam`. Den Ordner gibst du in `aquaticy secure-pro` an. Fehlt ClamAV, sagt Secure
-  Pro das im Bericht.
-- **Firewall:** Ohne `--lan` lauscht Aquaticy nur auf `127.0.0.1`. Mit `--lan` oder im
-  Hintergrund ist es auch im Heimnetz erreichbar. Soll nur dein Heimnetz an den Port, hilft
-  deine Firewall, zum Beispiel `sudo ufw allow from 192.168.0.0/16 to any port 8765`.
-  Secure Pro ändert keine Firewall-Regeln von selbst. Abwehr-Befehle brauchen immer dein Ja.
-
----
-
-## Gemeinsames Lernen und Auto-Upgrading
+## Gemeinsames Lernen
 
 **Gemeinsames Lernen** (freiwillig, *Einstellungen → Gemeinsames Lernen*). Mit deiner Zustimmung
 übernimmt Aquaticy kurze **Auszüge aus öffentlichen Sachartikeln**, die es für dich gelesen hat.
@@ -1130,122 +738,6 @@ Chats werden nie geteilt.
 - Dazu ein persönlicher **Recherchecache**: kurze Stichpunkte mit Quelle, nur für dich,
   höchstens 48 Stunden.
 - Widerruf und Löschen entfernen deine Beiträge und deinen Cache.
-
-**Auto-Upgrading** (*Dev settings*, Ultra schaltet es für alle ein). Aquaticy baut lokale
-Ollama-Modelle mit Wissen aus, das mehrere Konten bestätigt haben. Ein Wissenstest misst, wie
-viel besser die neue Fassung ist.
-
-- Ultra sieht jeden Fortschritt (z. B. +0,00000002 %) und kann den Kandidaten sofort nutzen.
-- Ab **5 %** wird „Upgraden“ grün: aus `gemma3:4b` wird `gemma3:4b 1.1`. Ab **30 %** gibt es
-  eine ganze Version (`gemma3:4b 2`).
-- Ultra kann Versionen überspringen oder eine ältere zurückholen.
-- Nach einer Freigabe sieht jedes Konto einmal **Ausprobieren** und **Zurück**. Beide Fassungen
-  bleiben vier Tage wählbar.
-- Die Gewichte bleiben gleich. Ein Upgrade ist ein lokales Modell mit eingebautem, geprüftem
-  Wissen. Läuft das Wissen ab, wird die Fassung zurückgezogen.
-
----
-
-## Server-Verbund und Serverlast aufteilen
-
-*Einstellungen → Dev settings → Server-Verbund* (nur **Ultra**). Bis zu **10 Server**
-arbeiten zusammen.
-
-- **Eine Datenbank, auf jedem Server ganz.** Konten, Sitzungen und Ai-guard werden gespiegelt,
-  die Profilordner auch. Anmelden geht an jedem Server.
-- **Lastausgleich nach Nutzern.** Jedes Konto hat einen Heimserver. Kommt eine Anfrage
-  woanders an, geht sie verschlüsselt zum Heimserver.
-- **Arbeit nach Stärke.** Jeder Server meldet Kerne, Arbeitsspeicher, Grafikkarte und die
-  Zahl seiner Ollama-Modelle. Daraus gibt der Master jedem eine Rolle:
-  - **Modelle und etwas Website:** Grafikkarte ab 4 GB oder ab 16 GB Arbeitsspeicher, dazu
-    Ollama mit mindestens einem Modell, und mindestens 40 % der Modell-Leistung des
-    stärksten Servers.
-  - **Nur Website:** alle anderen. Sie bekommen nie ein Konto mit lokalen Modellen.
-
-  Ein Konto mit lokalen Modellen geht auf einen Modell-Server. Sitzt es auf einem schwachen,
-  zieht es um, sobald dort nichts mehr läuft. Alle anderen Konten verteilt der Master nach
-  Last im Verhältnis zur Stärke. Ein Modell-Server zählt dafür höchstens halb so stark wie
-  der beste reine Website-Server.
-- **Auslastung je Server:** Unter *Einstellungen → Auslastung* steht jeder Server mit
-  Prozessor, Arbeitsspeicher, Grafikkarte, Rolle und Zahl der Konten (nur Ultra).
-- **Master** ist der Server, der eingeladen hat. Fällt ein Server aus, übernimmt der Master
-  dessen Konten per Knopf.
-
-**Verbinden:** Auf allen Servern `aquaticy web --lan` starten (mit eigener Domain reicht
-`aquaticy web`) und den Schalter einschalten. Im lokalen Netz erscheinen die anderen Server
-in der Liste. Über Tailscale trägst du ihre 100.x-Adresse oder ihren vollständigen
-MagicDNS-Gerätenamen (z. B. `server.tail123.ts.net`) und ihren Aquaticy-Port von Hand ein.
-Dann **Verbinden**. Der andere Server fragt
-im Terminal `Annehmen? [yes/no]` und zeigt bei `yes` einen sechsstelligen Code. Den gibst du
-auf dem Master ein. Ohne Terminal: `docker compose exec aquaticy aquaticy cluster`.
-
-**Gut zu wissen:** Der neue Server übernimmt die Daten des Verbunds und startet einmal neu.
-Seine alten Daten bleiben unter `cluster/backup-<Zeit>`. Zwischen den Servern ist alles mit
-AES-GCM verschlüsselt (Schlüsseltausch per X25519). Gefunden wird per UDP-Rundruf auf Port 8766
-(`AQUATICY_CLUSTER_PORT`). Im Container dafür `compose.host.yaml` nutzen.
-
-**Über Tailscale:** Alle Server müssen im selben Tailnet erreichbar sein. Für einen Verbund
-über mehrere Standorte jeden Server über seine Tailscale-Adresse einladen; lokale LAN-Adressen
-sind an anderen Standorten normalerweise nicht erreichbar. Die lokale Firewall und die
-Tailscale-Zugriffsregeln müssen den tatsächlichen **Aquaticy-TCP-Port** (normalerweise 8765)
-zwischen allen Mitgliedern erlauben. Ist der Wunschport belegt, den im Terminal angezeigten
-Ersatzport eintragen. Eine Freigabe im Internet oder ein zusätzlicher RPC-Port ist nicht nötig.
-Die UDP-Suche auf 8766 funktioniert nur im lokalen Netz und wird für Tailscale nicht gebraucht.
-MagicDNS muss auf dem einladenden Rechner funktionieren; andernfalls die 100.x-IP verwenden.
-Aquaticy löst nur vollständige `*.ts.net`-Namen auf, akzeptiert dabei ausschließlich
-Tailscale-IP-Adressen und speichert die geprüfte IP für alle weiteren Verbindungen.
-
-`aquaticy web --lan` bindet IPv4. Wer gezielt Tailscale-IPv6 verwendet, startet Aquaticy mit
-`aquaticy web --host fd7a:115c:a1e0:… --no-open` (die eigene vollständige Tailscale-IPv6-Adresse
-einsetzen). Dann muss diese Adressfamilie zwischen allen Mitgliedern erreichbar sein.
-Im Container muss der Aquaticy-Port auch über die Tailscale-Schnittstelle des Hosts erreichbar
-sein; bei Netzwerk-Isolation ist außerdem der Rückweg zu den anderen Mitgliedern nötig.
-Tailscale ersetzt weder die Zustimmung auf dem eingeladenen Server noch den Bestätigungscode.
-
-### Serverlast aufteilen
-
-Ein Schalter im Server-Verbund, nur für den **Master**. Dann verteilt der Verbund nicht die
-Nutzer, sondern das *Modell*. Seine Schichten liegen auf allen Servern, die gemeinsam rechnen.
-So läuft auch ein Modell, das in keinen Server allein passt – etwa ein 70B-Modell auf drei
-Rechnern mit je 24 GB.
-
-| | Server-Verbund allein | mit „Serverlast aufteilen“ |
-|---|---|---|
-| Was wird verteilt? | die Nutzer | das Modell |
-| Modell | auf jedem Server eines | eines für alle |
-| Größtes Modell | was ein Server schafft | was alle zusammen schaffen |
-| Wer bedient die Konten? | der Heimserver | der Master |
-
-**Was es braucht:** nur **das Modell in Ollama auf dem Master** (`ollama pull llama3.3:70b`).
-Laufen muss es dort nicht. Die anderen Server bekommen ihre Schichten beim Start.
-
-**llama.cpp installiert sich selbst.** Sobald der Schalter an ist, lädt Aquaticy auf jedem
-Server `rpc-server` und `llama-server` von [llama.cpp](https://github.com/ggml-org/llama.cpp):
-
-- **Eine Fassung für alle.** Der Master wählt sie und schickt sie an alle Server.
-- **Die passende Ausgabe je Server:** Metal auf dem Mac, Vulkan mit NVIDIA-Karte, sonst die
-  für den Prozessor. Startet die Grafik-Ausgabe nicht, nimmt Aquaticy die für den Prozessor.
-- **Geprüft:** nur von GitHub, nur mit veröffentlichter Prüfsumme (SHA-256), entpackt nur in
-  den eigenen Ordner (`~/.aquaticy/llama.cpp`).
-- **Im Container schon dabei.**
-
-Wer llama.cpp selbst baut, gibt die Programme mit `AQUATICY_RPC_SERVER` und
-`AQUATICY_LLAMA_SERVER` vor. `AQUATICY_LLAMA_TAG` legt eine Fassung fest. `aquaticy cluster`
-zeigt, welche läuft.
-
-**So geht es:** Auf dem Master das Modell wählen und **Serverlast aufteilen** einschalten.
-Aquaticy lädt llama.cpp (beim ersten Mal ein paar Minuten), startet die Server, prüft, ob das
-Modell in den gemeinsamen Speicher passt, und startet es. Danach steht es für alle Konten als
-**„&lt;Modell&gt; · Verbund“** in der Auswahl. Klappt etwas nicht, steht der Grund im
-Verbund-Bereich. Die Meldungen von llama.cpp liegen unter `~/.aquaticy/cluster/`.
-
-**Sicherheit:** `rpc-server` und `llama-server` lauschen nur auf `127.0.0.1`. Der Master
-erreicht die anderen nur durch einen verschlüsselten Tunnel über den Aquaticy-Port. Es wird kein
-zusätzlicher Port geöffnet.
-
-**Grenzen:** Jedes Wort wandert durch alle Server. Mit Kabel geht das gut, über WLAN langsamer.
-Der erste Start überträgt das ganze Modell. Das verteilte Modell beantwortet eine Anfrage nach
-der anderen.
 
 ---
 
@@ -1284,8 +776,8 @@ Beispiele: App, keine Fehlversuche, bekanntes Gerät = 6; App, 6 Fehlversuche, n
 Skript, 40 Fehlversuche, neues Gerät = 99. Ein Browser, dessen Fingerabdruck passt, kommt
 höchstens auf 59 und wird nie abgewiesen.
 
-Den echten TLS-Fingerabdruck (JA3/JA4) sieht Aquaticy nicht: Hinter dem Cloudflare-Tunnel endet
-die Verschlüsselung bei Cloudflare, im Heimnetz gibt es keine. Als Fingerabdruck zählen deshalb
+Den echten TLS-Fingerabdruck (JA3/JA4) sieht Aquaticy nicht: Auf Vercel endet die
+Verschlüsselung bei Vercel, im Heimnetz gibt es keine. Als Fingerabdruck zählen deshalb
 User-Agent, `Accept-Language`, die Fetch-Metadaten des Browsers (`Sec-Fetch-Site`),
 `navigator.webdriver` und eine kleine Rechenaufgabe (SHA-256), die die Seite beim Besuch im
 Hintergrund löst. Alles liegt nur im Arbeitsspeicher, siehe `aquaticy/botguard.py`.
@@ -1298,8 +790,8 @@ Private Anschrift, Handynummer oder Aufenthaltsort auszuforschen ist es nicht.
 - **Abgelehnt bleibt abgelehnt.** „Bitte“ oder Drängen ändern nichts. Eine neue Frage oder ein
   neuer Chat heben die Absage auf.
 - **Abschalten** geht nur mit Ultra, nur in den Einstellungen und nur fürs eigene Konto.
-- **Grundschutz bleibt immer:** keine Schadsoftware in der virtual machine, keine Bilder, die
-  echte Menschen herabsetzen.
+- **Grundschutz bleibt immer:** keine Schadsoftware, keine Bilder, die echte Menschen
+  herabsetzen.
 
 **Ai-guard** läuft auf jedem Konto und entscheidet nach **Art und Schwere**:
 
@@ -1335,7 +827,7 @@ aquaticy aiguard --konto "name"  # die letzten Vorfälle eines Kontos
 ## Modelle und Anbieter
 
 Aquaticy nimmt **Mistral** und **NVIDIA NIM** in der Cloud und sonst nur, was **auf dem
-Server** läuft: Ollama, LM Studio, vLLM, llama.cpp und das Verbund-Modell. Andere Anbieter
+Server** läuft: Ollama, LM Studio, vLLM und llama.cpp. Andere Anbieter
 (Claude, ChatGPT, Gemini, Groq, OpenRouter …) ruft es nicht auf, auch nicht über eine
 eingetragene Modell-ID.
 
@@ -1382,7 +874,7 @@ aquaticy --model ollama_chat/qwen2.5:7b
   Modellen. Auf „Automatisch“ nimmt Aquaticy mit einem Cloud-Modell ein schnelles Modell
   desselben Anbieters (siehe Tabelle oben), lokal das Hauptmodell.
 - **Zeit:** Aquaticy rechnet immer mit deutscher Zeit (Europe/Berlin, mit Sommer- und
-  Winterzeit), auch wenn die Uhr des Servers auf UTC steht. Das gilt auch für die Coworker.
+  Winterzeit), auch wenn die Uhr des Servers auf UTC steht.
 
 ---
 
@@ -1406,40 +898,9 @@ sich Aquaticy das nicht. Ein echter Fehlschlag bleibt höchstens eine Stunde gem
 aus den Feeds großer Redaktionen (Tagesschau, ZDF, Deutschlandfunk, Spiegel; in Österreich,
 der Schweiz und auf Englisch passende andere). Mit Thema („Neues zu Tesla“) sucht es gezielt.
 
-Alles auf dem eigenen Rechner – lokales Modell plus eigener Suchserver:
-
-```bash
-docker compose --profile searxng up -d searxng
-echo 'AQUATICY_SEARCH_BACKEND=searxng' >> .env
-```
-
-Vorher in `docker/searxng/settings.yml` den `secret_key` ersetzen (`openssl rand -hex 32`).
-
----
-
-## Im Container
-
-```bash
-./aquaticy-box --setup            # einmal: Modell und Schlüssel
-./aquaticy-box                    # Chat
-./aquaticy-box "deine Frage"      # einzelne Recherche
-```
-
-Oder mit Compose:
-
-```bash
-docker compose run --rm aquaticy
-docker compose build aquaticy                                # mit Chromium (Standard)
-AQUATICY_IMAGE_TARGET=slim docker compose build aquaticy     # ohne Chromium, ~700 MB kleiner
-```
-
-Nach einem `git pull` das Abbild neu bauen (`docker compose build aquaticy`). Ein laufender
-Web-Container braucht danach `docker compose up -d --force-recreate aquaticy`.
-
-Der Container trennt das Dateisystem vom Rechner. Noch strenger: `compose.sandbox.yaml`
-(`aquaticy sandbox` zeigt, was offen ist). Das Abbild bringt llama.cpp und `cloudflared` schon
-mit. Für die eigene Domain im Container setzt du `AQUATICY_DOMAIN` und
-`AQUATICY_CLOUDFLARE_TOKEN`. Aquaticy richtet den Rest beim Start ein.
+Alles auf dem eigenen Rechner – lokales Modell plus eigener Suchserver: Starte einen
+[SearXNG](https://docs.searxng.org/)-Server und trag ihn ein (`AQUATICY_SEARCH_BACKEND=searxng`,
+`AQUATICY_SEARXNG_URL=http://localhost:8080`).
 
 ---
 
@@ -1477,43 +938,20 @@ du auch in der Weboberfläche ein.
 | `AQUATICY_BROWSER_PARALLEL` | höchstens so viele Browser gleichzeitig | `3` |
 | `AQUATICY_PROXY` | Proxy für Abrufe (`http://host:port` oder `env`) | direkt |
 | `AQUATICY_MEMORY` | Speicher an | `true` |
-| `AQUATICY_HOME_HTTPS` | HTTPS im Heimnetz und über Tailscale | `true` |
-| `AQUATICY_HTTPS_PORT` | Port für HTTPS im Heimnetz | `8443` |
 | `AQUATICY_LEGAL_GUARD` | Rechts-Leitplanken (abschaltbar nur mit Ultra) | `true` |
-| `AQUATICY_VM_SIZE` | virtual machine: `normal` oder `plus` (Ultra) | `normal` |
-| `AQUATICY_VM_IMAGE` | Abbild der virtual machine | `docker.io/library/python:3.12-slim` |
-| `AQUATICY_VM_USER_MODE` | User mode (Ultra) | `false` |
-| `AQUATICY_VM_INTERNET` | Internet für die virtual machine (Ultra) | `false` |
-| `AQUATICY_VM_LAN` | virtual machine auch ins lokale Netz (Ultra) | `false` |
-| `AQUATICY_VM_DESKTOP_IMAGE` | Abbild für den User mode | `aquaticy-werkstatt-desktop:local` |
-| `AQUATICY_VM_IDLE_MINUTES` | virtual machine löschen nach Minuten Ruhe | `20` |
 | `AQUATICY_ANSWER_CHECK` | Ai-guard prüft Antworten bei aktiven Rechts-Leitplanken | `true` |
 | `AQUATICY_GITHUB_TOKEN` | Token des GitHub-Add-ons | – |
-| `AQUATICY_SIGNAL_CLI` | Pfad zu signal-cli (Signal direkt koppeln, ohne virtual machine) | im Suchpfad |
 | `AQUATICY_GOOGLE` / `AQUATICY_GOOGLE_WRITE` | Gmail und Kalender lesen / ändern | `false` |
 | `AQUATICY_GOOGLE_DIRECT` | auf Befehl ohne Rückfrage ändern, braucht `AQUATICY_GOOGLE_WRITE` | `false` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | eigene Google-Anwendung | – |
-| `AQUATICY_HA_URL` / `AQUATICY_HA_CONTROL` | Home Assistant / schalten erlaubt (Ultra) | – / `false` |
-| `AQUATICY_HA_DIRECT` | auf Befehl ohne Rückfrage schalten, braucht `AQUATICY_HA_CONTROL` (Ultra) | `false` |
-| `AQUATICY_LAN_ENABLED` / `AQUATICY_LAN_SUBNET` | Heimnetz ansehen (Ultra) | `true` / automatisch |
 | `AQUATICY_ACCOUNTS` | Kontensystem für mehrere Nutzer (sonst ein Konto, Ultra) | `false` |
-| `AQUATICY_STORAGE_URL` / `AQUATICY_STORAGE_ACCESS` | Lagerverwaltung: Adresse / `off`, `read`, `write` (Ultra) | – / `read` |
-| `AQUATICY_DOMAIN` | eigene Domain (siehe [Website](#eigene-website-mit-domain)) | – |
-| `AQUATICY_CLOUDFLARE_TOKEN` | API-Token von Cloudflare für Tunnel, DNS und Zertifikat | – |
-| `AQUATICY_PUBLIC_PORT` | Eingang für den Tunnel, nur `127.0.0.1` | `8443` |
-| `AQUATICY_CLOUDFLARED` | eigener Pfad zu `cloudflared` | lädt Aquaticy selbst |
-| `AQUATICY_ACME_STAGING` | Testzertifikate von Let's Encrypt (zum Ausprobieren) | `false` |
-| `AQUATICY_CLUSTER_PORT` | UDP-Port zum Finden anderer Server | `8766` |
-| `AQUATICY_RPC_SERVER` / `AQUATICY_LLAMA_SERVER` | eigener Pfad zu `rpc-server` / `llama-server` | lädt Aquaticy selbst |
-| `AQUATICY_LLAMA_TAG` | feste Fassung von llama.cpp, z. B. `b7000` | der Master wählt |
-| `AQUATICY_LLAMA_DIR` | Ordner mit einer mitgelieferten Fassung | `/opt/aquaticy/llama.cpp` |
 | `AQUATICY_PRO_CODE` | Code für neue Pro-Konten | zufällig |
 | `AQUATICY_ULTRA_CODE` | Code für neue Ultra-Konten (14 Zeichen) | zufällig |
 | `MISTRAL_API_KEY`, `NVIDIA_NIM_API_KEY` | schreibt das Add-on (ohne Konten); mit Konten gilt ein Eintrag hier als gestellt | – |
 | `BRAVE_API_KEY`, `TAVILY_API_KEY` | Schlüssel der Suchmaschine, nur vom Betreiber | – |
 
 Daten liegen unter `~/.aquaticy/` (Konten in `accounts.sqlite3`, je Konto ein Ordner unter
-`users/`, die Website unter `website/`). Die Einstellungen liegen in `~/.config/aquaticy/.env`.
+`users/`). Die Einstellungen liegen in `~/.config/aquaticy/.env`.
 
 ---
 

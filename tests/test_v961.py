@@ -87,27 +87,6 @@ def test_hidden_tab_does_not_poll() -> None:
     assert "showLoad" not in html and "loadTimer" not in html
 
 
-def test_jobs_only_run_on_the_home_server(monkeypatch) -> None:
-    """Im Verbund laeuft ein Auftrag nur auf dem Heimserver -- sonst doppelt."""
-    from types import SimpleNamespace
-
-    gestartet: list = []
-
-    class Planer:
-        def __init__(self, getter, paused=None, on_abuse=None, **kwargs) -> None:
-            self.paused = paused
-            gestartet.append(self)
-
-        def start(self) -> None:
-            pass
-
-    monkeypatch.setattr("aquaticy.coworker.Scheduler", Planer)
-    monkeypatch.setattr(web, "USER_COWORKERS", {})
-    monkeypatch.setattr(web, "AIGUARD", None)
-    monkeypatch.setattr(web, "SESSIONS", SimpleNamespace(
-        get=lambda account: SimpleNamespace(settings=lambda: None)))
-    monkeypatch.setattr(web, "CLUSTER", SimpleNamespace(is_home=lambda user: user == "hier"))
-    web.start_user_scheduler(SimpleNamespace(id="hier"))
-    web.start_user_scheduler(SimpleNamespace(id="woanders"))
-    assert gestartet[0].paused() is False
-    assert gestartet[1].paused() is True
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).

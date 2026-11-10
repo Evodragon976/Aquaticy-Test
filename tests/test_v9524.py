@@ -19,9 +19,6 @@ def guard(tmp_path: Path) -> AiGuard:
     return AiGuard(tmp_path / "accounts.sqlite3")
 
 
-
-
-
 @pytest.mark.parametrize(("art", "schwere", "vorher", "art_massnahme", "tage"), [
 
     ("beleidigung", 1, 0, "chat", 0),
@@ -66,9 +63,6 @@ def test_no_severity_means_no_measure() -> None:
 ])
 def test_categories_are_recognised(eingabe: str, art: str) -> None:
     assert normalize_category(eingabe) == art
-
-
-
 
 
 def test_a_light_insult_locks_only_that_chat(guard: AiGuard) -> None:
@@ -162,9 +156,6 @@ def test_old_databases_get_the_new_columns(tmp_path: Path) -> None:
     assert waechter.is_banned(user_id="neu") is not None
 
 
-
-
-
 def test_the_judge_reads_kind_and_severity() -> None:
     from aquaticy.guardrails import parse_verdict
 
@@ -186,9 +177,6 @@ def test_a_trifle_is_named_harmless_in_the_prompt() -> None:
 
     text = judge_prompt("Ich bin bei Rot über die Ampel gelaufen, ist das ok?")
     assert "Ampel" in text and "Bagatellen" in text and "missbrauch_schwere" in text
-
-
-
 
 
 @pytest.fixture
@@ -238,14 +226,9 @@ def test_the_workshop_stops_malware_before_it_runs(
     assert missbrauch and missbrauch[0]["art"] == "malware" and missbrauch[0]["schwere"] == 3
 
 
-def test_ordinary_workshop_code_still_runs(
-    settings: object, monkeypatch: pytest.MonkeyPatch, pruefer
-) -> None:
-    pruefer('{"zulaessig": true, "regel": "", "grund": "harmlos", "missbrauch": false}')
-    box, (ereignisse, gelaufen) = _werkstatt(settings, monkeypatch)
-    box._call("vm_run", {"command": "python3 -c 'print(1+1)'"})
-    assert gelaufen == ["vm_run"]
-    assert not [n for n, _ in ereignisse if n == "abuse"]
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_workshop_tools_are_checked_by_the_judge() -> None:
@@ -254,12 +237,6 @@ def test_workshop_tools_are_checked_by_the_judge() -> None:
     assert {"vm_run", "vm_write", "blender_run"} <= set(SENSITIVE_TOOLS)
 
 
-def test_jobs_wait_while_the_account_is_banned(settings: object, tmp_path: Path) -> None:
-    """Waehrend einer Sperre laufen keine Auftraege (9.5.24)."""
-    from aquaticy.coworker_schedule import Scheduler
-
-    gesperrt = [True]
-    takt = Scheduler(lambda: settings, paused=lambda: gesperrt[0])
-    assert takt.tick() == 0
-    gesperrt[0] = False
-    assert takt.tick() == 0, "ohne faellige Auftraege laeuft auch nach der Sperre nichts"
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).

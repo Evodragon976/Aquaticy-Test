@@ -1041,7 +1041,8 @@ def test_every_subcommand_is_recognised_as_one() -> None:
     registered |= {group.name for group in cli.app.registered_groups if group.name}
     assert registered == cli.COMMANDS
     assert "google" in cli.COMMANDS
-    assert "website" in cli.COMMANDS
+    # 16.0.1 (Aquaticy-Test): keine eigene Domain mehr.
+    assert "website" not in cli.COMMANDS
 
 
 def test_a_subcommand_is_not_treated_as_a_question(monkeypatch: pytest.MonkeyPatch) -> None:

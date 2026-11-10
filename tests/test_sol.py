@@ -104,11 +104,9 @@ def test_rate_limit_counts_per_account_not_per_address(monkeypatch) -> None:
     assert "ADDRESS_LIMIT.allow(client)" in source
 
 
-def test_backup_ports_skip_the_cluster_port() -> None:
-    kandidaten = web.port_candidates(8765)
-    assert kandidaten[0] == 8765 and web.cluster.DISCOVERY_PORT not in kandidaten
-    assert len(kandidaten) == web.BACKUP_PORTS + 1
-    assert web.port_candidates(0) == [0]
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_busy_port_falls_back_to_the_next_free_one() -> None:

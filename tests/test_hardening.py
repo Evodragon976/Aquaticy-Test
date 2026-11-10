@@ -88,7 +88,6 @@ def test_the_chat_cannot_smuggle_a_protected_setting(
     assert os.environ.get("AQUATICY_HA_CONTROL", "") != "true"
 
 
-
 import threading  # noqa: E402
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer  # noqa: E402
 
@@ -288,7 +287,6 @@ def test_feeds_are_cut_off_while_reading() -> None:
     assert gelesen["stuecke"] < 200
 
 
-
 def test_a_google_state_works_once_for_its_account_only(monkeypatch: pytest.MonkeyPatch) -> None:
     from aquaticy import web
 
@@ -345,7 +343,6 @@ def test_the_google_return_needs_the_session_that_started_it(
     state = _json.loads(_req(port, "POST", "/api/google", {"action": "start"}, anna)[1])["state"]
     _, seite = _req(port, "GET", f"/google?code=abc&state={state}", cookie=anna)
     assert b"opfer@example.com" in seite and getauscht == ["x"]
-
 
 
 import time as _time  # noqa: E402
@@ -465,7 +462,6 @@ def test_streamed_answers_are_counted_with_the_providers_numbers(
     assert any(a["stream"] for a in anfragen)
 
 
-
 from aquaticy import budget, media  # noqa: E402
 from aquaticy.cache import Cache  # noqa: E402
 
@@ -564,7 +560,6 @@ def test_ai_images_leave_with_their_chat_and_are_capped(
         media.save_snapshot(tmp_path, PNG + b"n", "image/png", keep=True)
 
 
-
 from aquaticy.memory import (  # noqa: E402
     LEGACY_KEY_SALT,
     UNREADABLE,
@@ -622,7 +617,6 @@ def test_old_data_with_the_fixed_salt_still_reads_and_is_moved_over(tmp_path: Pa
     assert falsch.all_entries()[0].text == UNREADABLE
 
 
-
 def test_a_session_only_counts_from_its_own_network(tmp_path: Path) -> None:
     from aquaticy.auth import AuthStore
 
@@ -674,56 +668,9 @@ def test_every_run_is_found_by_its_id() -> None:
 
 
 
-import subprocess as _subprocess  # noqa: E402
-
-from aquaticy import sandbox as werkstatt  # noqa: E402
-
-
-def _werkstatt(monkeypatch: pytest.MonkeyPatch, dauer: float = 0.0):
-    kasten = werkstatt.Sandbox(image="python:3.12-slim")
-    kasten.runtime = werkstatt.Runtime("docker", "docker", "Docker (gehaertet)")
-    kasten._quota_ok = False
-    monkeypatch.setattr(kasten, "ensure", lambda: "werkstatt-test")
-    monkeypatch.setattr(kasten, "touch", lambda: None)
-    gelaufen: list[str] = []
-
-    def ausfuehren(binary, *args, **kwargs):
-        gelaufen.append(args[-1])
-        _time.sleep(dauer)
-        return _subprocess.CompletedProcess(args, 0, "", "")
-
-    monkeypatch.setattr(werkstatt, "_runs_capped", ausfuehren)
-    return kasten, gelaufen
-
-
-def test_over_the_disk_limit_only_cleanup_runs(monkeypatch: pytest.MonkeyPatch) -> None:
-    kasten, gelaufen = _werkstatt(monkeypatch)
-    monkeypatch.setattr(kasten, "usage_gb", lambda: 9.0)
-    ergebnis = kasten.run("python erzeuge_riesig.py")
-    assert "erlaubt sind" in ergebnis.stderr and kasten._over_quota
-    gesperrt = kasten.run("python noch_mehr.py")
-    assert gesperrt.exit_code == 125 and gelaufen == ["python erzeuge_riesig.py"]
-    for verkettet in ("rm a; python x.py", "rm $(cat liste)", "ls > datei", "rm a && curl x"):
-        assert kasten.run(verkettet).exit_code == 125, verkettet
-    with pytest.raises(ValueError, match="voll"):
-        kasten.write("/work/neu.txt", "x")
-    monkeypatch.setattr(kasten, "usage_gb", lambda: 0.5)
-    assert kasten.run("rm -rf /work/gross").exit_code == 0, "aufraeumen geht"
-    assert not kasten._over_quota
-    assert kasten.run("python wieder_frei.py").exit_code == 0
-
-
-def test_the_watchdog_stops_a_command_that_fills_the_disk(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    kasten, _ = _werkstatt(monkeypatch, dauer=0.6)
-    monkeypatch.setattr(kasten, "WATCH_SECONDS", 0.05)
-    monkeypatch.setattr(kasten, "usage_gb", lambda: 9.0)
-    abgebrochen: list[str] = []
-    monkeypatch.setattr(kasten, "_kill_processes", lambda: abgebrochen.append("weg"))
-    kasten.run("dd if=/dev/zero of=/work/voll bs=1M")
-    assert abgebrochen, "waehrend des Laufs abgebrochen, nicht erst danach gewarnt"
-
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_csv_cells_never_start_a_formula(tmp_path: Path) -> None:
@@ -742,7 +689,6 @@ def test_csv_cells_never_start_a_formula(tmp_path: Path) -> None:
     ziel = write_csv([zug], tmp_path / "export.csv")
     zeilen = list(_csv.reader(ziel.open(encoding="utf-8")))
     assert zeilen[1][0].startswith("'=HYPERLINK") and zeilen[1][-1] == "'@rot"
-
 
 
 def _box_mit_web(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

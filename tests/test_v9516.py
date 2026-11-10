@@ -40,78 +40,9 @@ def _ha_transport(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return pfade
 
 
-
-@pytest.mark.parametrize("service", [
-    "../lock/unlock", "..%2flock%2funlock", "turn_on/../../lock/unlock", "unlock?x=1",
-    "turn on", "",
-])
-def test_a_light_service_can_never_become_a_lock(settings: Settings,
-                                                 monkeypatch: pytest.MonkeyPatch,
-                                                 service: str) -> None:
-    pfade = _ha_transport(monkeypatch)
-    box = Toolbox(_ha_settings(settings))
-    result = box.ha_call("light", service, "light.kueche")
-    assert result.get("done") is not True
-    assert "error" in result
-    assert not pfade, f"trotzdem gesendet: {pfade}"
-
-
-@pytest.mark.parametrize("entity_id,data", [
-    ("lock.haustuer", None),
-    ("light.kueche, lock.haustuer", None),
-    ("", {"entity_id": "lock.haustuer"}),
-    ("", {"entity_id": ["light.kueche", "lock.haustuer"]}),
-    ("", {"area_id": "flur"}),
-    ("", {"device_id": "abc"}),
-    ("light.kueche/../x", None),
-])
-def test_a_light_call_only_reaches_lights(settings: Settings, monkeypatch: pytest.MonkeyPatch,
-                                          entity_id: str, data: Any) -> None:
-    pfade = _ha_transport(monkeypatch)
-    box = Toolbox(_ha_settings(settings))
-    result = box.ha_call("light", "turn_on", entity_id, data)
-    assert "error" in result
-    assert not pfade
-
-
-def test_a_plain_light_call_still_works(settings: Settings,
-                                        monkeypatch: pytest.MonkeyPatch) -> None:
-    pfade = _ha_transport(monkeypatch)
-    box = Toolbox(_ha_settings(settings))
-    result = box.ha_call("light", "turn_on", "light.kueche", {"brightness_pct": 40})
-    assert result["done"] is True
-    assert pfade == ["/api/services/light/turn_on"]
-
-
-def test_the_client_itself_checks_too(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Auch wer den Client direkt benutzt, kommt nicht am Pruefen vorbei."""
-    from aquaticy.homeassistant import HomeAssistant, HomeAssistantError
-
-    pfade = _ha_transport(monkeypatch)
-    with pytest.raises(HomeAssistantError):
-        HomeAssistant("http://192.168.1.5:8123", "geheim").call("light", "../lock/unlock")
-    assert not pfade
-
-
-
-@pytest.mark.parametrize("domain,service,entity", [
-    ("script", "turn_on", "script.tuer_auf"),
-    ("scene", "turn_on", "scene.abwesend"),
-    ("button", "press", "button.garage"),
-])
-def test_indirect_switches_need_a_confirmation(settings: Settings,
-                                               monkeypatch: pytest.MonkeyPatch,
-                                               domain: str, service: str, entity: str) -> None:
-    pfade = _ha_transport(monkeypatch)
-    box = Toolbox(_ha_settings(settings))
-    assert "bestaetigungspflichtig" in box.ha_call(domain, service, entity)["error"]
-    box.ask_handler = lambda frage, optionen: "nein"
-    assert box.ha_call(domain, service, entity)["done"] is False
-    assert not pfade
-    box.ask_handler = lambda frage, optionen: "klar"
-    assert box.ha_call(domain, service, entity)["done"] is True
-    assert pfade == [f"/api/services/{domain}/{service}"]
-
+# 16.0.1 (Aquaticy-Test): 12 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 import socket  # noqa: E402
@@ -179,7 +110,6 @@ def test_the_proxy_resolves_only_once(monkeypatch: pytest.MonkeyPatch,
         f"GET http://umspringer.example:{intern_server}/ HTTP/1.1\r\n\r\n".encode())
     assert antwort.startswith(b"HTTP/1.1 403")
     assert _Intern.treffer == []
-
 
 
 CHROMIUM = "/opt/pw-browsers/chromium"
@@ -263,7 +193,6 @@ def test_p1_the_browser_never_reaches_an_internal_server_after_rebinding(
     assert _Intern.treffer == []
 
 
-
 import json  # noqa: E402
 import re  # noqa: E402
 import subprocess  # noqa: E402
@@ -318,7 +247,6 @@ def test_the_web_ui_shows_ai_images() -> None:
         assert bool(js.match(name)) == bool(MEDIA_ID.match(name)), name
 
 
-
 def test_own_search_key_is_used_for_searches(settings: Settings,
                                              monkeypatch: pytest.MonkeyPatch) -> None:
     from aquaticy import tools
@@ -358,7 +286,6 @@ def test_a_normal_account_never_borrows_the_operators_paid_search_key(
     assert settings.search_key_for("brave") == "betreiber-schluessel"
 
 
-
 def test_odd_json_ld_never_costs_the_page() -> None:
     from aquaticy.extract import extract_product
 
@@ -387,7 +314,6 @@ def test_a_crashing_extractor_keeps_the_page_text(monkeypatch: pytest.MonkeyPatc
     fetcher.robots = fetch.RobotsPolicy(fetcher._client, "test")
     ergebnis = fetcher.fetch("https://laden.example/", want_products=True)
     assert ergebnis.ok and "Inhalt" in ergebnis.text
-
 
 
 def test_auto_research_marks_foreign_text(settings: Settings,
@@ -434,25 +360,6 @@ def test_chat_history_remembers_foreign_text() -> None:
     assert not _chat_untrusted([SimpleNamespace(meta={"sources": []})])
 
 
-
-@pytest.mark.parametrize("netz", ["127.0.0.0/24", "169.254.169.0/24", "192.0.2.0/24",
-                                  "198.18.0.0/24", "0.0.0.0/24", "224.0.0.0/24"])
-def test_lan_refuses_what_is_not_a_home_network(netz: str) -> None:
-    from aquaticy import lan
-
-    with pytest.raises(lan.NotPrivate):
-        lan.parse_subnet(netz)
-
-
-@pytest.mark.parametrize("netz", ["10.1.2.0/24", "172.20.0.0/24", "192.168.178.0/24",
-                                  "100.100.0.0/24"])
-def test_lan_accepts_home_networks(netz: str) -> None:
-    from aquaticy import lan
-
-    assert str(lan.parse_subnet(netz)) == netz
-
-
-
 @pytest.mark.parametrize("to", ["a@b.de\r\nBcc: fremd@x.de", "a@b.de\nBcc: fremd@x.de",
                                 "keine-adresse", "a@b.de, <javascript:x>"])
 def test_mail_recipients_cannot_smuggle_headers(to: str) -> None:
@@ -467,7 +374,6 @@ def test_mail_recipients_are_rewritten_cleanly() -> None:
 
     assert mail_addresses("Anna <anna@example.com>, bob@example.org") == \
         "Anna <anna@example.com>, bob@example.org"
-
 
 
 def _fetcher_mit(handler: Any) -> Any:
@@ -514,7 +420,6 @@ def test_a_slow_robots_txt_does_not_hold_up_other_sites() -> None:
     assert fetcher.robots.allows("https://schnell.example/")
     assert zeit.monotonic() - start < 1.0
     faden.join()
-
 
 
 class _Kontingent:
@@ -566,7 +471,6 @@ def test_the_media_fetcher_never_starts_a_browser(settings: Settings) -> None:
     assert web._media_fetcher(settings).enable_browser is False
 
 
-
 def test_account_github_token_goes_into_the_vault(settings: Settings, tmp_path: Path) -> None:
     from aquaticy import addons
     from aquaticy.keyvault import KeyVault
@@ -584,7 +488,6 @@ def test_account_github_token_goes_into_the_vault(settings: Settings, tmp_path: 
     assert all(e["name"] != addons.GITHUB_TOKEN_KEY for e in tresor.public())
     addons.forget_github_token(settings)
     assert tresor.secret(addons.GITHUB_TOKEN_KEY) == ""
-
 
 
 def test_product_names_are_not_rich_markup() -> None:
@@ -608,7 +511,6 @@ def test_product_names_are_not_rich_markup() -> None:
     assert "Kabel [/] X" in ausgabe
     assert "[link=https://fremd.example]klick[/link]" in ausgabe
     assert "kaputt [/] hier" in ausgabe
-
 
 
 def _quota(tmp_path: Path) -> Any:
@@ -665,7 +567,6 @@ def test_p2_the_answer_is_shortened_to_fit(settings: Settings, tmp_path: Path) -
         metering.output_cap(settings, "mistral/mistral-small-latest", nachrichten)
 
 
-
 def test_a_chat_without_title_is_not_called_none(settings: Settings) -> None:
     from aquaticy.cache import Cache
 
@@ -691,7 +592,6 @@ def test_deleting_a_chat_removes_its_unread_mark(settings: Settings) -> None:
                           ).fetchone()[0] == 0
 
 
-
 def test_notes_can_be_deleted_from_the_web(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
                                            settings: Settings) -> None:
     from aquaticy import web
@@ -709,7 +609,6 @@ def test_notes_can_be_deleted_from_the_web(tmp_path: Path, monkeypatch: pytest.M
     assert "gibt es nicht" in session.command("/notes delete 999")["text"]
     session.command("/notes clear")
     assert cache.list_notes() == []
-
 
 
 def test_own_key_limits_come_from_the_account(settings: Settings,
@@ -746,28 +645,6 @@ def test_a_full_gate_waits_at_most_max_wait(monkeypatch: pytest.MonkeyPatch) -> 
         pass
 
 
-
-def test_research_jobs_run_at_most_hourly(settings: Settings) -> None:
-    from aquaticy.coworker_schedule import JobStore
-
-    store = JobStore(settings.db_path)
-    recherche = store.add("Neuigkeiten zu X", rhythm="minutes1", kind="research")
-    assert recherche.rhythm == "hourly"
-    beobachtung = store.add("Flugzeug sichtbar", rhythm="always", kind="visual",
-                            source_url="https://kamera.example/live")
-    assert beobachtung.rhythm == "always"
-
-
-def test_a_job_never_runs_twice_at_once(settings: Settings) -> None:
-    from aquaticy.coworker_schedule import claim_run, release_run
-
-    assert claim_run(settings.db_path, 7) is True
-    assert claim_run(settings.db_path, 7) is False
-    release_run(settings.db_path, 7)
-    assert claim_run(settings.db_path, 7) is True
-    release_run(settings.db_path, 7)
-
-
 @pytest.mark.parametrize("rhythm,text", [("always", "die ganze Zeit"),
                                          ("minutes1", "jede Minute"),
                                          ("minutes5", "alle 5 Minuten")])
@@ -776,32 +653,6 @@ def test_job_view_names_every_rhythm(rhythm: str, text: str) -> None:
 
     ansicht = job_view({"rhythm": rhythm, "kind": "visual", "enabled": False, "question": "q"})
     assert ansicht["when_text"].startswith(text)
-
-
-
-def test_saving_an_unrelated_setting_keeps_the_workshop(settings: Settings,
-                                                        monkeypatch: pytest.MonkeyPatch) -> None:
-    from dataclasses import replace
-
-    from aquaticy import sandbox, web
-
-    gestoppt: list[Any] = []
-    monkeypatch.setattr(sandbox, "forget_shared", lambda s=None: gestoppt.append(s))
-    session = web.ChatSession()
-    neu = {"s": settings}
-    monkeypatch.setattr(session, "settings", lambda: neu["s"])
-    session._settings = settings
-    neu["s"] = replace(settings, model="mistral/mistral-small-latest")
-    session.reload()
-    assert gestoppt == [], "ein anderes Modell braucht keine neue virtual machine"
-    session._settings = neu["s"]
-    neu["s"] = replace(settings, vm_memory_mb=2048)
-    session.reload()
-    assert len(gestoppt) == 1
-    session._settings = neu["s"]
-    session.reload(workshop=True)
-    assert len(gestoppt) == 2
-
 
 
 def test_notes_are_never_deleted_silently(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -823,7 +674,6 @@ def test_notes_are_never_deleted_silently(tmp_path: Path, monkeypatch: pytest.Mo
     assert store.count() == 6
 
 
-
 def test_the_login_page_does_not_show_the_server_profile_state(
     monkeypatch: pytest.MonkeyPatch, settings: Settings
 ) -> None:
@@ -838,7 +688,6 @@ def test_the_login_page_does_not_show_the_server_profile_state(
     monkeypatch.setattr(web, "AUTH", None)
     html = web.with_state('<html lang="de"><body class="start"></body></html>')
     assert 'data-theme="dark"' in html
-
 
 
 def test_registration_does_not_reveal_which_email_exists(tmp_path: Path) -> None:
@@ -869,21 +718,6 @@ def test_forwarded_for_counts_only_behind_a_trusted_proxy(
     assert client_ip("10.1.2.3", "", "198.51.100.8") == "198.51.100.8"
     assert client_ip("203.0.113.9", "1.2.3.4") == "203.0.113.9"
     assert client_ip("127.0.0.1", "kaputt") == "127.0.0.1"
-
-
-
-@pytest.mark.parametrize("text,gesperrt", [
-    ("web.whatsapp.com", True), ("https://WEB.WhatsApp.com./", True),
-    ("web.telegram.org/k/", True), ("x.web.whatsapp.com", True),
-    ("Ich lese gern whatsapp.com-Artikel", False), ("notweb.whatsapp.company", False),
-])
-def test_messenger_addresses_are_recognised(text: str, gesperrt: bool) -> None:
-    from aquaticy.desktop import MESSENGER_TEXT_RE, messenger_host
-
-    assert bool(MESSENGER_TEXT_RE.search(text)) is gesperrt
-    assert messenger_host("web.whatsapp.com.") and messenger_host("WEB.TELEGRAM.ORG")
-    assert not messenger_host("whatsapp.com")
-
 
 
 def test_export_never_writes_script_links() -> None:
@@ -918,7 +752,6 @@ def test_exported_images_get_a_suffix_from_their_type(tmp_path: Path,
     assert export.IMAGE_SUFFIXES["image/png"] == ".png"
 
 
-
 @pytest.mark.parametrize("inhalt", [[1, 2], {"models": "kaputt"}, {"models": [1, {"name": "a"}]},
                                     "text"])
 def test_odd_ollama_answers_are_handled(monkeypatch: pytest.MonkeyPatch, inhalt: Any) -> None:
@@ -928,26 +761,6 @@ def test_odd_ollama_answers_are_handled(monkeypatch: pytest.MonkeyPatch, inhalt:
     namen = lm.installed_models("http://127.0.0.1:11434")
     assert isinstance(namen, list)
     assert lm.model_size_gb("a", "http://127.0.0.1:11434") is None
-
-
-
-def test_sweep_only_touches_this_installation(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy import sandbox
-
-    aufrufe: list[list[str]] = []
-
-    def lauf(*args: Any, **kw: Any) -> Any:
-        aufrufe.append(list(args))
-        from types import SimpleNamespace
-
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr(sandbox, "_runs", lambda *a, **k: lauf(*a, **k))
-    sandbox.sweep(sandbox.Runtime("docker", "docker", "Docker"))
-    ps = next(a for a in aufrufe if "ps" in a)
-    ls = next(a for a in aufrufe if "ls" in a)
-    assert f"label={sandbox.instance_label()}" in ps
-    assert f"label={sandbox.instance_label()}" in ls
 
 
 def test_calc_refuses_complex_results() -> None:

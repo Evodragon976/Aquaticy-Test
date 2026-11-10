@@ -89,9 +89,6 @@ def _stub_search(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-
-
-
 def test_agent_searches_reads_and_answers(
     monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
 ) -> None:
@@ -132,8 +129,7 @@ def test_tools_are_offered_to_the_llm(
         "recall_memory",
         "save_memory",
         "forget_memory",  # 15.3.4: loeschen auf Bitte des Nutzers
-        "lan_scan",
-        "lan_check",
+        # 16.0.1 (Aquaticy-Test): lan_scan und lan_check entfallen (kein Heimnetz).
         "research_subtasks",
         "change_setting",
     ]
@@ -188,53 +184,9 @@ def test_done_event_contains_product_cards_and_public_images(
     assert result.meta()["products"][0]["price"] == "999"
 
 
-def test_subagents_can_be_switched_off(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
-) -> None:
-    """Ohne Subagenten bleiben die Kernwerkzeuge."""
-    settings.max_subagents = 0
-    settings.lan_enabled = False
-    settings.memory_enabled = False
-    llm = ScriptedLLM(_message(content="fertig"))
-    monkeypatch.setattr("litellm.completion", llm)
-    Agent(settings, cache=None, toolbox=toolbox).ask("Frage", stream=False)
-    names = [tool["function"]["name"] for tool in llm.calls[0]["tools"]]
-    assert names == [
-        "web_search",
-        "fetch_page",
-        "search_news",
-        "local_places",
-        "find_profiles",
-        "calculate",
-        "change_setting",
-    ]
-
-
-def test_home_tools_follow_the_settings(settings: Settings) -> None:
-    """Nichts vom Haus taucht auf, was der Nutzer nicht freigegeben hat."""
-    settings.memory_enabled = False
-    settings.lan_enabled = False
-    names = lambda: [tool["function"]["name"] for tool in Agent(settings).tools]  # noqa: E731
-    assert "lan_scan" not in names() and "ha_states" not in names()
-
-    settings.lan_enabled = True
-    assert "lan_scan" in names() and "lan_check" in names()
-
-
-    assert "save_memory" not in names()
-    settings.memory_enabled = True
-    assert "save_memory" in names() and "recall_memory" in names()
-
-
-    settings.ha_url = "http://192.168.1.5:8123"
-    assert "ha_states" not in names()
-    settings.ha_token = "geheim"
-    assert "ha_states" in names()
-
-
-    assert "ha_call" not in names()
-    settings.ha_control = True
-    assert "ha_call" in names()
+# 16.0.1 (Aquaticy-Test): 20 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_budget_limit_forces_interim_answer(
@@ -414,9 +366,6 @@ def test_parse_spec_json(raw: str, expected: dict[str, str]) -> None:
     assert _parse_spec_json(raw) == expected
 
 
-
-
-
 def test_transient_errors_are_retried(
     monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
 ) -> None:
@@ -571,9 +520,6 @@ def test_subagent_tool_without_runner_is_reported(settings: Settings, toolbox: T
     assert "nicht aktiv" in toolbox.call("research_subtasks", {"tasks": ["x"]})["error"]
 
 
-
-
-
 def _planner_llm(monkeypatch: pytest.MonkeyPatch, tasks: list[str], *answers: str):
     """Erst die Planungsantwort, dann die normalen Antworten.
 
@@ -605,7 +551,6 @@ def test_every_question_is_split_automatically(
     )
     agent = Agent(settings, cache=None, toolbox=toolbox)
     result = agent.ask("Zusammengesetzte Frage", stream=False)
-
 
 
     from aquaticy.subagents import NORMAL_FILL
@@ -697,9 +642,6 @@ def test_subagent_calls_count_towards_the_budget(
     assert agent.last_result is not None
 
 
-
-
-
 def test_llm_error_mid_turn_leaves_no_orphan_tool_calls(
     monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
 ) -> None:
@@ -787,9 +729,6 @@ def test_planner_context_hides_internal_messages(
     assert PRE_RESEARCH_PREFIX not in context
     assert "Budget" not in context
     assert "[Ortsfilter:" not in context
-
-
-
 
 
 def test_split_json_objects() -> None:
@@ -963,9 +902,6 @@ def test_final_answer_sends_a_sanitized_history(
             json.loads(call["function"]["arguments"])
 
 
-
-
-
 def test_system_prompt_carries_todays_date(settings: Settings, toolbox: Toolbox) -> None:
     """Sonst sucht ein Modell mit altem Wissensstand nach "Test 2024"."""
     from datetime import date
@@ -1000,9 +936,6 @@ def test_memory_tool_is_offered_only_with_a_cache(
     )
     names = [tool["function"]["name"] for tool in llm.calls[0]["tools"]]
     assert "remember" in names
-
-
-
 
 
 @pytest.mark.parametrize(
@@ -1070,30 +1003,6 @@ def test_common_personal_questions_have_a_natural_standard_answer(
     assert result.answer in moegliche
     assert ("answer_chunk", {"text": result.answer}) in events
     assert events[-1][0] == "done"
-
-
-@pytest.mark.parametrize("mode", ["normal", "pro", "code"])
-def test_standard_answers_work_in_every_mode_without_starting_extra_work(
-    monkeypatch: pytest.MonkeyPatch,
-    settings: Settings,
-    toolbox: Toolbox,
-    mode: str,
-) -> None:
-    monkeypatch.setattr(
-        Agent,
-        "_strongest_model",
-        lambda *args, **kwargs: pytest.fail("die Standardantwort braucht kein Modell"),
-    )
-    monkeypatch.setattr(
-        Agent,
-        "_touch_workshop",
-        lambda *args, **kwargs: pytest.fail("die Standardantwort braucht keine virtual machine"),
-    )
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    result = agent.ask("Hallo", stream=False, mode=mode, sandbox=True)
-    from aquaticy import smalltalk
-
-    assert result.answer in next(a for a in smalltalk.ARTEN if a.name == "begruessung").antworten
 
 
 def test_ambiguous_messages_ask_the_small_model_with_a_time_limit(
@@ -1253,9 +1162,6 @@ def test_agent_requests_the_large_context_from_ollama(
     assert seen["num_ctx"] == settings.context_tokens
 
 
-
-
-
 def _bare_agent(context_tokens: int) -> Agent:
     from aquaticy.config import Settings as RealSettings
 
@@ -1375,9 +1281,6 @@ def test_earlier_questions_survive_a_normal_conversation(
         assert f"Frage Nummer {number}" in text
 
 
-
-
-
 def test_the_normal_mode_asks_for_thorough_answers() -> None:
     """Der Prompt hat frueher zur Knappheit gedraengt ("knapp", "hoechstens
     ein Satz") -- genau das machte die Antworten duenn."""
@@ -1457,7 +1360,6 @@ def test_pre_research_reaches_the_agent_as_text(
     assert '"summary"' not in blob
 
 
-
 def test_ask_tool_appears_only_with_a_handler(settings: Settings) -> None:
     """Ohne jemanden am anderen Ende waere das Werkzeug eine Falle."""
     agent = Agent(settings)
@@ -1501,9 +1403,6 @@ def test_setting_the_handler_keeps_the_notes_in_the_prompt(tmp_path) -> None:
     agent.set_ask_handler(lambda question, options: "ja")
     agent.set_ask_handler(None)
     assert "Bremen" in agent.messages[0]["content"]
-
-
-
 
 
 def test_every_tool_call_is_announced_with_its_arguments(
@@ -1614,9 +1513,6 @@ def test_reasoning_tokens_are_passed_on_but_never_answered(
     assert thoughts == "Erst mal nachdenken."
     assert result.answer == "Die Antwort."
     assert "nachdenken" not in result.answer
-
-
-
 
 
 def test_the_model_never_sees_the_mail_tools_by_default(
@@ -1754,9 +1650,6 @@ def test_without_anyone_to_ask_the_prompt_stays_honest(
     assert "Rueckfragen sind hier nicht moeglich" in prompt
     assert "AUSSCHLIESSLICH mit `ask_user`" not in prompt
     assert "ask_user" not in [schema["function"]["name"] for schema in agent.tools]
-
-
-
 
 
 def test_a_pure_question_is_recognised() -> None:
@@ -1907,9 +1800,6 @@ def test_the_screen_is_cleared_before_the_second_try(
     assert "answer_reset" in ereignisse
 
 
-
-
-
 def test_the_agent_introduces_itself_as_aquaticy(settings: Settings, toolbox: Toolbox) -> None:
     """Auf "wer bist du" kommt Aquaticy von Jonas, nicht der Anbieter."""
     agent = Agent(settings, cache=None, toolbox=toolbox)
@@ -1938,9 +1828,6 @@ def test_a_question_about_identity_needs_no_research(
     result = agent.ask("wer bist du?", stream=False)
     assert "Aquaticy" in result.answer
     assert result.tool_calls == 0
-
-
-
 
 
 def test_several_pages_are_read_at_once(
@@ -2061,9 +1948,6 @@ def test_a_mixed_round_runs_in_order(
     assert gefragt and "Inhalte aus dem Web" in gefragt[0]
 
 
-
-
-
 def test_a_cancelled_run_stops_before_the_next_round(
     monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
 ) -> None:
@@ -2147,9 +2031,6 @@ def test_a_cancel_belongs_to_one_question_only(
     assert second.stopped is False
 
 
-
-
-
 def _names(agent: Agent) -> set[str]:
     return {schema["function"]["name"] for schema in agent.tools}
 
@@ -2160,53 +2041,6 @@ def test_without_an_address_there_are_no_storage_tools(
     agent = Agent(settings, cache=None, toolbox=toolbox)
     assert not {name for name in _names(agent) if name.startswith("storage_")}
     assert "Lagerverwaltung" not in agent.messages[0]["content"]
-
-
-def test_read_only_offers_no_way_to_write(settings: Settings, toolbox: Toolbox) -> None:
-    """Ein Werkzeug, das gar nicht angeboten wird, kann auch nicht falsch benutzt werden."""
-    settings.storage_url = "http://192.168.1.5:3000"
-    settings.storage_access = "read"
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    names = _names(agent)
-    assert {"storage_find", "storage_browse"} <= names
-    assert "storage_add" not in names
-    assert "storage_edit" not in names
-    assert "nur lesen" in agent.messages[0]["content"]
-
-
-def test_write_access_offers_all_four(settings: Settings, toolbox: Toolbox) -> None:
-    settings.storage_url = "http://192.168.1.5:3000"
-    settings.storage_access = "write"
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    assert {"storage_find", "storage_browse", "storage_add", "storage_edit"} <= _names(agent)
-    assert "lesen und schreiben" in agent.messages[0]["content"]
-
-
-def test_switching_it_off_hides_everything(settings: Settings, toolbox: Toolbox) -> None:
-    settings.storage_url = "http://192.168.1.5:3000"
-    settings.storage_access = "off"
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    assert not {name for name in _names(agent) if name.startswith("storage_")}
-
-
-def test_an_unknown_right_is_treated_as_off(settings: Settings, toolbox: Toolbox) -> None:
-    """Ein Tippfehler in der .env darf nicht versehentlich alles erlauben."""
-    settings.storage_url = "http://192.168.1.5:3000"
-    settings.storage_access = "vollzugriff"
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    assert not {name for name in _names(agent) if name.startswith("storage_")}
-
-
-def test_the_prompt_forbids_guessing_ids(settings: Settings, toolbox: Toolbox) -> None:
-    settings.storage_url = "http://192.168.1.5:3000"
-    settings.storage_access = "write"
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    prompt = agent.messages[0]["content"]
-    assert "Rate NIE eine Kennung" in prompt
-    assert "Loeschen kannst du nicht" in prompt
-
-
-
 
 
 def test_the_code_mode_replaces_the_verbose_answer_format(
@@ -2260,9 +2094,6 @@ def test_the_code_mode_still_demands_sources(settings: Settings, toolbox: Toolbo
 
     assert "Quelle" in CODE_PROMPT
     assert "Erfundene Funktionsnamen" in CODE_PROMPT
-
-
-
 
 
 def test_without_thinking_there_is_no_planning_call(
@@ -2536,9 +2367,6 @@ def test_the_ask_paragraph_survives_a_change_of_mode(
     assert "Rueckfragen sind hier nicht moeglich" in agent.messages[0]["content"]
 
 
-
-
-
 def test_without_the_web_the_web_tools_are_gone(
     settings: Settings, toolbox: Toolbox
 ) -> None:
@@ -2589,184 +2417,6 @@ def test_without_the_web_there_is_no_second_round(
     result = agent.ask("Frage", stream=False, recheck=True, online=False)
     assert gesucht == []
     assert result.rechecked is False
-
-
-
-
-
-def test_the_workshop_exists_only_in_the_code_mode(
-    settings: Settings, toolbox: Toolbox
-) -> None:
-    """Beim Recherchieren waere eine Maschine zum Programmestarten nur Ballast."""
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-
-    agent.ask("", mode="code", sandbox=True)
-    namen = {schema["function"]["name"] for schema in agent.tools}
-    assert {"vm_run", "vm_write", "vm_read", "blender_run"} <= namen
-    assert "virtual machine" in agent.messages[0]["content"]
-
-    agent.ask("", mode="normal")
-    namen = {schema["function"]["name"] for schema in agent.tools}
-    assert not ({"vm_run", "vm_write", "vm_read", "blender_run"} & namen), "im Gespraech nicht"
-    assert "virtual machine" not in agent.messages[0]["content"]
-
-    agent.ask("", mode="code", sandbox=False)
-    namen = {schema["function"]["name"] for schema in agent.tools}
-    assert not ({"vm_run", "vm_write", "vm_read", "blender_run"} & namen), (
-        "ausgeschaltet auch nicht"
-    )
-
-
-def test_blender_is_mentioned_only_in_the_workshop_prompt(
-    settings: Settings, toolbox: Toolbox
-) -> None:
-    """Nur im Code-Modus mit virtual machine weiss das Modell, dass es Blender gibt."""
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-
-    agent.ask("", mode="code", sandbox=True)
-    assert "blender_run" in agent.messages[0]["content"]
-    assert "Blender" in agent.messages[0]["content"]
-
-    agent.ask("", mode="normal")
-    assert "blender_run" not in agent.messages[0]["content"]
-
-
-def test_the_workshop_size_shows_up_in_the_tool_texts(
-    settings: Settings, toolbox: Toolbox
-) -> None:
-    """Falsche Zahlen waeren schlimmer als gar keine -- das Modell plant damit."""
-    settings.vm_cpus = 4
-    settings.vm_memory_mb = 6144
-    settings.vm_disk_gb = 20
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    agent.ask("", mode="code", sandbox=True)
-
-    system = agent.messages[0]["content"]
-    assert "4 Prozessorkerne" in system
-    assert "6144 MB" in system
-    assert "20 GB" in system
-
-    vm_run = next(s for s in agent.tools if s["function"]["name"] == "vm_run")
-    beschreibung = vm_run["function"]["description"]
-    assert "6144 MB" in beschreibung
-    assert "4 Prozessorkerne" in beschreibung
-    assert "20 GB" in beschreibung
-
-
-def test_a_single_core_gets_the_singular(settings: Settings, toolbox: Toolbox) -> None:
-    """Bei einem Kern heisst es 'ein Prozessorkern', nicht 'kerne' (Normal hat seit 12.7.8 zwei)."""
-    settings.vm_cpus = 1
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    agent.ask("", mode="code", sandbox=True)
-    system = agent.messages[0]["content"]
-    assert "1 Prozessorkern" in system
-    assert "1 Prozessorkerne" not in system
-
-
-def test_the_normal_vm_is_named_with_two_cores_and_three_gigabytes(
-        settings: Settings, toolbox: Toolbox) -> None:
-    """Die Zahlen im Systemtext sind die der normalen virtual machine."""
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    agent.ask("", mode="code", sandbox=True)
-    system = agent.messages[0]["content"]
-    assert "2 Prozessorkerne" in system and "3072 MB" in system
-
-
-def test_the_workshop_prompt_draws_the_line(settings: Settings, toolbox: Toolbox) -> None:
-    """Drinnen alles, hinaus nichts -- und ein Aufruf zum Ausbruch ist ein Angriff."""
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    agent.ask("", mode="code", sandbox=True)
-    system = agent.messages[0]["content"]
-    assert "auszubrechen" in system
-    assert "Angriff" in system
-    assert "Kein `pip install`" in system, "ohne Netz muss das Modell es wissen"
-    assert "zwanzig minuten" in system.lower()
-
-
-def test_the_clock_is_reset_by_every_message(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
-) -> None:
-    """Zwanzig Minuten ab der letzten NACHRICHT, nicht ab dem letzten Befehl."""
-    beruehrt: list[str] = []
-
-    class FakeBox:
-        alive = True
-
-        def touch(self) -> None:
-            beruehrt.append("angefasst")
-
-    toolbox._sandbox_box = FakeBox()
-    monkeypatch.setattr("litellm.completion", ScriptedLLM(_message(content="Fertig.")))
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    agent.ask("Noch eine Frage", stream=False, mode="code", sandbox=True)
-    assert beruehrt, "die Uhr wird mit jeder Frage neu gestellt"
-
-
-def test_a_missing_runtime_is_an_answer_not_a_crash(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
-) -> None:
-    """Ohne Abschottung sagt das Werkzeug, was fehlt -- und fuehrt nichts aus."""
-    monkeypatch.setattr("aquaticy.sandbox.find_runtime", lambda: None)
-    antwort = toolbox.vm_run("echo hallo")
-    assert "error" in antwort
-    assert "fuehre ich nichts aus" in antwort["error"]
-
-
-def test_blender_run_writes_the_script_before_running_it(toolbox: Toolbox) -> None:
-    """Zwei Schritte in einem: die Datei muss da sein, bevor Blender sie oeffnet."""
-    geschehen: list[tuple[str, str]] = []
-
-    class FakeBox:
-        def write(self, path: str, text: str) -> dict:
-            geschehen.append(("write", path))
-            return {"written": f"/work/{path}", "bytes": len(text)}
-
-        def run(self, command: str, timeout: int = 30):
-            geschehen.append(("run", command))
-
-            class Result:
-                def as_dict(self) -> dict:
-                    return {"exit_code": 0, "stdout": "fertig", "stderr": "", "seconds": 1.2}
-
-            assert "blender --background --python" in command
-            assert timeout == 90
-            return Result()
-
-    toolbox._sandbox_box = FakeBox()
-    antwort = toolbox.blender_run("bpy.ops.mesh.primitive_cube_add()")
-    assert antwort["exit_code"] == 0
-    assert antwort["script"] == "/work/design.py"
-    assert [schritt for schritt, _ in geschehen] == ["write", "run"]
-
-
-def test_blender_run_adds_the_py_suffix(toolbox: Toolbox) -> None:
-    class FakeBox:
-        def write(self, path: str, text: str) -> dict:
-            return {"written": f"/work/{path}"}
-
-        def run(self, command: str, timeout: int = 30):
-            class Result:
-                def as_dict(self) -> dict:
-                    return {"exit_code": 0, "stdout": "", "stderr": "", "seconds": 0.1}
-
-            return Result()
-
-    toolbox._sandbox_box = FakeBox()
-    antwort = toolbox.blender_run("pass", filename="szene")
-    assert antwort["script"] == "/work/szene.py"
-
-
-def test_blender_run_without_a_runtime_is_an_answer_not_a_crash(
-    monkeypatch: pytest.MonkeyPatch, toolbox: Toolbox
-) -> None:
-    """Fehlt Blender im Abbild, ist das ein gewoehnlicher Fehler -- kein Absturz."""
-    monkeypatch.setattr("aquaticy.sandbox.find_runtime", lambda: None)
-    antwort = toolbox.blender_run("bpy.ops.mesh.primitive_cube_add()")
-    assert "error" in antwort
-    assert "fuehre ich nichts aus" in antwort["error"]
-
-
-
 
 
 def test_personal_notes_stand_in_the_system_prompt(
@@ -2833,9 +2483,6 @@ def test_the_memory_rule_tells_the_model_to_save_on_its_own(
     assert "ich heisse louis" in system.lower()
     assert '"person"' in system, "das Thema, unter dem es wiedergefunden wird"
     assert "gemerkt" in system, "und er sagt es dazu"
-
-
-
 
 
 def test_code_mode_runs_on_the_strongest_model(
@@ -2938,9 +2585,6 @@ def test_without_any_cloud_key_the_biggest_local_model_wins(
     assert strongest_model(Settings()) == "ollama_chat/gross:70b"
 
 
-
-
-
 def test_the_second_round_searches_before_it_asks_the_model(
     monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
 ) -> None:
@@ -2963,7 +2607,6 @@ def test_the_second_round_searches_before_it_asks_the_model(
     )
     agent = Agent(settings, cache=None, toolbox=toolbox)
     toolbox.stats.sources.append({"url": "https://alt.example/x", "domain": "alt.example"})
-
 
 
     result = agent.ask("Wie schwer ist ein Lastenrad?", stream=False, structured=False,
@@ -3175,9 +2818,6 @@ def test_every_call_is_counted(settings: Settings, toolbox: Toolbox, tmp_path: A
     assert summe["models"][0]["model"] == agent.active_model
 
 
-
-
-
 def test_the_pro_mode_runs_on_the_strongest_model(
     monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
 ) -> None:
@@ -3332,14 +2972,6 @@ def test_without_structuring_the_pro_mode_promises_no_agents(
     assert "du führst ein Gespräch" in prompt
 
 
-def test_the_pro_mode_needs_no_workshop(settings: Settings, toolbox: Toolbox) -> None:
-    """Die virtual machine gehoert zum Programmieren, nicht zur Leistung."""
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    agent.sandbox = True
-    agent._apply_mode("pro")
-    assert agent.workshop_on is False
-
-
 def test_the_pro_mode_arrives_at_the_agents(
     monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
 ) -> None:
@@ -3358,9 +2990,6 @@ def test_the_pro_mode_arrives_at_the_agents(
     agent._run_subagents(["a", "b"])
     assert gesehen["limit"] == 44
     assert gesehen["parallel"] >= 2
-
-
-
 
 
 def test_the_checkers_need_a_reason(settings: Settings, toolbox: Toolbox) -> None:
@@ -3498,9 +3127,6 @@ def test_the_pro_prompt_says_what_a_check_note_means(
     assert "Pruefvermerk" in prompt
     assert "BEIDE Angaben" in prompt, "bei einer Abweichung wird nicht gewaehlt"
     assert "einer einzigen Quelle" in prompt
-
-
-
 
 
 def _master_llm(monkeypatch: pytest.MonkeyPatch, plan: Any, review: Any, answer: str = "Fertig"):
@@ -3687,7 +3313,6 @@ def test_max_fills_the_crew_and_only_in_the_pro_mode(
     assert gesehen[0][0].text == "Teil A"
 
 
-
     agent.max_run = False
     agent.ask("/max Frage", stream=False, mode="normal", structured=False)
     assert agent.max_run is False
@@ -3715,9 +3340,6 @@ def test_the_strong_model_reaches_the_agents(
     monkeypatch.setattr("aquaticy.system.strongest_model", lambda _s, purpose="work": "")
     agent._code_model.clear()
     assert agent.strong_count == 0
-
-
-
 
 
 def test_the_three_strongest_are_offered(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -3766,9 +3388,6 @@ def test_nothing_reachable_is_an_empty_list(monkeypatch: pytest.MonkeyPatch) -> 
     settings = Settings(model="ollama_chat/klein")
     assert strongest_models(settings) == []
     assert strongest_model(settings) == ""
-
-
-
 
 
 def test_the_provider_tables_cover_the_same_two_providers() -> None:
@@ -3832,10 +3451,6 @@ def test_the_coding_models_are_offered_for_code(monkeypatch: pytest.MonkeyPatch)
 
     assert fuer_die_recherche == ["mistral/mistral-large-latest",
                                   "nvidia_nim/nvidia/llama-3.3-nemotron-super-49b-v1.5"]
-
-
-
-
 
 
 def test_answer_urls_reads_addresses_out_of_a_text() -> None:
@@ -3960,9 +3575,6 @@ def test_a_pending_question_is_not_pushed_for_a_picture(
     assert agent._should_force_visual()
     toolbox.stats.questions = 1
     assert not agent._should_force_visual()
-
-
-
 
 
 def test_the_wait_for_a_loading_model_is_announced(

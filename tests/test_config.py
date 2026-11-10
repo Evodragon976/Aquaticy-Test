@@ -80,9 +80,6 @@ def test_write_env_file_preserves_comments(tmp_path: Path) -> None:
     assert "AQUATICY_MODEL=alt" not in content
 
 
-
-
-
 def test_nvidia_nim_key_is_recognised() -> None:
     """NVIDIA-Modell-IDs enthalten mehrere Schraegstriche."""
     assert config.provider_of("nvidia_nim/meta/llama-3.3-70b-instruct") == "nvidia_nim"
@@ -144,9 +141,6 @@ def test_generic_key_does_not_override_known_providers(
     assert config.api_key_name_for("ollama/llama3.1") == ""
 
 
-
-
-
 def test_valid_models_pass() -> None:
     for model in (
         "mistral/mistral-large-latest",
@@ -192,9 +186,6 @@ def test_resolve_model_reports_the_provider() -> None:
     assert config.resolve_model("") == ""
 
 
-
-
-
 def test_kwargs_for_the_same_provider_are_passed_through(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -228,10 +219,6 @@ def test_main_model_key_is_not_sent_to_other_providers(
 
     assert "api_key" not in kwargs and "api_base" not in kwargs
     assert kwargs["num_ctx"] == 16384
-
-
-
-
 
 
 def test_ollama_models_get_a_real_context_window() -> None:
@@ -277,9 +264,6 @@ def test_context_tokens_is_configurable(
 def test_context_tokens_zero_uses_the_ollama_default() -> None:
     settings = config.Settings(model="ollama_chat/x", context_tokens=0)
     assert "num_ctx" not in settings.llm_kwargs()
-
-
-
 
 
 def test_local_models_run_two_subagents() -> None:
@@ -353,53 +337,8 @@ def test_an_explicit_parallelism_is_never_exceeded() -> None:
     assert settings.parallel_for(24) == 6
 
 
+# 16.0.1 (Aquaticy-Test): 4 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
-
-def test_the_default_size_matches_the_old_fixed_numbers(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Wer nichts einstellt, bekommt "Normal": 2 Kerne, 3 GB, 4 GB Platte (seit 12.7.8 Luna)."""
-    monkeypatch.setenv("AQUATICY_DATA_DIR", str(tmp_path / "data"))
-    settings = config.get_settings()
-    assert settings.vm_size == "normal"
-    assert settings.vm_cpus == 2
-    assert settings.vm_memory_mb == 3072
-    assert settings.vm_disk_gb == 4
-
-
-def test_plus_gives_more_of_everything(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setenv("AQUATICY_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("AQUATICY_VM_SIZE", "plus")
-    settings = config.get_settings()
-    assert settings.vm_size == "plus"
-    assert settings.vm_cpus == 4
-    assert settings.vm_memory_mb == 6144
-    assert settings.vm_disk_gb == 20
-
-
-def test_an_unknown_size_falls_back_to_normal(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setenv("AQUATICY_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("AQUATICY_VM_SIZE", "gigantisch")
-    settings = config.get_settings()
-    assert settings.vm_size == "normal"
-    assert settings.vm_cpus == 2
-
-
-def test_a_hand_picked_number_wins_over_the_size(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Wer einzeln schraubt, weiss was er tut -- das gewinnt gegenueber der Groesse."""
-    monkeypatch.setenv("AQUATICY_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("AQUATICY_VM_SIZE", "plus")
-    monkeypatch.setenv("AQUATICY_VM_CPUS", "2")
-    settings = config.get_settings()
-    assert settings.vm_size == "plus"
-    assert settings.vm_cpus == 2
-
-    assert settings.vm_memory_mb == 6144
-    assert settings.vm_disk_gb == 20

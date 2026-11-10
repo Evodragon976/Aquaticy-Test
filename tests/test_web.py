@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import base64
-import dataclasses
 import json
 import re
-import sqlite3
 import threading
 import time
 from http.client import HTTPConnection
@@ -429,24 +427,9 @@ def test_config_post_reports_failures(
     assert json.loads(body)["error"] == web.GENERIC_ERROR
 
 
-def test_ui_file_offers_every_setting() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    # 16.0.0 (Aquaticy-Test): Heimnetz, Home Assistant, Lager und virtual machine sind geloescht.
-    geloescht = ("AQUATICY_HA_", "AQUATICY_LAN_", "AQUATICY_STORAGE_", "AQUATICY_VM_",
-                 web.HA_TOKEN_FIELD)
-    for key in web.SETTING_KEYS:
-        if key == "AQUATICY_MAX_SUBAGENTS":
-            continue
-        if key.startswith(geloescht):
-            assert f'name="{key}"' not in html, f"{key} sollte geloescht sein"
-            continue
-        assert f'name="{key}"' in html, f"{key} fehlt im Formular"
-
-
-    assert 'id="sec-schluessel"' in html and 'id="keys-summary"' not in html
-    assert "Eigene Modelle" in html
-    assert '<fieldset id="sec-schluessel" hidden>' in html
-    assert 'name="__API_KEY__"' not in html
+# 16.0.1 (Aquaticy-Test): 30 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_ui_exposes_legal_links_and_keyboard_controls() -> None:
@@ -731,62 +714,6 @@ def port(session: web.ChatSession):
 def test_without_a_token_everything_stays_open(port: int) -> None:
 
     assert raw_request(port, "GET", "/")[0] == 200
-
-
-def test_consent_registration_and_account_isolation(
-    port: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from aquaticy.auth import AuthStore
-
-    monkeypatch.setattr(web, "AUTH", AuthStore(tmp_path / "accounts", "PRO123456"))
-    monkeypatch.setattr(web, "SESSIONS", web.SessionRegistry())
-    monkeypatch.setattr(web, "SESSION", web.SessionProxy())
-    monkeypatch.setattr(web, "strong_models", lambda *args, **kwargs: [])
-    assert raw_request(port, "GET", "/api/config")[0] == 401
-
-    status, headers, _ = json_request(port, "POST", "/api/consent", {"accepted": True})
-    assert status == 200
-    consent = headers["Set-Cookie"].split(";", 1)[0]
-    status, _, payload = json_request(
-        port,
-        "POST",
-        "/api/auth/register",
-        {
-            "email": "person@example.org",
-            "username": "Person",
-            "password": "eine sehr lange Passphrase",
-            "plan": "normal",
-        },
-        consent,
-    )
-    assert status == 400 and "ausdrücklich" in payload["error"]
-    status, headers, payload = json_request(
-        port,
-        "POST",
-        "/api/auth/register",
-        {
-            "email": "person@example.org",
-            "username": "Person",
-            "password": "eine sehr lange Passphrase",
-            "plan": "normal",
-            "terms_accepted": True,
-        },
-        consent,
-    )
-    assert status == 200 and payload["account"]["plan"] == "normal"
-    assert "HttpOnly" in headers["Set-Cookie"]
-    assert "SameSite=Strict" in headers["Set-Cookie"]
-    session_cookie = headers["Set-Cookie"].split(";", 1)[0]
-    cookies = consent + "; " + session_cookie
-    status, _, body = raw_request(
-        port,
-        "GET",
-        "/api/config",
-        {"Cookie": cookies, "User-Agent": "Aquaticy-Test"},
-    )
-    assert status == 200 and json.loads(body)["account"]["pro"] is False
-    status, _, payload = json_request(port, "POST", "/api/ha", {}, cookies)
-    assert status == 403 and "Ultra" in payload["error"]
 
 
 def test_legal_pages_are_available_before_account_login(port: int) -> None:
@@ -1356,100 +1283,6 @@ def test_old_uploads_are_cleaned_up(session: web.ChatSession, seeing: FakeAgent,
     assert any("bild5" in item.name for item in folder.iterdir())
 
 
-def test_the_token_never_goes_to_the_browser(client, session: web.ChatSession) -> None:
-    """Nur ob eines da ist -- nie das Token selbst."""
-    session._settings.ha_url = "http://192.168.1.5:8123"
-    session._settings.ha_token = "streng-geheim"
-    _, body = client("GET", "/api/config")
-    payload = json.loads(body)
-    assert payload["ha_connected"] is True
-    assert "streng-geheim" not in body.decode()
-    assert "AQUATICY_HA_URL" in payload["values"]
-    assert not any("geheim" in str(value) for value in payload["values"].values())
-
-
-def test_ha_discovery_reports_what_it_found(client, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("aquaticy.homeassistant.discover", lambda: ["http://192.168.1.5:8123"])
-    status, body = client("POST", "/api/ha", {"action": "discover"})
-    assert status == 200
-    assert json.loads(body) == {"ok": True, "found": ["http://192.168.1.5:8123"]}
-
-
-def test_ha_test_needs_both_pieces(client) -> None:
-    _, body = client("POST", "/api/ha", {"url": "http://x:8123", "token": ""})
-    assert json.loads(body)["ok"] is False
-    assert "Zugangsschlüssel" in json.loads(body)["error"]
-
-
-def test_ha_test_reports_success(client, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("aquaticy.homeassistant.HomeAssistant.ping", lambda self: "Zuhause 2026.8")
-    monkeypatch.setattr(
-        "aquaticy.homeassistant.HomeAssistant.domains", lambda self: {"light": 4, "sensor": 9}
-    )
-    _, body = client("POST", "/api/ha", {"url": "192.168.1.5", "token": "t"})
-    payload = json.loads(body)
-    assert payload["ok"] is True
-    assert payload["name"] == "Zuhause 2026.8"
-    assert payload["entities"] == 13
-    assert payload["url"] == "http://192.168.1.5:8123"
-
-
-def test_ha_test_passes_the_error_through(client, monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy.homeassistant import HomeAssistantError
-
-    def boom(self):
-        raise HomeAssistantError("Token abgelehnt")
-
-    monkeypatch.setattr("aquaticy.homeassistant.HomeAssistant.ping", boom)
-    _, body = client("POST", "/api/ha", {"url": "192.168.1.5", "token": "falsch"})
-    assert json.loads(body) == {"ok": False, "error": "Token abgelehnt"}
-
-
-def test_the_stored_ha_token_only_goes_to_the_stored_address(
-    client, session: web.ChatSession, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """9.5.13: Eine neue Adresse bekommt den gespeicherten Token nicht."""
-    gesehen: list[tuple[str, str]] = []
-
-    def ping(self):
-        gesehen.append((self.url, self.token))
-        return "Zuhause"
-
-    monkeypatch.setattr("aquaticy.homeassistant.HomeAssistant.ping", ping)
-    monkeypatch.setattr("aquaticy.homeassistant.HomeAssistant.domains", lambda self: {})
-    session._settings = dataclasses.replace(
-        session.settings(), ha_url="http://192.168.1.5:8123", ha_token="gespeichert"
-    )
-    _, body = client("POST", "/api/ha", {"url": "http://fremd.example:8123", "token": ""})
-    assert json.loads(body)["ok"] is False and "neue Adresse" in json.loads(body)["error"]
-    assert gesehen == []
-    _, body = client("POST", "/api/ha", {"url": "192.168.1.5", "token": ""})
-    assert json.loads(body)["ok"] is True, "dieselbe Adresse (vervollstaendigt) geht"
-    _, body = client("POST", "/api/ha", {"url": "http://fremd.example:8123", "token": "neu"})
-    assert json.loads(body)["ok"] is True
-    assert gesehen == [("http://192.168.1.5:8123", "gespeichert"),
-                       ("http://fremd.example:8123", "neu")]
-
-
-def test_an_empty_ha_token_keeps_the_stored_one(
-    session: web.ChatSession, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    target = tmp_path / ".env"
-    target.write_text("HA_TOKEN=alt-und-gut\n")
-    monkeypatch.setattr(web, "find_env_file", lambda: target)
-    web.save_values({"AQUATICY_HA_URL": "http://192.168.1.5:8123", web.HA_TOKEN_FIELD: "   "})
-    assert "HA_TOKEN=alt-und-gut" in target.read_text()
-
-
-def test_a_new_ha_token_is_written(
-    session: web.ChatSession, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    target = tmp_path / ".env"
-    monkeypatch.setattr(web, "find_env_file", lambda: target)
-    web.save_values({web.HA_TOKEN_FIELD: "neues-token"})
-    assert "HA_TOKEN=neues-token" in target.read_text()
-
-
 def test_the_ui_looks_like_the_new_design() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
     assert "<aside>" in html
@@ -1676,44 +1509,9 @@ def test_every_model_says_where_it_runs(
     assert local and local[0]["kind"] == "lokal"
 
 
-def test_the_system_endpoint_reports_the_load(client) -> None:
-    status, body = client("GET", "/api/system")
-    assert status == 200
-    payload = json.loads(body)
-    assert payload["cpu"]["cores"] >= 1
-    assert "system" in payload and "python" in payload
-
-
-def test_the_load_includes_the_storage_when_it_is_on(
-    client, session: web.ChatSession
-) -> None:
-    session._settings.memory_enabled = True
-    _, body = client("GET", "/api/system")
-    storage = json.loads(body)["storage"]
-    assert storage["limit_mb"] == 20  # 16.0.0 (Aquaticy-Test): 20 MB je Konto
-
-    assert "memory" in json.loads(body)
-
-
 def test_no_storage_line_when_memory_is_off(client, session: web.ChatSession) -> None:
     session._settings.memory_enabled = False
     assert "storage" not in json.loads(client("GET", "/api/system")[1])
-
-
-@pytest.mark.parametrize("plan", ["normal", "pro"])
-def test_only_ultra_reads_server_load(client, session: web.ChatSession, plan: str) -> None:
-    """Seit 9.5.21 sehen Normal und Pro die Auslastung des Rechners nicht."""
-    session.account = web.Account(plan, f"{plan}@example.org", plan, 0)
-    status, body = client("GET", "/api/system")
-    assert status == 403
-    assert "nur mit Ultra" in json.loads(body)["error"]
-    assert "cpu" not in json.loads(body)
-
-
-def test_an_ultra_account_reads_server_load(client, session: web.ChatSession) -> None:
-    session.account = web.Account("ultra", "ultra@example.org", "ultra", 0)
-    status, body = client("GET", "/api/system")
-    assert status == 200 and json.loads(body)["cpu"]["cores"] >= 1
 
 
 # 16.0.0 (Aquaticy-Test): test_the_load_section_is_hidden_until_ultra entfaellt.
@@ -2472,65 +2270,6 @@ def test_stopping_cancels_the_running_agent(
 # geloescht
 
 
-def test_the_storage_probe_reports_what_it_found(
-    client, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    class Fake:
-        url = "http://192.168.1.5:3000"
-
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def info(self):
-            return {"app": "storage-system", "name": "Lagerverwaltung", "version": "1.0.0"}
-
-        def rooms(self):
-            return [{"id": 1, "name": "Keller", "itemCount": 12}]
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr("aquaticy.storage.Storage", Fake)
-    status, body = client("POST", "/api/storage", {"url": "192.168.1.5:3000"})
-    data = json.loads(body)
-    assert status == 200 and data["ok"] is True
-    assert data["rooms"] == 1 and data["items"] == 12
-
-
-def test_the_storage_probe_only_reads(client, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ein Verbindungstest darf nichts anlegen -- auch nicht versehentlich."""
-    seen: dict[str, Any] = {}
-
-    class Fake:
-        url = "http://x"
-
-        def __init__(self, url, access="read", **kwargs):
-            seen["access"] = access
-
-        def info(self):
-            return {"app": "storage-system"}
-
-        def rooms(self):
-            return []
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr("aquaticy.storage.Storage", Fake)
-    client("POST", "/api/storage", {"url": "192.168.1.5:3000"})
-    assert seen["access"] == "read"
-
-
-def test_searching_the_network_says_so_when_nothing_answers(
-    client, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("aquaticy.storage.discover", lambda subnet: [])
-    _, body = client("POST", "/api/storage", {})
-    data = json.loads(body)
-    assert data["ok"] is False
-    assert "Nichts gefunden" in data["error"]
-
-
 def test_a_closed_tab_keeps_the_run_alive(
     client, session: web.ChatSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2844,7 +2583,8 @@ def test_every_choice_is_sent_with_every_question() -> None:
     body = body[: body.index("const slashBefehle = new")]
     korb = body[body.index("JSON.stringify({") : body.index("signal: running.signal")]
     for feld in (
-        "message", "attachments", "mode", "structured", "recheck", "effort", "online", "sandbox",
+        # 16.0.1 (Aquaticy-Test): "sandbox" entfaellt -- es gibt keine virtual machine mehr.
+        "message", "attachments", "mode", "structured", "recheck", "effort", "online",
     ):
         assert feld in korb, f"{feld} geht nicht mit"
 
@@ -2976,11 +2716,9 @@ def test_the_web_switch_reaches_the_agent(
 # geloescht
 
 
-def test_the_workshop_reaches_the_agent(
-    client, session: web.ChatSession, agent: FakeAgent
-) -> None:
-    client("POST", "/api/chat", {"message": "Bau mir was", "mode": "code", "sandbox": True})
-    assert agent.sandbox is True
+# 16.0.1 (Aquaticy-Test): 6 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_the_code_mode_always_keeps_the_web(
@@ -2996,12 +2734,6 @@ def test_the_code_mode_always_keeps_the_web(
     body = html[html.index("async function ask(text){") :]
     korb = body[body.index("JSON.stringify({") : body.index("signal: running.signal")]
     assert 'online: mode === "code" ? true : online' in korb
-
-
-def test_the_workshop_reports_what_it_does() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    for event in ("vm_start", "vm_run", "vm_write", "vm_done", "vm_stop"):
-        assert f'case "{event}"' in html, f"{event} wird nicht angezeigt"
 
 
 def test_the_recheck_leaves_a_mark_on_the_answer() -> None:
@@ -3162,62 +2894,6 @@ def test_exporting_an_unknown_chat_is_a_404(client) -> None:
     assert client("GET", "/api/chatexport?session_id=gibtsnicht")[0] == 404
 
 
-def test_jobs_can_be_created_paused_and_deleted(client) -> None:
-    status, data = client(
-        "POST",
-        "/api/coworkers",
-        {
-            "action": "create",
-            "goal": "Was gibt es Neues?",
-            "schedule": {"rhythm": "daily", "hour": 7, "minute": 30, "kind": "research"},
-        },
-    )
-    assert status == 200
-    job = json.loads(data)["coworkers"][-1]
-    assert job["goal"] == "Was gibt es Neues?"
-    assert job["schedule"]["rhythm_name"] == "täglich"
-
-    payload = json.loads(client("GET", "/api/coworkers")[1])
-    assert len(payload["coworkers"]) == 1
-
-    assert json.loads(client("POST", "/api/coworkers", {"action": "pause", "id": job["id"]})[1])[
-        "ok"
-    ]
-    assert json.loads(client("GET", "/api/coworkers")[1])["coworkers"][0]["enabled"] is False
-
-    assert json.loads(client("DELETE", f"/api/coworkers?id={job['id']}")[1])["ok"] is True
-    assert json.loads(client("GET", "/api/coworkers")[1])["coworkers"] == []
-
-
-def test_a_job_without_a_question_is_refused(client) -> None:
-    status, data = client(
-        "POST",
-        "/api/coworkers",
-        {"action": "create", "goal": "  ", "schedule": {"kind": "research"}},
-    )
-    assert status == 400
-    assert json.loads(data)["ok"] is False
-
-
-def test_the_workshop_answers_even_when_it_is_not_running(client) -> None:
-    """Keine virtual machine ist keine Stoerung -- dann liegt eben nichts darin."""
-    status, data = client("GET", "/api/werkstatt")
-    assert status == 200
-    payload = json.loads(data)
-    assert payload["running"] is False
-    assert payload["files"] == []
-
-
-def test_a_workshop_file_is_never_served_as_html(client) -> None:
-    """Sonst liefe eine Datei aus der virtual machine unter der Adresse von Aquaticy."""
-    quelle = Path("aquaticy/web.py").read_text(encoding="utf-8")
-    stelle = quelle[quelle.index("def _workshop_file") :]
-    stelle = stelle[: stelle.index("\n    def ", 10)]
-    assert 'attachment; filename=' in stelle
-    assert "application/octet-stream" in stelle
-    assert "nosniff" in stelle
-
-
 def test_the_settings_show_the_usage_limits() -> None:
     """Seit 9.5.14: Sitzung und Woche als Balken in Prozent -- wie bei Claude."""
     html = web.UI_FILE.read_text(encoding="utf-8")
@@ -3257,60 +2933,11 @@ def test_every_answer_can_be_copied_and_saved() -> None:
 # geloescht
 
 
-def test_the_settings_offer_scheduled_jobs() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert "<legend>Aufträge</legend>" not in html
-    assert html.index('id="coworkerbox"') < html.index('id="cw-task-rhythm"')
-    assert html.index('id="cw-task-rhythm"') < html.index('id="membox"')
-    assert 'id="cw-task-rhythm"' in html
-    assert "stündlich" in html and "wöchentlich" in html
-
-
 def test_the_google_section_has_its_own_write_switch() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
     assert 'name="AQUATICY_GOOGLE_WRITE"' in html
     assert "Ändern erlaubt" in html
     assert "Verschickt wird nie eine Mail" in html
-
-
-def test_an_attachment_lands_in_the_workshop_of_this_turn(
-    session: web.ChatSession, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Der Modus dieses Turns zählt -- nicht der des letzten.
-
-    Die Anhänge werden verarbeitet, bevor der Agent den neuen Modus kennt.
-    Wer `agent.workshop_on` fragt, bekommt den Stand von gestern.
-    """
-    agent = SimpleNamespace(mode="normal", sandbox=False, workshop_on=False)
-
-
-    assert web.ChatSession._workshop_wanted(agent, "code", True) is True
-
-    assert web.ChatSession._workshop_wanted(agent, "code", False) is False
-
-    assert web.ChatSession._workshop_wanted(agent, "normal", True) is False
-
-
-    agent.mode, agent.sandbox = "code", True
-    assert web.ChatSession._workshop_wanted(agent, "", None) is True
-
-
-def test_without_the_workshop_an_attachment_is_not_copied_anywhere(
-    session: web.ChatSession, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    versuche: list[str] = []
-    monkeypatch.setattr(
-        session, "_into_workshop", lambda name, data: versuche.append(name) or ""
-    )
-    agent = FakeAgent()
-    text = session.attachments_text(
-        agent,
-        [{"name": "notiz.txt", "data": base64.b64encode(b"Hallo").decode()}],
-        lambda *a: None,
-        workshop=False,
-    )
-    assert "Hallo" in text
-    assert versuche == [], "ohne virtual machine wird nichts hineingelegt"
 
 
 def test_thinking_has_its_own_switch_next_to_structuring() -> None:
@@ -3371,16 +2998,13 @@ def test_the_switch_looks_like_a_switch_and_moves() -> None:
 
 def test_no_plain_checkbox_is_left_over() -> None:
     """Funktionsschalter bleiben Schalter; Kontrollkästchen gibt es nur dort, wo
-    erst ein Knopf die Wahl abschickt: die Zustimmung und (seit 9.5.32) die
-    Optionen im Coworker-Formular -- ein Schalter verspricht sofortige Wirkung."""
+    erst ein Knopf die Wahl abschickt: die Zustimmungen -- ein Schalter verspricht sofortige
+    Wirkung. (16.0.1, Aquaticy-Test: das Coworker-Formular gibt es nicht mehr.)"""
     html = web.UI_FILE.read_text(encoding="utf-8")
     roh = html.count('<input type="checkbox"')
     angezogen = html.count('<input type="checkbox" role="switch" class="schalter"')
-    assert roh == angezogen + 5
-    assert '<input type="checkbox" id="cw-sharing-chats">' in html
-    assert '<input type="checkbox" id="cw-sharing-coworkers">' in html
+    assert roh == angezogen + 2
     assert '<input type="checkbox" id="auth-terms" required>' in html
-    assert '<input type="checkbox" id="cw-task-struktur" checked>' in html
     assert '<input type="checkbox" id="consent-learning">' in html
 
 
@@ -3502,35 +3126,9 @@ def test_the_request_rate_is_settable_and_checked(client) -> None:
     assert client("POST", "/api/config", {"AQUATICY_RPM": ""})[0] == 200
 
 
-def test_an_invented_choice_is_refused(client) -> None:
-    status, data = client("POST", "/api/config", {"AQUATICY_STORAGE_ACCESS": "alles"})
-    assert status == 400
-    assert "off, read, write" in json.loads(data)["error"]
-
-
-def test_the_workshop_size_is_settable_and_checked(client, web_settings: Settings) -> None:
-    """Normal oder plus -- alles andere ist ein Versehen, kein Wunsch."""
-    assert "AQUATICY_VM_SIZE" in web.SETTING_KEYS
-
-    status, data = client("POST", "/api/config", {"AQUATICY_VM_SIZE": "riesig"})
-    assert status == 400
-    assert "normal, plus" in json.loads(data)["error"]
-
-    status, data = client("POST", "/api/config", {"AQUATICY_VM_SIZE": "plus"})
-    assert status == 200
-    status, body = client("GET", "/api/config")
-    assert json.loads(body)["values"]["AQUATICY_VM_SIZE"] == "plus"
-
-
-def test_normal_account_cannot_select_plus_workshop(
-    client, session: web.ChatSession
-) -> None:
-    session.account = web.Account("normal", "normal@example.org", "normal", 0)
-    status, data = client("POST", "/api/config", {"AQUATICY_VM_SIZE": "plus"})
-    assert status == 400
-
-    assert "Ultra" in json.loads(data)["error"]
-    assert client("POST", "/api/config", {"AQUATICY_VM_SIZE": "normal"})[0] == 200
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_agent_slider_is_in_the_model_picker_not_the_settings() -> None:
@@ -3541,7 +3139,7 @@ def test_agent_slider_is_in_the_model_picker_not_the_settings() -> None:
     assert 'type="range" id="agents"' in picker
     assert 'max="12"' in picker and 'mode === "pro" ? 50 : 12' in html
     assert 'name="AQUATICY_MAX_SUBAGENTS"' not in settings
-    assert 'message: text, attachments, mode, structured, recheck, effort, sandbox, agents' in html
+    assert 'message: text, attachments, mode, structured, recheck, effort, agents' in html
 
 
 def test_an_absurdly_long_value_is_refused(client) -> None:
@@ -3982,197 +3580,9 @@ def test_the_whole_picker_scrolls_not_just_the_list() -> None:
     assert "min(38vh,320px)" in picker
 
 
-def test_an_image_job_stores_the_picture_privately(client, session: web.ChatSession) -> None:
-    """Das Vergleichsbild landet im Datenordner des Kontos, nicht im Auftrag."""
-    import base64
-
-    from aquaticy.media import load_snapshot
-
-    session.settings().vision_model = "ollama_chat/gemma4:12b"
-    png = base64.b64encode(b"\x89PNG\r\n\x1a\ndas-bild").decode()
-    status, body = client(
-        "POST",
-        "/api/coworkers",
-        {
-            "image_data": png,
-            "image_type": "image/png",
-            "action": "create",
-            "goal": "Handy gesucht",
-            "schedule": {"kind": "image", "rhythm": "hourly"},
-        },
-    )
-    assert status == 200
-    payload = json.loads(body)
-    assert payload["ok"] is True, payload.get("error")
-    media_id = payload["coworkers"][-1]["schedule"]["image_id"]
-    assert media_id
-    assert load_snapshot(session.settings().data_dir, media_id) == (
-        b"\x89PNG\r\n\x1a\ndas-bild", "image/png")
-
-
-def test_p2_deleting_an_image_job_removes_its_picture(client, session: web.ChatSession) -> None:
-    """Seit 9.5.16 auch ueber DELETE /api/coworkers -- vorher nur ueber den POST-Weg."""
-    import base64
-
-    from aquaticy.media import load_snapshot
-
-    session.settings().vision_model = "ollama_chat/gemma4:12b"
-    for weg in ("DELETE", "POST"):
-        png = base64.b64encode(b"\x89PNG\r\n\x1a\ndas-bild").decode()
-        payload = json.loads(
-            client(
-                "POST",
-                "/api/coworkers",
-                {
-                    "image_data": png,
-                    "image_type": "image/png",
-                    "action": "create",
-                    "goal": "Handy gesucht",
-                    "schedule": {"kind": "image", "rhythm": "hourly"},
-                },
-            )[1]
-        )
-        nummer, media_id = (
-            payload["coworkers"][-1]["id"],
-            payload["coworkers"][-1]["schedule"]["image_id"],
-        )
-        assert load_snapshot(session.settings().data_dir, media_id) is not None
-        if weg == "DELETE":
-            status, body = client("DELETE", f"/api/coworkers?id={nummer}")
-        else:
-            status, body = client("POST", "/api/coworkers", {"action": "delete", "id": nummer})
-        assert status == 200 and json.loads(body)["ok"] is True, weg
-        assert load_snapshot(session.settings().data_dir, media_id) is None, weg
-
-
-def test_an_image_job_without_a_picture_is_refused(
-    client, session: web.ChatSession
-) -> None:
-    session.settings().vision_model = "ollama_chat/gemma4:12b"
-    status, body = client(
-        "POST",
-        "/api/coworkers",
-        {
-            "action": "create",
-            "goal": "Handy gesucht",
-            "schedule": {"kind": "image", "rhythm": "hourly"},
-        },
-    )
-    assert status == 400
-    payload = json.loads(body)
-    assert payload["ok"] is False
-    assert "fehlt das Bild" in payload["error"]
-
-
-def test_a_rejected_image_job_removes_its_permanent_snapshot(
-    client, session: web.ChatSession, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Ist die Auftragsliste voll, darf das schon gespeicherte Bild nicht liegen bleiben."""
-    session.settings().vision_model = "ollama_chat/gemma4:12b"
-    deleted: list[str] = []
-    monkeypatch.setattr(
-        "aquaticy.coworker.CoworkerStore.add",
-        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("Liste voll")),
-    )
-    monkeypatch.setattr(
-        "aquaticy.media.delete_snapshot",
-        lambda data_dir, media_id: deleted.append(media_id),
-    )
-
-    _, body = client(
-        "POST",
-        "/api/coworkers",
-        {
-            "image_data": base64.b64encode(b"\x89PNG\r\n\x1a\nbild").decode(),
-            "image_type": "image/png",
-            "action": "create",
-            "goal": "Handy gesucht",
-            "schedule": {"kind": "image", "rhythm": "hourly"},
-        },
-    )
-    payload = json.loads(body)
-    assert payload["ok"] is False
-    assert len(deleted) == 1 and deleted[0].endswith("-fest.png")
-
-
-def test_an_image_job_needs_a_vision_model(client) -> None:
-    """Ein Textmodell wuerde das Foto nicht sehen, sondern raten."""
-    _, body = client(
-        "POST",
-        "/api/coworkers",
-        {
-            "action": "create",
-            "goal": "Handy gesucht",
-            "schedule": {"kind": "image", "rhythm": "hourly"},
-        },
-    )
-    payload = json.loads(body)
-    assert payload["ok"] is False and "Vision-Modell" in payload["error"]
-
-
-@pytest.mark.parametrize("error", [sqlite3.OperationalError, sqlite3.IntegrityError])
-def test_database_failure_removes_uploaded_job_image(
-    client, session: web.ChatSession, monkeypatch: pytest.MonkeyPatch, error: Any
-) -> None:
-    from aquaticy import media
-
-    settings = session.settings()
-    settings.vision_model = "ollama_chat/gemma4:12b"
-    saved: list[str] = []
-    original = media.save_snapshot
-
-    def save(*args: Any, **kwargs: Any) -> str:
-        media_id = original(*args, **kwargs)
-        saved.append(media_id)
-        return media_id
-
-    def fail(*args: Any, **kwargs: Any) -> None:
-        raise error("database is locked")
-
-    monkeypatch.setattr(media, "save_snapshot", save)
-    monkeypatch.setattr("aquaticy.coworker.CoworkerStore.add", fail)
-    status, body = client(
-        "POST",
-        "/api/coworkers",
-        {
-            "image_data": base64.b64encode(b"\x89PNG\r\n\x1a\nbild").decode(),
-            "image_type": "image/png",
-            "action": "create",
-            "goal": "Handy gesucht",
-            "schedule": {"kind": "image"},
-        },
-    )
-    assert status == 500 and json.loads(body)["ok"] is False
-    assert len(saved) == 1
-    assert media.snapshot_path(settings.data_dir, saved[0]) is None
-
-
-def test_an_unsupported_picture_format_is_refused(
-    client, session: web.ChatSession
-) -> None:
-    import base64
-
-    session.settings().vision_model = "ollama_chat/gemma4:12b"
-    _, body = client(
-        "POST",
-        "/api/coworkers",
-        {
-            "image_data": base64.b64encode(b"nicht-wirklich").decode(),
-            "image_type": "application/zip",
-            "action": "create",
-            "goal": "Handy gesucht",
-            "schedule": {"kind": "image", "rhythm": "hourly"},
-        },
-    )
-    payload = json.loads(body)
-    assert payload["ok"] is False
-    assert "Bildformat" in payload["error"]
-
-
-def test_the_ui_offers_the_new_rhythms_and_the_image_job() -> None:
-    html = web.UI_FILE.read_text(encoding="utf-8")
-    assert 'value="minutes1"' in html and 'value="always"' in html
-    assert 'value="image"' in html and 'id="cw-task-bild"' in html
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_a_body_that_is_not_an_object_is_an_empty_request(client) -> None:
@@ -4206,9 +3616,10 @@ def test_the_header_comes_from_the_server_and_follows_the_switches(
     client("POST", "/api/prefs", {"mode": "normal", "structured": True})
     kopf = json.loads(client("GET", "/api/header")[1])
     assert kopf["model"] == "mistral/mistral-large-latest" and "strukturiert" in kopf["status"]
-    client("POST", "/api/prefs", {"mode": "code", "sandbox": True})
+    client("POST", "/api/prefs", {"mode": "code"})
     kopf = json.loads(client("GET", "/api/header")[1])
-    assert kopf["model"] == "x/code" and "virtual machine" in kopf["status"]
+    # 16.0.1 (Aquaticy-Test): keine virtual machine mehr -- der Kopf nennt sie nie.
+    assert kopf["model"] == "x/code" and "virtual machine" not in kopf["status"]
     assert json.loads(client("GET", "/api/config")[1])["header"]["model"] == "x/code"
 
 
@@ -4218,46 +3629,6 @@ def test_the_model_picker_is_decided_by_the_server(client, monkeypatch: pytest.M
     assert daten["picker"]["models"] == [{"id": "stark"}]
     assert daten["picker"]["field"] == "AQUATICY_CODE_MODEL"
     assert "picker" not in json.loads(client("GET", "/api/models")[1])
-
-
-def test_chats_jobs_and_memory_come_with_their_texts(
-    client, session: web.ChatSession, web_settings: Settings
-) -> None:
-    cache = Cache(web_settings.db_path, web_settings.cache_ttl_hours)
-    cache.add_history("s1", "Größe & Preis?", "Antwort", {})
-    chats = json.loads(client("GET", "/api/chats")[1])["chats"]
-    assert chats[0]["group"] == "Heute"
-    export = json.loads(client("GET", "/api/chatexport?session_id=s1")[1])
-    assert export["filename"].endswith(".md") and "Größe" in export["filename"]
-    job = json.loads(
-        client(
-            "POST",
-            "/api/coworkers",
-            {
-                "action": "create",
-                "goal": "Neues?",
-                "schedule": {
-                    "rhythm": "weekly",
-                    "weekday": 2,
-                    "hour": 9,
-                    "minute": 5,
-                    "kind": "research",
-                },
-            },
-        )[1]
-    )["coworkers"][-1]
-    liste = json.loads(client("GET", "/api/coworkers")[1])["coworkers"]
-    auftrag = next(j for j in liste if j["id"] == job["id"])
-    assert auftrag["schedule"]["title"] == "Recherche: Neues?"
-    assert auftrag["schedule"]["when_text"].startswith(
-        "wöchentlich, Mittwoch um 09:05 · nächstes Mal "
-    )
-    assert auftrag["schedule"]["toggle_label"] == "Anhalten"
-    session.memory().remember("Mag Tee", topic="Vorliebe")
-    speicher = json.loads(client("GET", "/api/memory")[1])
-    assert (
-        speicher["entries"][0]["when_text"] and "MB belegt" in speicher["usage"]["text"]
-    )
 
 
 def test_the_page_brings_its_texts_from_the_server() -> None:

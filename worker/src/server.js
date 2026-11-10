@@ -90,10 +90,9 @@ export function zustandAus(cookieKopf) {
   }
 }
 
-/** Pro, Code und die virtual machine gibt es hier nicht. */
+/** Pro und Code gibt es hier nicht. */
 function nurNormal(stand) {
   stand.mode = "normal";
-  stand.sandbox = false;
   stand.structured = false;
   return stand;
 }

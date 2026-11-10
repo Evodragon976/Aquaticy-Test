@@ -50,11 +50,9 @@ def test_the_readme_is_short_and_links_the_changelog() -> None:
         assert f"]({anker})" in readme
 
 
-# -- Fremdbericht: geprueft und behoben -----------------------------------------------------------
-def test_the_tunnel_log_is_trimmed_with_headroom() -> None:
-    from aquaticy import website
-
-    assert website.log_keep_bytes() <= website.MAX_LOG_BYTES - 1024 * 1024
+# 16.0.1 (Aquaticy-Test): 4 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_relative_and_absolute_paths_share_one_lock(tmp_path: Path,
@@ -64,13 +62,6 @@ def test_relative_and_absolute_paths_share_one_lock(tmp_path: Path,
     monkeypatch.chdir(tmp_path)
     assert keyvault._lock_for(Path("konten.sqlite3")) is keyvault._lock_for(
         tmp_path / "konten.sqlite3")
-
-
-def test_tailscale_addresses_with_a_scope_are_recognised() -> None:
-    from aquaticy.cluster import tailscale_ip_ok
-
-    assert tailscale_ip_ok("100.101.102.103") and tailscale_ip_ok("fd7a:115c:a1e0::1%tailscale0")
-    assert not tailscale_ip_ok("192.168.1.2%eth0")
 
 
 def test_dns_never_raises_an_index_error() -> None:
@@ -203,19 +194,3 @@ def _kette(*, path_length: int | None = None, signieren: bool = True,
                                        serialization.NoEncryption())
 
 
-def test_a_correct_chain_is_accepted() -> None:
-    from aquaticy import website
-
-    website._check_chain(*_kette(), "aquaticy.example")
-
-
-@pytest.mark.parametrize("kaputt", [
-    {"signieren": False},                                  # darf nicht signieren
-    {"path_length": 0, "zwischen": 2},                     # Pfadlaenge ueberschritten
-    {"erlaubt": ["andere.example"]},                       # Name ausserhalb der Beschraenkung
-])
-def test_invalid_chains_are_rejected(kaputt: dict[str, Any]) -> None:
-    from aquaticy import website
-
-    with pytest.raises(website.WebsiteError):
-        website._check_chain(*_kette(**kaputt), "aquaticy.example")

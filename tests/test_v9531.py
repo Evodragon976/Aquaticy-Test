@@ -253,46 +253,14 @@ def _sitzung(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plan: str) -> Path
     return profil
 
 
-@pytest.mark.parametrize("plan", ["normal", "pro"])
-def test_normal_and_pro_cannot_switch_the_vm_lan_on(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plan: str
-) -> None:
-    from aquaticy import web
-
-    profil = _sitzung(tmp_path, monkeypatch, plan)
-
-    for wert in ("true", "1", "on", "ja", "TRUE "):
-        with pytest.raises(ValueError, match="Ultra"):
-            web.save_values({"AQUATICY_VM_LAN": wert})
-    assert not (profil / ".env").exists() or "VM_LAN=true" not in (
-        profil / ".env").read_text()
-
-    web.save_values({"AQUATICY_VM_LAN": "false"})
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
-def test_ultra_can_switch_vm_internet_on(tmp_path: Path,
-                                         monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy import web
-
-    profil = _sitzung(tmp_path, monkeypatch, "ultra")
-    web.save_values({"AQUATICY_VM_INTERNET": "true"})
-    assert "AQUATICY_VM_INTERNET=true" in (profil / ".env").read_text()
-    assert web.current_values()["AQUATICY_VM_INTERNET"] == "true"
-
-
-def test_the_env_switch_only_counts_for_ultra(tmp_path: Path) -> None:
-    from aquaticy import web
-
-    profil = tmp_path / "konto"
-    profil.mkdir()
-    (profil / ".env").write_text("AQUATICY_VM_INTERNET=true\nAQUATICY_VM_LAN=true\n",
-                                 encoding="utf-8")
-    assert web._profile_settings(profil, "ultra").vm_internet is True
-    assert web._profile_settings(profil, "ultra").vm_lan is True
-
-    for plan in ("pro", "normal"):
-        einstellungen = web._profile_settings(profil, plan)
-        assert einstellungen.vm_internet is False and einstellungen.vm_lan is False
+# 16.0.1 (Aquaticy-Test): 7 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_the_model_cannot_switch_vm_internet() -> None:
@@ -316,81 +284,6 @@ def _flags(box: Any) -> list[str]:
     box.runtime = sandbox.Runtime("docker", "docker", "Docker (gehaertet)")
     box._name, box._volume = "aquaticy-test", "aquaticy-test-vol"
     return box._run_flags()
-
-
-def test_the_vm_without_internet_has_no_network() -> None:
-    from aquaticy import sandbox
-
-    box = sandbox.Sandbox()
-    flags = _flags(box)
-    assert flags[flags.index("--network"):flags.index("--network") + 2] == ["--network", "none"]
-    assert "NET_ADMIN" not in flags
-    assert box.image == sandbox.DEFAULT_IMAGE and not box.netz_offen
-    assert not any(f.startswith("/run:") for f in flags)
-
-
-def test_the_vm_with_internet_is_locked_like_user_mode() -> None:
-    from aquaticy import sandbox
-
-    box = sandbox.Sandbox(internet=True, headless=True)
-    flags = _flags(box)
-    assert "--network" not in flags
-    assert "NET_ADMIN" in flags and "ALL" in flags
-    assert "no-new-privileges" in flags and "--read-only" in flags
-
-    assert "/run:rw,nosuid,nodev,size=8m" in flags
-
-    assert "--shm-size" not in flags
-    assert not any(f.startswith("DISPLAY=") for f in flags)
-    assert box.image == sandbox.DESKTOP_IMAGE and box.netz_offen
-    assert box.status()["internet"] is True
-
-
-def test_the_home_network_lock_is_fail_closed_for_internet() -> None:
-    """Ohne Heimnetz-Sperre startet die Maschine mit Internet nicht: start()
-    sperrt, sobald das Netz offen ist, und _lock_network bricht sonst ab."""
-    import inspect
-
-    from aquaticy import sandbox
-
-    quelle = inspect.getsource(sandbox.Sandbox)
-    assert "if self.netz_offen:\n" in quelle and "self._lock_network()" in quelle
-    assert "BLOCKED_RANGES" in inspect.getsource(sandbox.Sandbox._lock_network)
-
-
-def test_user_mode_wins_over_internet() -> None:
-    from aquaticy import sandbox
-
-    box = sandbox.Sandbox(user_mode=True, internet=True)
-    assert box.user_mode and not box.internet and box.netz_offen
-
-
-def test_shared_builds_the_internet_vm(tmp_path: Path) -> None:
-    from aquaticy import sandbox
-
-    einstellungen = Settings(data_dir=tmp_path / "d", env_path=tmp_path / ".env")
-    einstellungen.vm_internet = True
-    try:
-        box = sandbox.shared(einstellungen)
-        assert box.internet and box.headless and not box.user_mode
-        assert box.image == sandbox.DESKTOP_IMAGE
-    finally:
-        sandbox.forget_shared(einstellungen)
-
-
-def test_the_model_is_told_about_the_internet() -> None:
-    from aquaticy.tools import VM_NET_INTERNET, VM_NET_OFF, vm_schemas_for
-
-    def text(**mehr: Any) -> str:
-        einstellungen = Settings()
-        for key, wert in mehr.items():
-            setattr(einstellungen, key, wert)
-        return next(s for s in vm_schemas_for(einstellungen)
-                    if s["function"]["name"] == "vm_run")["function"]["description"]
-
-    assert VM_NET_OFF in text()
-    assert VM_NET_INTERNET in text(vm_internet=True)
-    assert "Heimnetz" in VM_NET_INTERNET
 
 
 def _registrieren(port: int, mail: str, name: str, cookie: str = "",

@@ -43,9 +43,11 @@ from typing import Any
 HOME = Path(os.environ.get("AQUATICY_VERCEL_HOME") or tempfile.gettempdir()) / "aquaticy-home"
 PRESET_MODEL = "aquaticy/standard"
 MAX_BODY = 64 * 1024 * 1024
+#: Diese Teile gibt es in Aquaticy-Test nicht mehr (16.0.1). Die Sperre bleibt als zweite
+#: Wand -- falls ein alter Browser-Tab sie noch aufruft, kommt eine klare Meldung.
 BLOCKED = ("/api/cluster", "/api/messenger/", "/api/addons/qr", "/api/werkstatt", "/api/vm",
-           "/api/coworkers", "/api/upgrades", "/api/plugins", "/api/ha", "/api/storage",
-           "/api/system", "/cluster/")
+           "/api/coworkers", "/api/upgrades", "/api/ha", "/api/storage", "/api/system",
+           "/cluster/")
 #: /api/features: nur "Secure-Pro-Chat oeffnen" -- Netz, Pruefung und Abwehr gibt es nicht.
 FEATURES_ALLOWED = frozenset({"open"})
 BLOCKED_TEXT = "Das gibt es auf Vercel nicht. Dafür brauchst du Aquaticy auf deinem Rechner."

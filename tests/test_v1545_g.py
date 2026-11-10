@@ -1,52 +1,19 @@
 """15.4.5: Netzfreigaben, sparsames Scannen und wiederkehrende UI-Abfragen."""
 
-import inspect
 import json
 import shutil
 import subprocess
-import threading
-from collections import Counter
 from pathlib import Path
 
 import pytest
-
-from aquaticy import lan
 
 UI = Path(__file__).resolve().parents[1] / 'aquaticy' / 'webui.html'
 NODE = shutil.which('node')
 
 
-def test_f058_revoking_a_scan_stops_requests_that_have_not_started(monkeypatch):
-    revoked = threading.Event()
-    calls = []
-
-    def probe(address, port):
-        calls.append((address, port))
-        revoked.set()
-        return False
-
-    monkeypatch.setattr(lan, 'WORKERS', 1)
-    monkeypatch.setattr(lan, 'port_open', probe)
-    options = {'allowed': lambda: not revoked.is_set()} if 'allowed' in inspect.signature(
-        lan.scan).parameters else {}
-    lan.scan('192.168.1.1/32', ports=(21, 22, 23), with_titles=False,
-             with_names=False, **options)
-    assert len(calls) == 1
-
-
-def test_f059_discovery_reuses_confirmed_ports_instead_of_probing_every_port_twice(monkeypatch):
-    calls = Counter()
-
-    def probe(address, port):
-        calls[(address, port)] += 1
-        return port == 80
-
-    monkeypatch.setattr(lan, 'port_open', probe)
-    monkeypatch.setattr(lan, 'hostname_of', lambda address: 'nas.local')
-    monkeypatch.setattr(lan, 'web_title', lambda *args: 'Personal NAS')
-    found = lan.scan('192.168.1.1/32', ports=(22, 80))
-    assert found[0].title == 'Personal NAS' and found[0].name == 'nas.local'
-    assert calls == {('192.168.1.1', 22): 1, ('192.168.1.1', 80): 1}
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def _function(name):
@@ -56,7 +23,8 @@ def _function(name):
 
 
 @pytest.mark.skipif(not NODE, reason='JavaScript-Laufzeit fehlt')
-@pytest.mark.parametrize('component', ['coworker', 'addons'])
+# 16.0.1 (Aquaticy-Test): 'coworker' entfaellt -- es gibt keine Coworker mehr.
+@pytest.mark.parametrize('component', ['addons'])
 def test_f060_polling_recovers_from_a_transient_connection_failure(component):
     function = 'coworkerLaden' if component == 'coworker' else 'addonsLaden'
     setup = '''

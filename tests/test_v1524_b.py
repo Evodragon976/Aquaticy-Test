@@ -1,23 +1,12 @@
 """15.2.4: nachgestellte Fehler F021 bis F040."""
 
-import contextlib
-import threading
 from types import SimpleNamespace
 
 import pytest
 from rich.console import Console
 from selectolax.parser import HTMLParser
 
-from aquaticy import (
-    addons,
-    cli,
-    coworker,
-    coworker_context,
-    extract,
-    local_model,
-    messenger_native,
-    secure_chat,
-)
+from aquaticy import addons, cli, extract, local_model, secure_chat
 from aquaticy.agent import AgentResult
 from aquaticy.config import Settings
 
@@ -35,76 +24,9 @@ class Worker:
         self.closed = True
 
 
-def test_f021_failed_coworker_steps_do_not_acknowledge_unprocessed_orders(settings):
-    store = coworker.CoworkerStore(settings.db_path)
-    cw = store.add('Ava', 'Beobachte die Preise')
-    store.add_log(cw.id, 'nachricht', 'Neue Aufgabe')
-    coworker.run_session(cw, settings, 'pro', store=store, vm=False,
-                         agent_factory=lambda *a: Worker('Network error'))
-    assert store.unread_messages(cw.id)
-
-
-def test_f022_setup_failures_still_close_the_coworker_agent(settings, monkeypatch):
-    store = coworker.CoworkerStore(settings.db_path)
-    cw = store.add('Ava', 'Beobachte die Preise')
-    agent = Worker()
-    def broken(*args):
-        raise OSError('Context unavailable')
-    monkeypatch.setattr(coworker_context, 'relevant_context', broken)
-    with contextlib.suppress(OSError):
-        coworker.run_session(cw, settings, 'pro', store=store, vm=False,
-                             agent_factory=lambda *a: agent)
-    assert agent.closed
-
-
-def test_f023_log_rotation_does_not_discard_unprocessed_user_orders(settings, monkeypatch):
-    monkeypatch.setattr(coworker, 'LOG_KEEP', 2)
-    store = coworker.CoworkerStore(settings.db_path)
-    cw = store.add('Ava', 'Beobachte die Preise')
-    store.add_log(cw.id, 'nachricht', 'Unprocessed')
-    store.add_log(cw.id, 'schritt', 'First step', seen=True)
-    store.add_log(cw.id, 'schritt', 'Second step', seen=True)
-    assert [m['text'] for m in store.unread_messages(cw.id)] == ['Unprocessed']
-
-
-def test_f024_messenger_signatures_fit_inside_the_message_size_limit():
-    parts = messenger_native.message_parts('x' * (messenger_native.MAX_SEND_CHARS * 2 + 50))
-    assert len(parts) >= 3
-    assert all(len(part) <= messenger_native.MAX_SEND_CHARS for part in parts)
-
-
-def test_f025_a_fitting_url_is_not_split_just_to_fill_the_previous_message():
-    url = 'https://example.org/' + 'x' * 40
-    parts = messenger_native.split_text('A short ' + url, limit=64)
-    assert url in parts
-
-
-def test_f026_message_splitting_preserves_code_indentation():
-    text = 'first-line\n    return 1'
-    parts = messenger_native.split_text(text, limit=14)
-    assert any(part.startswith('    return') for part in parts)
-    assert ''.join(parts) == text
-
-
-def test_f027_signal_text_delivery_waits_for_the_rpc_confirmation(monkeypatch):
-    transport = object.__new__(messenger_native.SignalTransport)
-    calls = []
-    monkeypatch.setattr(transport, '_rpc', lambda method, params, **kw: calls.append(kw))
-    transport.send('+491701234567', 'Hello')
-    assert calls and all(call.get('wait') is True for call in calls)
-
-
-def test_f028_signal_disconnect_wakes_waiting_rpc_callers(monkeypatch):
-    transport = object.__new__(messenger_native.SignalTransport)
-    done = threading.Event()
-    transport._pending_rpc = {1: (done, [])}
-    transport._send_lock = threading.Lock()
-    transport._stopping = threading.Event()
-    transport._config = lambda: []
-    transport._set = lambda *a, **kw: None
-    transport._popen = lambda *a, **kw: SimpleNamespace(stdout=[], wait=lambda: 1)
-    transport._daemon('+491701234567')
-    assert done.is_set()
+# 16.0.1 (Aquaticy-Test): 8 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_f029_configured_local_vision_models_also_start_ollama(monkeypatch):

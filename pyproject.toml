@@ -1,6 +1,6 @@
 [project]
 name = "aquaticy"
-version = "16.0.0"
+version = "16.0.1"
 description = "Ein KI-Agent fuer Kommandozeile und Browser, der eigenstaendig das Web durchsucht, Seiten liest und die Ergebnisse ausgewertet zurueckgibt."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -43,8 +43,6 @@ dependencies = [
 [project.optional-dependencies]
 voice = ["faster-whisper>=1.2,<2", "numpy>=1.24,<2.4", "av>=18,<19"]
 browser = ["playwright>=1.62.0,<2"]
-# Seit 12.7.8 Terra v2 ist neonize eine feste Abhaengigkeit; der Name bleibt fuer alte Befehle.
-messenger = []
 # 15.8.8: Kein Extra "images" mehr. term-image braucht Pillow < 11, Aquaticy Pillow >= 13 --
 # das Extra liess sich nie installieren, und "uv lock" (Vercel) brach daran ab. Bilder im
 # Terminal zeigt Aquaticy mit chafa; ein von Hand installiertes term-image nutzt es weiter.
@@ -76,12 +74,6 @@ entrypoint = "aquaticy.vercel:app"
 [tool.hatch.build.targets.wheel]
 packages = ["aquaticy"]
 
-
-[tool.hatch.build.targets.wheel.force-include]
-"docker/workshop-desktop.Dockerfile" = "aquaticy/_desktop/workshop-desktop.Dockerfile"
-"docker/desktop/aquaticy-desktop" = "aquaticy/_desktop/desktop/aquaticy-desktop"
-"docker/desktop/aquaticy-netz" = "aquaticy/_desktop/desktop/aquaticy-netz"
-"docker/desktop/aquaticy-addons" = "aquaticy/_desktop/desktop/aquaticy-addons"
 
 [tool.ruff]
 line-length = 100

@@ -1161,7 +1161,19 @@ class AuthStore:
         Mit dem Kontensystem wie bisher mit der E-Mail-Adresse.
         """
         if not self.single:
-            return self.authenticate(name, password)
+            wer = " ".join(str(name or "").split())
+            if wer and "@" not in wer:
+                # 16.0.1 (Aquaticy-Test): auch mit dem Nutzernamen -- sonst haengt ein Konto aus
+                # der Zeit des Einzelkontos fest (es hat nur eine interne Adresse).
+                try:
+                    gefunden = self.account_by_name(wer)
+                except ValueError:
+                    gefunden = None
+                if gefunden is None:
+                    _argon_hash(str(password or "")[:128], b"\0" * 16, self._pepper)
+                    return None
+                wer = gefunden.email
+            return self.authenticate(wer, password)
         wanted = " ".join(str(name or "").split())
         eins = self.owner()
         passt = eins is not None and bool(wanted) and (
@@ -1172,6 +1184,18 @@ class AuthStore:
             return None
         konto = self.authenticate(eins.email, password)
         return konto if konto is not None and konto.id == eins.id else None
+
+    def login_key(self, name: str) -> str:
+        """Wonach Fehlversuche gezaehlt werden: dieselbe Zahl fuer Name und E-Mail eines Kontos."""
+        wer = " ".join(str(name or "").split()).lower()
+        if wer and "@" not in wer:
+            try:
+                konto = self.account_by_name(wer)
+            except ValueError:
+                konto = None
+            if konto is not None:
+                return konto.email.lower()
+        return wer
 
     def choose_owner(self, name: str) -> Account:
         """Kommandozeile am Rechner: Ein vorhandenes Konto wird das eine Konto (Ultra).
@@ -1385,8 +1409,7 @@ class AuthStore:
         profile = self.profile_dir(account.id)
         if profile.is_symlink():
             raise ValueError("Das Kontoprofil ist ein symbolischer Link; nichts gelöscht.")
-        from aquaticy import aiguard, guardrails, upgrading
-        from aquaticy.homeassistant import forget_states
+        from aquaticy import aiguard, guardrails
         from aquaticy.learning import Learning
 
         learning = Learning(profile)
@@ -1394,8 +1417,6 @@ class AuthStore:
             conn.execute("BEGIN IMMEDIATE")
             self._require_current_credential(conn, account)
 
-            upgrading.forget_account(self.data_dir, account.id)
-            forget_states(profile)
             guardrails.forget_verdicts()
             aiguard.forget_judgements()
             learning.forget(conn)
@@ -1416,16 +1437,13 @@ class AuthStore:
         profile = self.profile_dir(account.id)
         if profile.is_symlink():
             raise ValueError("Das Kontoprofil ist ein symbolischer Link; Löschung abgebrochen.")
-        from aquaticy import aiguard, guardrails, upgrading
-        from aquaticy.homeassistant import forget_states
+        from aquaticy import aiguard, guardrails
         from aquaticy.learning import Learning
 
         learning = Learning(profile)
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             self._require_current_credential(conn, account)
-            upgrading.forget_account(self.data_dir, account.id)
-            forget_states(profile)
             guardrails.forget_verdicts()
             aiguard.forget_judgements()
             if conn.execute("DELETE FROM users WHERE id=?", (account.id,)).rowcount != 1:

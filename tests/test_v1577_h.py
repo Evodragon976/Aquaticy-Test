@@ -3,36 +3,17 @@
 import contextlib
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
 
-from aquaticy import (
-    budget,
-    coworker,
-    export,
-    fetch,
-    local_model,
-    media,
-    news,
-    privacy,
-    system,
-    webview,
-)
+from aquaticy import budget, export, fetch, local_model, media, privacy, system
 from aquaticy.models import Product
 
-
-def test_f067_day_groups_and_coworker_dates_follow_the_german_clock():
-    zone = ZoneInfo('Europe/Berlin')
-    now = datetime(2026, 11, 8, 0, 20, tzinfo=zone).timestamp()
-    yesterday = datetime(2026, 11, 7, 23, 50, tzinfo=zone).timestamp()
-    assert coworker._today(now) == '2026-11-08'
-    assert webview.chat_group(yesterday, now) == 'Gestern'
-    assert '00:20' in webview.moment_text(now)
-    assert news._wann(now) == '08.11. 00:20'
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 @pytest.mark.parametrize('check', ['memory', 'model_memory', 'cpu'])

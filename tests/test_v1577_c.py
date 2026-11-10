@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 
-from aquaticy import coworker, memory_auto
+from aquaticy import memory_auto
 from aquaticy.agent import Agent
 from aquaticy.memory import Memory
 
@@ -32,17 +32,9 @@ def test_f024_fast_answers_do_not_bypass_the_configured_secret_filter(settings, 
         agent.close()
 
 
-def test_f025_coworker_fast_answers_need_the_personal_context_consent(settings, memory):
-    memory.remember('Der Nutzer heißt PrivateName.', 'person:name')
-    store = coworker.CoworkerStore(settings.db_path)
-    cw = store.add('Ava', 'Lies aktuelle Nachrichten.', plan='pro')
-    session = coworker.Session(store, cw, vm=False, plan='pro')
-    agent = coworker.coworker_agent_class()(settings, session)
-    agent._plugin_turn = ""
-    try:
-        assert agent._memory_answer('Wie heiße ich?') == ''
-    finally:
-        agent.close()
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 @pytest.mark.parametrize('wunsch', ['Vergiss mein Geburtsdatum.', 'Vergiss meinen Geburtstag.',

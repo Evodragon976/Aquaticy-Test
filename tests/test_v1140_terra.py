@@ -20,8 +20,6 @@ def einstellungen(tmp_path) -> Settings:
                     subagents_auto=False)
 
 
-
-
 def test_a_question_back_is_not_pushed_into_a_search(einstellungen, monkeypatch) -> None:
     """Seit 11.4.0 Luna: "Was laeuft im Kino?" ohne Stadt -- fragte das Modell nach
     der Stadt, kam der Auftrag "oeffne jetzt die Seiten", und es riet einen Ort."""
@@ -54,8 +52,6 @@ def test_own_words_drop_every_appendix() -> None:
     text = ("Wie wird das Wetter?\n\n[Im Gespräch schon geklärt: Ort? → Bremen; ...]"
             "\n\n[Rückfrage vor der Recherche: Tag? → morgen]\n\n[Ortsfilter: Bremen]")
     assert own_words(text) == "Wie wird das Wetter?"
-
-
 
 
 def test_the_planner_can_ask(monkeypatch, einstellungen) -> None:
@@ -129,8 +125,6 @@ def test_pro_mode_asks_first_too(monkeypatch, einstellungen, toolbox) -> None:  
     assert gemeistert and "Welches Budget? → bis 500 €" in gemeistert[0]
 
 
-
-
 def _offene_chats(anzahl: int, alter: float, gesehen: bool = False):
     from aquaticy import web
 
@@ -182,12 +176,6 @@ def test_a_running_answer_is_never_dropped_from_the_book() -> None:
     assert len(buch._runs) <= RunBook.KEEP + 4 and len(fertig) <= RunBook.KEEP
 
 
-def test_odd_load_numbers_from_another_server_do_not_break_placement(
-        staerken) -> None:  # noqa: F811
-    """Ein Text statt einer Zahl liess die Zuteilung aller Konten abstuerzen."""
-    a, b = staerken
-    a.loads[b.node_id] = {**a.loads.get(b.node_id, {}), "runs": "viel", "cpu": float("nan")}
-    assert a.score(b.node_id) >= 0
-    assert a.least_loaded("web-x") in (a.node_id, b.node_id)
-    zeile = next(m for m in a.view()["members"] if m["node"] == b.node_id)
-    assert zeile["runs"] == 0 and zeile["cpu"] == 0.0
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).

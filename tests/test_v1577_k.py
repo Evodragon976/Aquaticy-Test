@@ -2,7 +2,6 @@
 
 import base64
 import contextlib
-import io
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -10,7 +9,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from aquaticy import addons, budget, google, places, secure_pro, secure_tasks, website
+from aquaticy import addons, budget, google, places
 from aquaticy.cache import Cache
 
 
@@ -46,25 +45,9 @@ def test_f091_a_delayed_github_login_cannot_undo_logout(settings):
     assert not addons.github_token(settings)
 
 
-def test_f092_a_running_tunnel_log_is_bounded_without_restarting_the_process(tmp_path, monkeypatch):
-    monkeypatch.setattr(website, 'MAX_LOG_BYTES', 1024)
-    payload = b'noise\n' * 2000 + b'last log line\n'
-
-    class Process:
-        def __init__(self, args, **kw):
-            self.stdout = io.BytesIO(payload)
-            if kw.get('stdout') != website.subprocess.PIPE:
-                kw['stdout'].write(payload)
-
-        def wait(self):
-            return 1
-
-    tunnel = website.Tunnel(tmp_path, lambda: 'token', locate=lambda: Path('/bin/true'),
-                            popen=Process, sleep=lambda pause: True)
-    tunnel._run()
-    log = website.site_dir(tmp_path) / 'cloudflared.log'
-    assert log.stat().st_size <= website.MAX_LOG_BYTES
-    assert log.read_bytes().endswith(b'last log line\n')
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_f093_addon_state_writes_do_not_follow_a_predictable_temporary_symlink(settings, tmp_path):
@@ -75,12 +58,6 @@ def test_f093_addon_state_writes_do_not_follow_a_predictable_temporary_symlink(s
     addons._state_path(settings).with_suffix('.tmp').symlink_to(outside)
     addons._update(settings, 'feeds', installed=True)
     assert outside.read_bytes() == b'Previous private bytes'
-
-
-@pytest.mark.parametrize('address', ['2001:4860:4860::8888', 'fd00::1234'])
-def test_f095_unsupported_ipv6_task_filters_cannot_turn_into_network_wide_tasks(address):
-    with pytest.raises(ValueError):
-        secure_tasks.parse(f'Melde Malware bei {address}.')
 
 
 @pytest.mark.parametrize('lat,lon', [('NaN', 8), (200, 8), (52, 300), (None, None)])
@@ -123,19 +100,3 @@ def test_f099_optional_observances_are_not_reported_as_statutory_holidays(monkey
     assert day.get('arten') == ['Optional']
 
 
-def test_f100_a_failed_security_check_warning_is_retried_until_delivered(tmp_path, monkeypatch):
-    secure_pro.configure(tmp_path, '192.168.1.0/24')
-    sent = []
-    watcher = secure_pro.Watcher(tmp_path, lambda text: sent.append(text) or len(sent) >= 2)
-    monkeypatch.setattr(watcher, 'tick', lambda: (_ for _ in ()).throw(OSError('scan failed')))
-    rounds = []
-
-    def pause():
-        rounds.append(True)
-        if len(rounds) == 2:
-            watcher.stop_event.set()
-        return 0
-
-    monkeypatch.setattr(watcher, '_wait_seconds', pause)
-    watcher._run()
-    assert len(sent) == 2

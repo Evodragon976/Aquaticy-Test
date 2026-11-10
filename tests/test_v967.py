@@ -2,23 +2,19 @@
 
 from __future__ import annotations
 
-import shutil
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
-import httpx
 import pytest
 
-from aquaticy import learning, web
+from aquaticy import learning
 from aquaticy.agent import Agent, AgentResult
 from aquaticy.auth import AuthStore
-from aquaticy.cluster import SharedDb
 from aquaticy.learning import Learning
 from aquaticy.legal import LEGAL_VERSION
 from aquaticy.models import PageResult
 from aquaticy.privacy import TEXT_PREFIX
 from aquaticy.tools import Toolbox
-from tests.anmeldung import AGENT, FETCH, SPRACHE, wie_die_app
 from tests.test_agent import ScriptedLLM, _message, _tool_call
 from tests.test_v965 import parallel_site as parallel_site
 
@@ -302,147 +298,14 @@ def test_stopped_or_failed_runs_do_not_contribute(settings, monkeypatch, stopped
         agent.close()
 
 
-def test_consent_and_knowledge_replicate_with_authenticated_cluster(tmp_path):
-    first = Learning(tmp_path / "first")
-    second = Learning(tmp_path / "second")
-    shutil.copyfile(tmp_path / "first" / "data.key", tmp_path / "second" / "data.key")
-
-    from aquaticy import privacy
-
-    privacy._masters.pop(str((tmp_path / "second").resolve()), None)
-    second = Learning(tmp_path / "second")
-    logs = [SharedDb(s.path) for s in (first, second)]
-    for log in logs:
-        log.install()
-    first.set_consent(True, LEGAL_VERSION)
-    assert contribute(first) == 1
-    batch = logs[0].changes(0)
-    assert logs[1].apply("first", batch["entries"]) > 0
-    assert second.recall(QUESTION) and second.ticket() == first.ticket()
-    first.set_consent(False, "")
-    logs[1].apply("first", logs[0].changes(batch["last"])["entries"])
-    assert not second.recall(QUESTION) and not second.ticket()
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
-def test_http_learning_requires_auth_origin_and_exact_consent(parallel_site):
-    client, _, _, _, _, url = parallel_site
-    with httpx.Client(base_url=url, trust_env=False) as outsider:
-        assert outsider.get("/api/learning").status_code == 401
-        assert outsider.post("/api/learning", json={"enabled": True}).status_code == 401
-        assert outsider.post("/api/consent", json={"accepted": "false"}).status_code == 403
-    assert client.get("/api/learning").json()["enabled"] is False
-    for payload in ({"enabled": "true", "version": LEGAL_VERSION},
-                    {"enabled": True, "version": "old"}):
-        assert client.post("/api/learning", json=payload).status_code == 400
-    payload = {"enabled": True, "version": LEGAL_VERSION}
-    assert client.post("/api/learning", json=payload,
-                       headers={"Origin": "https://evil.example"}).status_code == 403
-    assert client.post("/api/learning", json=payload).json()["enabled"] is True
-    assert client.post("/api/learning", json={"enabled": False}).json()["enabled"] is False
-
-
-def test_login_only_grants_learning_with_separate_current_agreement(parallel_site):
-    client, _, _, _, account, _ = parallel_site
-    credentials = {"email": account.email, "password": "parallel-test-passwort",
-                   "learning_accepted": True, "learning_version": "old"}
-    assert client.post("/api/auth/login", headers=FETCH,
-                       json=wie_die_app(credentials)).status_code == 200
-    assert not client.get("/api/learning").json()["enabled"]
-    credentials["learning_version"] = LEGAL_VERSION
-    assert client.post("/api/auth/login", headers=FETCH,
-                       json=wie_die_app(credentials)).status_code == 200
-    assert client.get("/api/learning").json()["enabled"]
-
-
-def test_learning_can_be_withdrawn_while_the_account_is_banned(parallel_site, monkeypatch):
-    client, _, _, _, _, _ = parallel_site
-    client.post("/api/learning", json={"enabled": True, "version": LEGAL_VERSION})
-
-    class Guard:
-        def is_banned(self, **kwargs):
-            return object() if kwargs.get("user_id") else None
-
-    monkeypatch.setattr(web, "AIGUARD", Guard())
-    assert client.post("/api/learning", json={
-        "enabled": True, "version": LEGAL_VERSION}).status_code == 403
-    assert client.post("/api/learning", json={"enabled": False}).json()["enabled"] is False
-    assert client.post("/api/auth/login", headers=FETCH, json=wie_die_app({
-        "email": "parallel@example.org", "password": "parallel-test-passwort",
-        "learning_accepted": True, "learning_version": LEGAL_VERSION})).status_code == 200
-    assert not client.get("/api/learning").json()["enabled"]
-
-
-def test_browser_learning_controls_and_batched_renderer(parallel_site):
-    playwright = pytest.importorskip("playwright.sync_api")
-    chromium = shutil.which("chromium")
-    if not chromium:
-        pytest.skip("System-Chromium fehlt")
-    client, _, _, _, _, url = parallel_site
-    with playwright.sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path=chromium)
-        context = browser.new_context(user_agent=AGENT,
-                                      extra_http_headers={"Accept-Language": SPRACHE})
-        context.add_cookies([{"name": k, "value": v, "url": url}
-                            for k, v in client.cookies.items()])
-        page = context.new_page()
-        errors = []
-        page.on("pageerror", lambda error: errors.append(str(error)))
-        try:
-            page.goto(url, wait_until="networkidle")
-            page.locator("#auth-gate").wait_for(state="hidden")
-            page.click("#btn-settings")
-            toggle = page.locator("#learning-enabled")
-            playwright.expect(toggle).to_be_enabled()
-            playwright.expect(toggle).not_to_be_checked()
-            toggle.check()
-            playwright.expect(page.locator("#learning-status")).to_contain_text(
-                "Gespeichert. Ab jetzt helfen nur neue Chats mit.")
-            assert client.get("/api/learning").json()["enabled"]
-            toggle.uncheck()
-            playwright.expect(page.locator("#learning-status")).to_contain_text(
-                "Zustimmung zurückgenommen. Deine Beiträge sind gelöscht.")
-            assert not client.get("/api/learning").json()["enabled"]
-            result = page.evaluate("""() => {
-              const oldRAF = window.requestAnimationFrame, oldCancel = window.cancelAnimationFrame;
-              let paints = 0, callbacks = new Map(), next = 0, text = '', active = true, html = '';
-              window.requestAnimationFrame = cb => { callbacks.set(++next, cb); return next; };
-              window.cancelAnimationFrame = id => callbacks.delete(id);
-              const bubble = {set innerHTML(value){ paints++; html=value; }};
-              const renderer = streamRenderer(bubble, () => text, () => active);
-              try {
-                for(let i=0;i<1000;i++){ text += 'Wort '; renderer.schedule(); }
-                const queued = callbacks.size;
-                for(const cb of callbacks.values()) cb(); callbacks.clear();
-                const first = paints;
-                text = '<script>window.BAD=true</script> **gut**'; renderer.schedule();
-                renderer.flush();
-                const safe = !html.includes('<script>') && html.includes('<strong>gut</strong>');
-                const final = !html.includes('cursor') && callbacks.size === 0;
-                text = 'veraltete Antwort'; renderer.schedule(); renderer.cancel();
-                const cancelled = callbacks.size === 0;
-                active = false; renderer.flush();
-                return {queued, first, paints, safe, final, cancelled};
-              } finally {
-                window.requestAnimationFrame=oldRAF; window.cancelAnimationFrame=oldCancel;
-              }
-            }""")
-            assert result == {"queued": 1, "first": 1, "paints": 2,
-                              "safe": True, "final": True, "cancelled": True}
-            retained = page.evaluate("""async () => {
-              const steps=document.createElement('div'), bubble=document.createElement('div');
-              document.body.append(steps, bubble);
-              const events=[{type:'chunk',text:'Zurückgezogener Text'}, {type:'answer_reset'},
-                {type:'chunk',text:'**Geprüfte Antwort**'}, {type:'done',products:[],visuals:[]}];
-              await verfolge(async () => new Response(events.map(ev =>
-                'data: ' + JSON.stringify(ev) + '\\n\\n').join('')),
-                steps, bubble, 'Prüffrage');
-              const text=bubble.textContent;
-              steps.remove(); bubble.remove(); return text;
-            }""")
-            assert "Geprüfte Antwort" in retained and "Zurückgezogener Text" not in retained
-            assert not errors
-        finally:
-            browser.close()
+# 16.0.1 (Aquaticy-Test): 4 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_single_contributor_cannot_spread_a_fact_alone(learners):

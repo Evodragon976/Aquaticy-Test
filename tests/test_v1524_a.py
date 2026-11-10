@@ -1,12 +1,11 @@
 """15.2.4: nachgestellte Fehler F001 bis F020."""
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import httpx
 import pytest
 
-from aquaticy import addons, budget, cache, coworker_context, google, local_model, pace, search
+from aquaticy import addons, budget, cache, google, local_model, pace, search
 from aquaticy.memory import Memory
 
 
@@ -172,12 +171,6 @@ def test_f019_invalid_google_json_shapes_raise_a_google_error():
             client._get('https://gmail.googleapis.com/example', {})
 
 
-def test_f020_coworker_context_redacts_current_dictionary_api_keys(settings):
-    token = 'syntheticCredential1524NeverPublish'
-    settings.api_keys = {'NVIDIA_NIM_API_KEY': token}
-    current = SimpleNamespace(id=1, sharing_chats=False, sharing_coworkers=True,
-                              goal='Preise beobachten', chat='')
-    other = SimpleNamespace(id=2, name='Other', notes='Preise: ' + token)
-    store = SimpleNamespace(all=lambda: [current, other])
-    context = coworker_context.relevant_context(current, store, settings)
-    assert 'Preise' in context and token not in context
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).

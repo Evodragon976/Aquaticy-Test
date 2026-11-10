@@ -30,14 +30,19 @@ def test_every_extra_can_be_installed_with_pillow_13() -> None:
 
 
 def test_vercelignore_keeps_what_the_wheel_includes() -> None:
-    """hatchling bricht ab, wenn eine force-include-Datei fehlt ("Forced include not found")."""
+    """hatchling bricht ab, wenn eine force-include-Datei fehlt ("Forced include not found").
+
+    16.0.1 (Aquaticy-Test): Ohne Desktop-Abbild gibt es keine force-include-Dateien mehr --
+    das Paket kommt ganz aus aquaticy/, und das darf .vercelignore nie ausschliessen.
+    """
     import pathspec
 
     daten = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    fest = daten["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    wheel = daten["tool"]["hatch"]["build"]["targets"]["wheel"]
+    assert "force-include" not in wheel and wheel["packages"] == ["aquaticy"]
     regeln = (ROOT / ".vercelignore").read_text(encoding="utf-8").splitlines()
     spec = pathspec.PathSpec.from_lines("gitwildmatch", regeln)
-    assert fest and not [quelle for quelle in fest if spec.match_file(quelle)]
+    assert not spec.match_file("aquaticy/web.py") and not spec.match_file("pyproject.toml")
 
 
 def test_the_readme_explains_vercel() -> None:

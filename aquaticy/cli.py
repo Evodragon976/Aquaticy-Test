@@ -83,9 +83,8 @@ def setup_command(
         help="Kontensystem für mehrere Nutzer. Standard: aus (ein Konto, Ultra)."
     ),
     voice: bool = typer.Option(False, "--voice", help="Lokale Sprachnachrichten einrichten."),
-    secure_pro: bool = typer.Option(False, "--secure-pro", help="Secure Pro einrichten."),
 ) -> None:
-    """Ersteinrichtung: Modell, Schlüssel und auf Wunsch eine eigene Domain."""
+    """Ersteinrichtung: Modell und Schlüssel."""
     load_env()
     target = env_file or find_env_file() or DEFAULT_ENV_PATH
     console.print(
@@ -216,11 +215,8 @@ def setup_command(
     lang = typer.prompt("Sprache (ISO-Code)", default="de").strip() or "de"
     country = typer.prompt("Land (ISO-Code)", default="de").strip() or "de"
 
-    console.print("\n[bold]4. Eigene Website[/bold] [dim](optional)[/dim]")
-    website_values = _ask_website(no_probe=no_probe)
-
     if not no_probe:
-        console.print("\n[bold]5. Verbindungstest[/bold]")
+        console.print("\n[bold]4. Verbindungstest[/bold]")
         if api_key:
             os.environ[key_name] = api_key
         if backend_key:
@@ -262,7 +258,6 @@ def setup_command(
         values["AQUATICY_SEARXNG_URL"] = searxng_url
     if api_base:
         values["AQUATICY_API_BASE"] = api_base
-    values.update(website_values)
     if accounts is None:
         console.print("\n[bold]Konten[/bold]")
         console.print("  [dim]Ohne Kontensystem gibt es ein Konto: deins, mit allen Rechten "
@@ -280,11 +275,8 @@ def setup_command(
     reset_settings_cache()
     if voice is True:
         _setup_voice(assume_yes=yes)
-    if secure_pro is True:
-        _setup_secure_pro()
-    if not (voice or secure_pro):
-        console.print("[dim]Später: aquaticy voice (Sprache), aquaticy secure-pro "
-                      "(Netzschutz).[/dim]")
+    if not voice:
+        console.print("[dim]Später: aquaticy voice (Sprache).[/dim]")
     console.print(
         Panel.fit(
             f"Gespeichert in [cyan]{written}[/cyan]\n\n"
@@ -299,8 +291,6 @@ def setup_command(
 
     if not accounts:
         _einzelkonto_einrichten(get_settings())
-    _vm_beim_start(get_settings())
-    _messenger_beim_start(get_settings())
     if run_background:
         web_command(port=8765, host="", lan=True, open_browser=True, token="", background=True)
 
@@ -338,59 +328,6 @@ def _setup_voice(*, assume_yes: bool = False) -> None:
     console.print("Sprachnachrichten sind an. Verbinde WhatsApp/Signal und aktiviere die Brücke.")
 
 
-def _setup_secure_pro() -> None:
-    from aquaticy import lan, secure_pro
-
-    console.print("Secure Pro prüft dein freigegebenes Heimnetz, ab Werk alle 15 Minuten.")
-    console.print("Es meldet Malware-Zeichen, Angriffe und riskante Dienste. Es nutzt keine "
-                  "Lücken aus.")
-    subnet = typer.prompt("Eigenes Netz (CIDR)", default=lan.own_subnet() or "192.168.1.0/24")
-    if not typer.confirm("Gehört dir dieses Netz oder darfst du es ausdrücklich prüfen?",
-                         default=False):
-        return
-    folder = typer.prompt("Lokaler Ordner für ClamAV (leer: keine Dateiprüfung)", default="")
-    try:
-        secure_pro.configure(get_settings().data_dir, subnet, folder)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc)) from exc
-    _install_nmap()
-    console.print("Secure Pro ist an. Wichtiges steht im Secure-Pro-Chat und kommt per "
-                  "WhatsApp/Signal.")
-    console.print("Zeitplan, Paketprüfung, nmap, VM und Aufgaben: Einstellungen → Zuhause & "
-                  "Netz → Secure Pro.")
-    console.print("Läuft die Weboberfläche schon, starte sie neu.")
-
-
-def _install_nmap(*, assume_yes: bool = False) -> bool:
-    """Bietet nmap fuer die Schwachstellenpruefung von Secure Pro an (14.1.3 Terra)."""
-    import shutil
-
-    if shutil.which("nmap"):
-        console.print("nmap ist da. Schalte es unter Einstellungen → Zuhause & Netz → Secure Pro "
-                      "ein.")
-        return True
-    apt = shutil.which("apt-get")
-    if not apt:
-        console.print("nmap fehlt. Installiere es mit deinem Paketverwalter, zum Beispiel: "
-                      "brew install nmap", markup=False)
-        return False
-    command = ([] if not hasattr(os, "geteuid") or os.geteuid() == 0 else ["sudo"])
-    command += [apt, "install", "-y", "nmap"]
-    if command[0] == "sudo" and not shutil.which("sudo"):
-        console.print("nmap fehlt. Installiere es als Administrator: apt-get install nmap")
-        return False
-    console.print("Installationsbefehl: " + " ".join(command), markup=False)
-    if not (assume_yes or typer.confirm("nmap für die Schwachstellenprüfung installieren?",
-                                        default=False)):
-        return False
-    try:
-        subprocess.run(command, check=True, timeout=900)
-    except (OSError, subprocess.SubprocessError) as exc:
-        console.print(f"[red]nmap ließ sich nicht installieren:[/red] {exc}", markup=False)
-        return False
-    return shutil.which("nmap") is not None
-
-
 @app.command("voice")
 def voice_command(disable: bool = typer.Option(False, "--disable", help="Sprache ausschalten.")):
     """Lokale Sprachnachrichten einrichten oder ausschalten."""
@@ -400,18 +337,6 @@ def voice_command(disable: bool = typer.Option(False, "--disable", help="Sprache
         voice.configure(get_settings().data_dir, False)
     else:
         _setup_voice()
-
-
-@app.command("secure-pro")
-def secure_pro_command(disable: bool = typer.Option(False, "--disable", help="Überwachung aus.")):
-    """Defensive Netzueberwachung fuer den eigenen Rechner einrichten."""
-    if disable:
-        path = get_settings().data_dir / "secure-pro.json"
-        path.unlink(missing_ok=True)
-        (get_settings().data_dir / "secure-pro-log.json").unlink(missing_ok=True)
-        console.print("Secure Pro ist aus.")
-    else:
-        _setup_secure_pro()
 
 
 def _einzelkonto_store(settings: Any) -> Any:
@@ -492,70 +417,6 @@ def account_command(
     if konto is None:
         raise typer.Exit(code=1)
     console.print(f"[green]Gespeichert:[/green] {konto.username} (Ultra)")
-
-def _ask_website(*, no_probe: bool = False) -> dict[str, str]:
-    """Fragt nach Domain und Cloudflare-Token und richtet alles ein.
-
-    Returns: die Werte für die ``.env`` – leer, wenn keine Domain gewünscht ist.
-    """
-    from aquaticy import website as website_mod
-
-    console.print("  [dim]Mit eigener Domain ist Aquaticy auch im Internet erreichbar. Die Domain "
-                  "muss bei Cloudflare liegen.[/dim]")
-    jetzt = os.environ.get(website_mod.DOMAIN_ENV, "")
-    while True:
-        roh = typer.prompt("  Domain (leer = keine)", default=jetzt, show_default=bool(jetzt))
-        if not roh.strip():
-            return {}
-        try:
-            domain = website_mod.clean_domain(roh)
-            break
-        except website_mod.WebsiteError as exc:
-            console.print(f"  [red]{exc}[/red]")
-    console.print(
-        "  [dim]Leg bei Cloudflare ein API-Token an: dash.cloudflare.com/profile/api-tokens\n"
-        "  Rechte: " + ", ".join(website_mod.TOKEN_RIGHTS) + "[/dim]"
-    )
-    alt = os.environ.get(website_mod.TOKEN_ENV, "")
-    while True:
-        token = typer.prompt("  Cloudflare-Token", default=alt, hide_input=True,
-                             show_default=False).strip()
-        try:
-            website_mod.clean_token(token)
-            break
-        except website_mod.WebsiteError as exc:
-            console.print(f"  [red]{exc}[/red]")
-
-    email = os.environ.get(website_mod.EMAIL_ENV, "").strip()
-    werte = {website_mod.DOMAIN_ENV: domain, website_mod.TOKEN_ENV: token}
-    if not no_probe:
-        _set_up_website(website_mod.SiteConfig(domain=domain, token=token, email=email))
-    return werte
-
-
-def _set_up_website(config: object) -> bool:
-    """Tunnel, Domain und Zertifikat einrichten – mit Fortschritt im Terminal."""
-    from aquaticy import website as website_mod
-
-    assert isinstance(config, website_mod.SiteConfig)
-    data_dir = get_settings().data_dir
-    console.print("  [dim]Mit dem Zertifikat stimmst du den Bedingungen von Let's Encrypt zu: "
-                  "letsencrypt.org/repository[/dim]")
-    try:
-        with console.status("  Richte die Website ein …") as anzeige:
-            zustand = website_mod.provision(
-                config, data_dir, config.public_port,
-                progress=lambda text: anzeige.update(f"  {text}"))
-            anzeige.update("  Hole das Zertifikat von Let's Encrypt …")
-            ablauf = website_mod.obtain_certificate(config, data_dir, zustand.zone_id)
-    except website_mod.WebsiteError as exc:
-        console.print(f"  [red]Nicht geklappt:[/red] {exc}")
-        console.print("  [dim]Gespeichert wird trotzdem. `aquaticy web` versucht es beim Start "
-                      "noch einmal, `aquaticy website setup` fragt neu.[/dim]")
-        return False
-    console.print(f"  [green]OK[/green]  https://{config.domain}/ "
-                  f"[dim](Zertifikat bis {ablauf:%d.%m.%Y})[/dim]")
-    return True
 
 
 def _key_hint(key_name: str) -> str:
@@ -719,23 +580,6 @@ def cache_command(
 def version_command() -> None:
     """Gibt die Version aus."""
     console.print(f"aquaticy {VERSION_LABEL}")
-
-
-@app.command("sandbox")
-def sandbox_command() -> None:
-    """Zeigt, ob Aquaticy eingeschlossen läuft und was daran offen steht."""
-    from aquaticy.boxed import describe, posture
-
-    stand = posture()
-    for zeile in describe(stand):
-        if zeile.startswith("LOCH:"):
-            console.print(f"  [bold red]{zeile}[/]")
-        elif zeile.startswith("offen:"):
-            console.print(f"  [dim]{zeile}[/]")
-        else:
-            console.print(f"  {zeile}")
-    if stand.holes:
-        raise typer.Exit(1)
 
 
 @app.command("list")
@@ -1106,7 +950,7 @@ def web_command(
     host: str = typer.Option("", "--host", help="Adresse. Default: nur der eigene Rechner."),
     lan: bool = typer.Option(
         False, "--lan",
-        help="Auch im Heimnetz und über Tailscale erreichbar. Mit eigener Domain immer.",
+        help="Auch im Heimnetz und über Tailscale erreichbar.",
     ),
     open_browser: bool = typer.Option(
         True, "--open/--no-open", help="Browser automatisch öffnen."
@@ -1122,11 +966,8 @@ def web_command(
 ) -> None:
     """Startet die Weboberfläche – derselbe Agent im Browser.
 
-    Mit eigener Domain (aquaticy website setup) ist Aquaticy im Heimnetz, über
-    Tailscale und unter der Domain erreichbar. Ohne Domain nur auf diesem
-    Rechner; --lan oder Hintergrundbetrieb öffnen es dann fürs Heimnetz.
+    Nur auf diesem Rechner; --lan oder Hintergrundbetrieb öffnen es fürs Heimnetz.
     """
-    from aquaticy import website as website_mod
     from aquaticy.web import (
         AlreadyRunning,
         addresses_for,
@@ -1137,15 +978,9 @@ def web_command(
     )
 
     load_env()
-    try:
-        seite = website_mod.SiteConfig.from_env()
-    except website_mod.WebsiteError as exc:
-        console.print(f"[yellow]Website: {exc}[/yellow]")
-        seite = None
-
     in_background = background if isinstance(background, bool) else (
         os.environ.get("AQUATICY_BACKGROUND", "").lower() in {"true", "1", "yes", "on"})
-    bind = host or ("0.0.0.0" if (lan or seite or in_background) else "127.0.0.1")
+    bind = host or ("0.0.0.0" if (lan or in_background) else "127.0.0.1")
 
     gewuenscht = port
     _altes_aquaticy(port)
@@ -1164,9 +999,6 @@ def web_command(
     lines = [f"[bold]Aquaticy AI[/bold] [dim]{VERSION_LABEL}[/dim]"]
     if public:
         lines.append("[dim]Im Browser öffnen:[/dim]")
-    if seite is not None:
-        found.insert(0, (f"https://{seite.domain}/", "über deine Domain"))
-        width = max(width, len(found[0][0]))
     lines += [f"  [green]{url:<{width}}[/green]  [dim]{note}[/dim]" for url, note in found]
     if not port:
         lines.append("[dim]Die Adresse steht nach dem Start hier.[/dim]")
@@ -1211,9 +1043,6 @@ def web_command(
             + "\n[dim]Lässt sich in der Oberfläche unter Einstellungen beheben.[/dim]"
         )
 
-    _vm_beim_start(settings)
-    _messenger_beim_start(settings)
-
     _ollama_beim_start(settings)
     import time as _time
 
@@ -1245,182 +1074,6 @@ def web_command(
             open_browser = False
             _time.sleep(2)
     console.print("[dim]Beendet.[/dim]")
-
-
-website_app = typer.Typer(
-    help="Eigene Website: Aquaticy unter deiner Domain, über Cloudflare.",
-    invoke_without_command=True,
-    no_args_is_help=False,
-)
-app.add_typer(website_app, name="website")
-
-
-@website_app.callback()
-def website_command(ctx: typer.Context) -> None:
-    """Zeigt, wie es um die Website steht."""
-    if ctx.invoked_subcommand is not None:
-        return
-    from aquaticy import website as website_mod
-
-    load_env()
-    try:
-        config = website_mod.SiteConfig.from_env()
-    except website_mod.WebsiteError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
-    if config is None:
-        console.print("Keine eigene Domain eingerichtet. Einrichten: "
-                      "[bold]aquaticy website setup[/bold]")
-        return
-    data_dir = get_settings().data_dir
-    zustand = website_mod.load_state(data_dir, config.domain)
-    ablauf = website_mod.certificate_expiry(data_dir, config.domain)
-    programm = website_mod.find_cloudflared(data_dir)
-    zeilen = [
-        f"Domain:      https://{config.domain}/",
-        "Tunnel:      " + (f"eingerichtet ({zustand.tunnel_id[:8]}…)" if zustand
-                           else "noch nicht eingerichtet"),
-        "Zertifikat:  " + (f"gültig bis {ablauf:%d.%m.%Y}" if ablauf
-                           else "noch keins (kommt beim Start)"),
-        "cloudflared: " + (str(programm) if programm else "wird beim Start geladen"),
-        f"Eingang:     127.0.0.1:{config.public_port} (nur für den Tunnel)",
-    ]
-    console.print(Panel.fit("\n".join(zeilen), title="Website", border_style="cyan"))
-    console.print("[dim]Gestartet wird sie mit [bold]aquaticy web[/bold].[/dim]")
-
-
-@website_app.command("setup")
-def website_setup_command(
-    env_file: Path | None = typer.Option(None, "--env-file", help="Ziel-.env."),
-) -> None:
-    """Domain und Cloudflare einrichten (ohne den Rest des Setups)."""
-    load_env()
-    werte = _ask_website()
-    if not werte:
-        console.print("[dim]Nichts geändert.[/dim]")
-        return
-    ziel = write_env_file(werte, env_file or find_env_file() or DEFAULT_ENV_PATH)
-    reset_settings_cache()
-    console.print(f"[dim]Gespeichert in {ziel}. Starten mit [bold]aquaticy web[/bold].[/dim]")
-
-
-@website_app.command("remove")
-def website_remove_command(
-    yes: bool = typer.Option(False, "--yes", "-y", help="Ohne Rückfrage."),
-    env_file: Path | None = typer.Option(None, "--env-file", help="Ziel-.env."),
-) -> None:
-    """Tunnel und DNS-Eintrag bei Cloudflare löschen und die Domain austragen."""
-    from aquaticy import website as website_mod
-
-    load_env()
-    config = website_mod.SiteConfig.from_env()
-    if config is None:
-        console.print("Keine eigene Domain eingerichtet.")
-        return
-    if not yes and not typer.confirm(f"Website {config.domain} wirklich entfernen?",
-                                     default=False):
-        raise typer.Exit(code=1)
-    data_dir = get_settings().data_dir
-    zustand = website_mod.load_state(data_dir, config.domain)
-    if zustand is not None and config.token:
-        try:
-            with website_mod.Cloudflare(config.token) as cf:
-                cf.remove_domain(zustand.zone_id, config.domain, zustand.tunnel_id)
-                cf.delete_tunnel(zustand.account_id, zustand.tunnel_id)
-        except website_mod.WebsiteError as exc:
-            console.print(f"[yellow]Bei Cloudflare nicht alles gelöscht:[/yellow] {exc}")
-    website_mod.forget_state(data_dir)
-    write_env_file({website_mod.DOMAIN_ENV: "", website_mod.TOKEN_ENV: "",
-                    website_mod.EMAIL_ENV: ""},
-                   env_file or find_env_file() or DEFAULT_ENV_PATH)
-    reset_settings_cache()
-    console.print("Website entfernt. [bold]aquaticy web[/bold] läuft jetzt wieder nur "
-                  "auf diesem Rechner (oder mit --lan im Heimnetz).")
-
-
-@app.command("cluster")
-def cluster_command() -> None:
-    """Server-Verbund: offene Anfragen zum Verbinden beantworten (yes/no) und Stand zeigen.
-
-    Fuer Server ohne offenes Terminal, etwa im Container:
-    ``docker compose exec aquaticy aquaticy cluster``.
-    """
-    import json as _json
-    import secrets as _secrets
-
-    ordner = get_settings().data_dir / "cluster"
-    try:
-        zustand = _json.loads((ordner / "state.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        zustand = {}
-    verbund = zustand.get("cluster") or {}
-    if not zustand.get("enabled"):
-        console.print("Der Server-Verbund ist aus (Einstellungen → Dev settings, nur Ultra).")
-    elif verbund:
-        console.print(f"Im Verbund mit {len(verbund.get('members', []))} Servern.")
-        roh = verbund.get("split")
-        aufteilen: dict[str, Any] = roh if isinstance(roh, dict) else {}
-        if aufteilen.get("on"):
-            from aquaticy import llamacpp, sharding
-
-            console.print(f"Serverlast aufteilen: an ({aufteilen.get('model') or '?'}).")
-            fassung = str(aufteilen.get("llama") or "")
-            eintrag = None
-            if llamacpp.TAG_RE.fullmatch(fassung):
-                eintrag = llamacpp.Installer(get_settings().data_dir / "llama.cpp",
-                                             gpu=sharding.nvidia_card).installed(fassung)
-            for name, env, namen, feld in (
-                    ("rpc-server", sharding.RPC_ENV, sharding.RPC_NAMES, "rpc_server"),
-                    ("llama-server", sharding.SERVER_ENV, sharding.SERVER_NAMES,
-                     "llama_server")):
-                da = sharding.find_binary(env, namen) if os.environ.get(env, "").strip() \
-                    else (str(getattr(eintrag, feld)) if eintrag is not None
-                          else sharding.find_binary(env, namen))
-                console.print(f"[dim]  {name}: {da or 'wird beim Start geladen'}[/dim]")
-            if eintrag is not None:
-                console.print(f"[dim]  {eintrag.label()}[/dim]")
-    else:
-        console.print("Der Server-Verbund ist an, aber noch nicht verbunden.")
-    try:
-        offen = _json.loads((ordner / "pending.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        offen = []
-    offen = [e for e in offen if isinstance(e, dict) and e.get("status") == "pending"]
-    if not offen:
-        console.print("[dim]Keine offenen Anfragen.[/dim]")
-        return
-    (ordner / "answers").mkdir(parents=True, exist_ok=True)
-    for einladung in offen:
-        peer = einladung.get("peer") or {}
-        console.print(f"\nServer „{peer.get('name') or '?'}“ ({peer.get('address')}) möchte "
-                      "diesen Server in seinen Verbund aufnehmen und wird Master.")
-        console.print("[dim]Die bisherigen Daten dieses Servers werden gesichert und durch "
-                      "die des Verbunds ersetzt.[/dim]")
-        while True:
-            antwort = typer.prompt("Annehmen? [yes/no]").strip().lower()
-            if antwort in ("yes", "y", "ja", "j", "no", "n", "nein"):
-                break
-        ja = antwort in ("yes", "y", "ja", "j")
-        datei = ordner / "answers" / f"{_secrets.token_hex(6)}.json"
-        datei.write_text(_json.dumps({"id": einladung.get("id"),
-                                      "answer": "yes" if ja else "no"}), encoding="utf-8")
-        if ja:
-            console.print("Angenommen. Der Code für den Master erscheint gleich im Log des "
-                          "Servers und hier:")
-            import time as _time
-
-            for _ in range(20):
-                _time.sleep(0.5)
-                with contextlib.suppress(OSError, ValueError):
-                    for e in _json.loads((ordner / "pending.json").read_text(encoding="utf-8")):
-                        if e.get("id") == einladung.get("id") and e.get("code"):
-                            console.print(f"[bold]Code: {e['code']}[/bold]")
-                            break
-                    else:
-                        continue
-                    break
-        else:
-            console.print("Abgelehnt.")
 
 
 @app.command("google")
@@ -1558,160 +1211,6 @@ def google_command(
     console.print("[dim]Wieder loswerden: aquaticy google --trennen[/dim]")
 
 
-@app.command("connect-ha")
-def connect_ha_command(
-    url: str = typer.Option("", "--url", help="Adresse der Instanz, z.B. 192.168.1.5:8123."),
-    token: str = typer.Option("", "--token", help="Langlebiges Zugriffstoken."),
-    env_file: Path | None = typer.Option(None, "--env-file", help="Zieldatei für die .env."),
-) -> None:
-    """Verbindet aquaticy mit Home Assistant – sucht die Instanz selbst.
-
-    Danach kann aquaticy Fragen über das eigene Haus beantworten: Temperaturen,
-    Lichter, Fenster, Anwesenheit.
-    """
-    from aquaticy.homeassistant import HomeAssistant, HomeAssistantError, discover, normalize_url
-
-    load_env()
-    console.print(
-        Panel.fit(
-            "[bold]Home Assistant verbinden[/bold]\n"
-            "[dim]Zwei Angaben: die Adresse und ein Zugriffstoken.[/dim]",
-            border_style="green",
-        )
-    )
-
-    if not url:
-        with console.status("  Suche Home Assistant im Netz ..."):
-            found = discover()
-        if found:
-            console.print("\n[bold]Gefunden:[/bold]")
-            for index, candidate in enumerate(found, start=1):
-                console.print(f"  [cyan]{index}[/cyan]  {candidate}")
-            choice = typer.prompt("Auswahl (oder eigene Adresse)", default="1").strip()
-            if choice.isdigit() and 1 <= int(choice) <= len(found):
-                url = found[int(choice) - 1]
-            else:
-                url = choice
-        else:
-            from aquaticy.lan import container_hint
-
-            console.print(
-                "\n[yellow]Nichts gefunden.[/yellow] "
-                "[dim]Die Adresse steht in der Browserzeile, wenn du Home Assistant "
-                "offen hast.[/dim]"
-            )
-            hint = container_hint()
-            if hint:
-                console.print(f"  [yellow]{hint}[/yellow]")
-            url = typer.prompt("Adresse", default="homeassistant.local:8123").strip()
-    url = normalize_url(url)
-    console.print(f"  Adresse: [bold cyan]{url}[/bold cyan]")
-
-    if not token:
-        console.print(
-            "\n[bold]Zugriffstoken[/bold]\n"
-            "  [dim]In Home Assistant: unten links auf deinen Namen klicken →\n"
-            "  Reiter [bold]Sicherheit[/bold] → ganz unten [bold]Langlebige "
-            "Zugriffstokens[/bold]\n"
-            "  → [bold]Token erstellen[/bold], Namen vergeben (z.B. Aquaticy AI), kopieren.[/dim]"
-        )
-        console.print(f"  [dim]Direkt dorthin: {url}/profile/security[/dim]")
-        token = typer.prompt("Token einfügen", hide_input=True).strip()
-    if not token:
-        console.print("[red]Ohne Token geht es nicht.[/red]")
-        raise typer.Exit(code=1)
-
-    client = HomeAssistant(url, token)
-    try:
-        with console.status("  Teste die Verbindung ..."):
-            hello = client.ping()
-            entities = client.states()
-    except HomeAssistantError as exc:
-        console.print(f"\n[red]Fehlgeschlagen:[/red] {exc}")
-        raise typer.Exit(code=1) from exc
-
-    counts = client.domains()
-    console.print(f"\n[green]Verbunden mit {hello}[/green]")
-    console.print(f"  [dim]{len(entities)} Entitäten in {len(counts)} Bereichen:[/dim]")
-    top = ", ".join(f"{name} ({number})" for name, number in list(counts.items())[:6])
-    console.print(f"  [dim]{top}[/dim]")
-
-    console.print(
-        "\n[bold]Darf Aquaticy AI auch schalten?[/bold]\n"
-        "  [dim]Nein = er sieht nur nach (Temperaturen, Zustände, ob etwas an ist).\n"
-        "  Ja = er darf Licht, Steckdosen und Szenen bedienen. Schlösser, Alarm,\n"
-        "  Tore und Heizung fragen auch dann jedes Mal nach.[/dim]"
-    )
-    control = typer.confirm("  Schalten erlauben?", default=False)
-
-    values = {
-        "AQUATICY_HA_URL": url,
-        "HA_TOKEN": token,
-        "AQUATICY_HA_CONTROL": str(control).lower(),
-    }
-    target = env_file or find_env_file() or DEFAULT_ENV_PATH
-    written = write_env_file(values, target)
-    load_env(written, override=True)
-    reset_settings_cache()
-    console.print(
-        Panel.fit(
-            f"Gespeichert in [cyan]{written}[/cyan]\n\n"
-            "Probier es aus:\n"
-            '  [bold]aquaticy "wie warm ist es im Wohnzimmer"[/bold]\n'
-            '  [bold]aquaticy "welche Lichter sind gerade an"[/bold]'
-            + ("\n  [bold]aquaticy \"mach das Licht im Flur aus\"[/bold]" if control else ""),
-            title="fertig",
-            border_style="green",
-        )
-    )
-
-
-@app.command("lan")
-def lan_command(
-    subnet: str = typer.Option("", "--subnet", help="Netz, z.B. 192.168.1.0/24. Leer = eigenes."),
-    thorough: bool = typer.Option(False, "--thorough", help="Alle bekannten Ports prüfen."),
-) -> None:
-    """Zeigt, welche Geräte im eigenen Netz erreichbar sind."""
-    from aquaticy.lan import NotPrivate, own_subnet, scan
-
-    settings = get_settings()
-    target = subnet or settings.lan_subnet or own_subnet()
-    if not target:
-        console.print("[red]Kein eigenes Netz erkennbar.[/red]")
-        console.print("[dim]Gib es an: aquaticy lan --subnet 192.168.1.0/24[/dim]")
-        raise typer.Exit(code=1)
-
-    console.print(f"[dim]Durchsuche {target} ...[/dim]")
-    try:
-        with console.status("  klopfe an ..."):
-            devices = scan(target, quick=not thorough)
-    except (NotPrivate, ValueError) as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
-
-    if not devices:
-        from aquaticy.lan import container_hint
-
-        console.print("[yellow]Nichts gefunden.[/yellow]")
-        hint = container_hint(target)
-        if hint:
-            console.print(f"[yellow]{hint}[/yellow]")
-        console.print("[dim]Mit --thorough werden alle bekannten Ports geprüft.[/dim]")
-        return
-
-    table = Table(box=None, pad_edge=False)
-    table.add_column("Adresse", style="cyan", no_wrap=True)
-    table.add_column("Name")
-    table.add_column("Läuft dort", style="dim")
-    for device in devices:
-        services = ", ".join(dict.fromkeys(device.services)) or ", ".join(
-            str(port) for port in device.ports
-        )
-        table.add_row(device.address, device.title or device.name or "-", services)
-    console.print(table)
-    console.print(f"\n[dim]{len(devices)} Geräte erreichbar.[/dim]")
-
-
 @app.command("install-browser")
 def install_browser_command() -> None:
     """Installiert Playwright samt Chromium für den JavaScript-Fallback (Stufe 3)."""
@@ -1737,188 +1236,6 @@ def install_browser_command() -> None:
 
 
 VM_INSTALL_NEIN = "vm-install-abgelehnt"
-
-
-def _ensure_vm(assume_yes: bool = False) -> str:
-    """Sorgt dafuer, dass es Podman (oder Docker) gibt und es laeuft.
-
-    Wie bei Ollama: Jeder Befehl wird gezeigt, und ohne ``--yes`` wird gefragt.
-    Returns: "bereit", "abgelehnt", "fehlgeschlagen" oder "unbekannt" (kein Weg).
-    """
-    from aquaticy import sandbox, vm_install
-
-    laufzeit = sandbox.find_runtime()
-    if laufzeit is not None:
-        console.print(f"[green]virtual machine bereit:[/green] {laufzeit.label}")
-        return "bereit"
-    if vm_install.podman_installed() and vm_install.start_machine():
-        console.print("[green]Podman-Maschine gestartet.[/green]")
-        return "bereit"
-    schritte = vm_install.install_steps()
-    if schritte is None:
-        console.print(f"[yellow]Podman fehlt.[/yellow] {vm_install.install_hint()}")
-        return "unbekannt"
-    console.print("\n[bold]Podman für die virtual machine installieren[/bold]")
-    console.print("  [dim]Ohne Podman oder Docker bleibt Code im Code-Modus ungetestet. "
-                  "Diese Befehle würden ausgeführt:[/dim]")
-    for befehl in schritte:
-        console.print(f"  [cyan]{' '.join(befehl)}[/cyan]")
-    if not (assume_yes or typer.confirm("  Ausführen?", default=True)):
-        console.print("  [dim]Abgebrochen. Später: aquaticy install-vm[/dim]")
-        return "abgelehnt"
-    if not vm_install.run_steps(schritte, on_step=lambda b: console.print(
-            f"  [dim]→ {' '.join(b)}[/dim]")):
-        console.print(f"[red]Installation fehlgeschlagen.[/red] {vm_install.install_hint()}")
-        return "fehlgeschlagen"
-    laufzeit = sandbox.find_runtime()
-    if laufzeit is None:
-        console.print("[yellow]Podman ist installiert, antwortet aber noch nicht.[/yellow] "
-                      "Nach einem Neustart des Rechners geht es meist.")
-        return "fehlgeschlagen"
-    console.print(f"[green]virtual machine bereit:[/green] {laufzeit.label}")
-    return "bereit"
-
-
-@app.command("install-vm")
-def install_vm_command(
-    yes: bool = typer.Option(False, "--yes", "-y", help="Ohne Rückfrage installieren."),
-) -> None:
-    """Richtet Podman für die virtual machine ein (Code im Code-Modus wirklich ausführen)."""
-    load_env()
-    settings = get_settings()
-    with contextlib.suppress(OSError):
-        (Path(settings.data_dir) / VM_INSTALL_NEIN).unlink(missing_ok=True)
-    if _ensure_vm(assume_yes=yes) != "bereit":
-        raise typer.Exit(code=1)
-
-
-def _vm_beim_start(settings: Any) -> None:
-    """Beim Start von `aquaticy web`: fehlt Podman, wird es angeboten -- einmal.
-
-    Nur mit einem Menschen am Terminal. Als Dienst (ohne Terminal) steht nur der
-    Befehl da; nach einem Nein fragt Aquaticy nicht wieder.
-    """
-    from aquaticy import sandbox, vm_install
-
-    try:
-        if sandbox.find_runtime() is not None:
-            return
-
-        if vm_install.podman_installed() and vm_install.start_machine():
-            console.print("[green]Podman-Maschine gestartet[/green] [dim](virtual machine)[/dim]")
-            return
-    except Exception:
-        return
-    nein = Path(settings.data_dir) / VM_INSTALL_NEIN
-    terminal = sys.stdin.isatty() and sys.stdout.isatty()
-    if not terminal or nein.exists() or vm_install.install_steps() is None:
-        console.print("[yellow]virtual machine:[/yellow] Podman oder Docker fehlt – "
-                      "[bold]aquaticy install-vm[/bold] richtet es ein.")
-        return
-
-    if _ensure_vm() == "abgelehnt":
-        with contextlib.suppress(OSError):
-            nein.parent.mkdir(parents=True, exist_ok=True)
-            nein.write_text("Podman beim Start nicht installieren.\n", encoding="utf-8")
-
-
-def _ensure_messenger(assume_yes: bool = False) -> str:
-    """Richtet die Direktverbindung zu WhatsApp und Signal ein (12.7.8 Terra v2).
-
-    WhatsApp: libmagic per Paketmanager (Befehle werden gezeigt, ohne --yes wird gefragt).
-    Signal: signal-cli von GitHub, mit Pruefsumme, ohne Verwalterrechte.
-    Returns: "bereit", "abgelehnt" oder "fehlgeschlagen".
-    """
-    from aquaticy import messenger_install as mi
-
-    ergebnis = "bereit"
-    problem = mi.whatsapp_problem()
-    if not problem:
-        console.print("[green]WhatsApp direkt:[/green] bereit")
-    else:
-        schritte = mi.libmagic_steps()
-        if "libmagic" not in problem or schritte is None:
-            console.print(f"[yellow]WhatsApp direkt:[/yellow] {problem}")
-            if "libmagic" in problem:
-                console.print(f"  {mi.libmagic_hint()}")
-            ergebnis = "fehlgeschlagen"
-        else:
-            console.print("\n[bold]libmagic für WhatsApp installieren[/bold]")
-            console.print("  [dim]Diese Befehle würden ausgeführt:[/dim]")
-            for befehl in schritte:
-                console.print(f"  [cyan]{' '.join(befehl)}[/cyan]")
-            if not (assume_yes or typer.confirm("  Ausführen?", default=True)):
-                console.print("  [dim]Abgebrochen. Später: aquaticy install-messenger[/dim]")
-                ergebnis = "abgelehnt"
-            elif mi.install_libmagic(on_step=lambda b: console.print(
-                    f"  [dim]→ {' '.join(b)}[/dim]")):
-                console.print("[green]WhatsApp direkt:[/green] bereit")
-            else:
-                console.print(f"[red]Installation fehlgeschlagen.[/red] {mi.libmagic_hint()}")
-                ergebnis = "fehlgeschlagen"
-
-    if mi.find_signal_cli() is not None:
-        console.print("[green]Signal direkt:[/green] bereit")
-        return ergebnis
-    name, art = mi.signal_asset_name("v0.0.0")
-    if not name:
-        console.print(f"[yellow]Signal direkt:[/yellow] {mi.signal_hint()}")
-        return "fehlgeschlagen"
-    console.print("\n[bold]signal-cli für Signal laden[/bold]")
-    java = "ohne Java" if art == "native" else "mit Java"
-    console.print(f"  [dim]Von github.com/AsamK/signal-cli ({java}), mit geprüfter Prüfsumme. "
-                  "Dafür brauchst du keine Verwalterrechte.[/dim]")
-    if not (assume_yes or typer.confirm("  Laden?", default=True)):
-        console.print("  [dim]Abgebrochen. Später: aquaticy install-messenger[/dim]")
-        return "abgelehnt" if ergebnis == "bereit" else ergebnis
-    settings = get_settings()
-    try:
-        with console.status("  lade signal-cli ..."):
-            mi.install_signal_cli(Path(settings.data_dir))
-    except mi.InstallError as exc:
-        console.print(f"[red]signal-cli:[/red] {exc}")
-        return "fehlgeschlagen"
-    console.print("[green]Signal direkt:[/green] bereit")
-    return ergebnis
-
-
-@app.command("install-messenger")
-def install_messenger_command(
-    yes: bool = typer.Option(False, "--yes", "-y", help="Ohne Rückfrage installieren."),
-) -> None:
-    """Richtet WhatsApp und Signal für die Direktverbindung ein (ohne virtual machine)."""
-    load_env()
-    settings = get_settings()
-    with contextlib.suppress(OSError):
-        (Path(settings.data_dir) / "messenger-install-abgelehnt").unlink(missing_ok=True)
-    if _ensure_messenger(assume_yes=yes) != "bereit":
-        raise typer.Exit(code=1)
-
-
-def _messenger_beim_start(settings: Any) -> None:
-    """Beim Start von `aquaticy web` und nach `aquaticy setup`: fehlt etwas, wird es angeboten.
-
-    Wie bei Podman: einmal, nur mit einem Menschen am Terminal. Nach einem Nein fragt
-    Aquaticy nicht wieder; der Befehl `aquaticy install-messenger` bleibt.
-    """
-    from aquaticy import messenger_install as mi
-
-    try:
-        fehlt = [t for t in mi.status(Path(settings.data_dir)).values() if t]
-    except Exception:
-        return
-    if not fehlt:
-        return
-    nein = Path(settings.data_dir) / mi.NEIN
-    terminal = sys.stdin.isatty() and sys.stdout.isatty()
-    if not terminal or nein.exists():
-        console.print("[dim]WhatsApp und Signal direkt verbinden: "
-                      "[bold]aquaticy install-messenger[/bold] richtet es ein.[/dim]")
-        return
-    if _ensure_messenger() == "abgelehnt":
-        with contextlib.suppress(OSError):
-            nein.parent.mkdir(parents=True, exist_ok=True)
-            nein.write_text("WhatsApp und Signal beim Start nicht einrichten.\n", encoding="utf-8")
 
 
 def _ollama_beim_start(settings: Any) -> list[str]:
@@ -2415,7 +1732,6 @@ HELP_TEXT = """\
   aquaticy fetch                Webseite lesen
   aquaticy cache                Cache verwalten
   aquaticy version              Versionsnummer
-  aquaticy sandbox              Sandbox-Status
   aquaticy list                 Konten und Nutzung
   aquaticy remove KONTONAME     Konto und private Daten löschen
   aquaticy ban                  Konto oder Adresse sperren
@@ -2427,19 +1743,12 @@ HELP_TEXT = """\
   aquaticy history              Verlauf anzeigen
   aquaticy web                  Browseroberflaeche starten
   aquaticy google               Google-Verbindung verwalten
-  aquaticy connect-ha           Home Assistant verbinden
-  aquaticy lan                  LAN-Funktionen
   aquaticy install-browser      Browser einrichten
   aquaticy install-model        Lokales Modell einrichten
-  aquaticy install-vm           Podman für die virtual machine einrichten
   aquaticy account              Dein Konto: anlegen oder Passwort neu setzen
-  aquaticy install-messenger    WhatsApp und Signal direkt verbinden (ohne virtual machine)
   aquaticy export               Recherchen exportieren
-  aquaticy cluster              Server-Verbund: Anfrage annehmen (yes/no)
-  aquaticy website              eigene Domain: Stand, setup, remove
   aquaticy stop                 laufende Aquaticy-Server beenden (auch im Hintergrund)
   aquaticy voice                lokale Sprachnachrichten einrichten; --disable schaltet sie aus
-  aquaticy secure-pro           defensive Netzprüfung einrichten; --disable schaltet sie aus
 """
 
 
@@ -2565,15 +1874,13 @@ def _plugin_options(line: str, settings: object) -> dict[str, object] | None:
         optionen["mode"] = turn.mode
     if turn.online is not None:
         optionen["online"] = turn.online
-    if turn.sandbox is not None:
-        optionen["sandbox"] = turn.sandbox
     return optionen
 
 
 def _plugin_turn(agent, renderer, line: str, optionen: dict[str, object], stream: bool,
                  show_images: bool) -> object:
     """Ein Plugin-Turn – danach arbeitet der Chat wie vorher weiter."""
-    felder = ("mode", "structured", "recheck", "online", "sandbox")
+    felder = ("mode", "structured", "recheck", "online")
     vorher = {feld: getattr(agent, feld, None) for feld in felder}
     try:
         return _run_turn(agent, renderer, line, stream, show_images, **optionen)

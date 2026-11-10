@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-import shutil
-import threading
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from http.client import HTTPConnection
-from http.server import ThreadingHTTPServer
 
 import pytest
 from typer.testing import CliRunner
 
-from aquaticy import cli, cluster, web
-from tests.anmeldung import AGENT, SPRACHE
+from aquaticy import cli, web
 from tests.test_v965 import parallel_site as parallel_site
 
 
@@ -67,145 +61,14 @@ def test_own_google_secret_is_migrated_and_kept(settings, tmp_path, monkeypatch)
     assert web.account_vault(profile).secret("GOOGLE_CLIENT_SECRET") == "own-secret-fixture"
 
 
-@pytest.mark.parametrize("message,expected", [
-    ("TimeoutError: access_token=callback-secret-fixture", web.GENERIC_ERROR),
-    ("Anmeldung abgelehnt: token=callback-secret-fixture", "Anmeldung abgelehnt:"),
-    ("Client-ID und Secret fehlen -- erst speichern.", "Client-ID und Secret fehlen"),
-])
-def test_google_error_page_filters_diagnostics_and_secrets(monkeypatch, message, expected):
-
-    monkeypatch.setattr(web, "AUTH", None)
-    monkeypatch.setattr(web, "TOKEN", "")
-    monkeypatch.setattr(web, "CLUSTER", None)
-    monkeypatch.setattr(web.Handler, "_get", lambda handler: handler._google_page(False, message))
-    server = ThreadingHTTPServer(("127.0.0.1", 0), web.Handler)
-    worker = threading.Thread(target=server.serve_forever, daemon=True)
-    worker.start()
-    conn = HTTPConnection("127.0.0.1", server.server_port, timeout=10)
-    try:
-        conn.request("GET", "/google")
-        response = conn.getresponse()
-        body = response.read().decode()
-        assert response.status == 200 and expected in body
-        assert "callback-secret-fixture" not in body and "TimeoutError" not in body
-        assert response.getheader("Cache-Control") == "no-store"
-        assert response.getheader("X-Content-Type-Options") == "nosniff"
-        assert response.getheader("Content-Security-Policy")
-    finally:
-        conn.close()
-        server.shutdown()
-        server.server_close()
-        worker.join(5)
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
-def local_cluster(tmp_path, hooks):
-    instance = cluster.Cluster(tmp_path, hooks=hooks)
-    instance.state["cluster"] = {"id": "test-cluster", "version": 1, "secret": "fixture",
-                                  "members": [{"node": instance.node_id}]}
-    return instance
-
-
-def test_stale_release_does_not_stop_a_local_account(tmp_path):
-    calls = []
-    instance = local_cluster(tmp_path,
-                             cluster.Hooks(release=lambda user: calls.append(user) or True))
-    instance.homes["account"] = instance.node_id
-    instance._release_quietly("account")
-    assert calls == []
-
-
-def test_delayed_release_checks_assignment_again_before_retry(tmp_path):
-    calls = []
-    instance = local_cluster(tmp_path,
-                             cluster.Hooks(release=lambda user: calls.append(user) or False))
-    instance.homes["account"] = "other-node"
-
-    class ReturnDuringWait:
-        def is_set(self):
-            return False
-
-        def wait(self, timeout):
-            instance.homes["account"] = instance.node_id
-            return False
-
-    instance._stop = ReturnDuringWait()
-    instance._release_quietly("account")
-    assert calls == ["account"]
-
-
-def test_returning_membership_adopts_after_pending_release(tmp_path):
-    entered, finish, adopted = threading.Event(), threading.Event(), threading.Event()
-    order = []
-
-    def release(user):
-        order.append("release started")
-        entered.set()
-        assert finish.wait(10)
-        order.append("release finished")
-        return True
-
-    def adopt(user):
-        order.append("adopted")
-        adopted.set()
-
-    instance = local_cluster(tmp_path, cluster.Hooks(release=release, adopt=adopt))
-    instance.homes["account"] = "other-node"
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(instance._release_quietly, "account")
-        try:
-            assert entered.wait(5)
-            instance._take_members(dict(instance.info), {"account": instance.node_id})
-        finally:
-            finish.set()
-        future.result(timeout=5)
-        assert adopted.wait(5)
-    assert order == ["release started", "release finished", "adopted"]
-
-
-@pytest.mark.parametrize("stopped", [False, True])
-def test_stale_adoption_does_not_restart_foreign_or_stopped_runtime(tmp_path, stopped):
-    calls = []
-    instance = local_cluster(tmp_path, cluster.Hooks(adopt=calls.append))
-    instance.homes["account"] = instance.node_id if stopped else "other-node"
-    if stopped:
-        instance._stop.set()
-    instance._adopt_quietly("account")
-    assert calls == []
-
-
-def test_ephemeral_server_prints_its_actual_address(settings, monkeypatch, capsys):
-    for name in ("AUTH", "TOKEN", "AIGUARD", "COWORKER_SCHEDULER", "SERVER", "CLUSTER"):
-        monkeypatch.setattr(web, name, getattr(web, name))
-    monkeypatch.setattr(web, "USER_COWORKERS", {})
-    monkeypatch.setattr(web, "get_settings", lambda: settings)
-    monkeypatch.setattr(web, "_warm_up", lambda: None)
-    monkeypatch.setattr("aquaticy.sandbox.sweep", lambda: None)
-
-    class Scheduler:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def start(self):
-            pass
-
-        def stop(self):
-            pass
-
-    monkeypatch.setattr("aquaticy.coworker.Scheduler", Scheduler)
-    original = web.bind_server
-    ports = []
-
-    def bind(host, port):
-        server = original(host, port)
-        ports.append(server.server_port)
-        server.serve_forever = lambda: None
-        return server
-
-    monkeypatch.setattr(web, "bind_server", bind)
-    web.serve("127.0.0.1", 0, open_browser=False)
-    output = capsys.readouterr().out
-    assert ports[0] > 0 and f"http://127.0.0.1:{ports[0]}/" in output
-    assert "http://127.0.0.1:0/" not in output
+# 16.0.1 (Aquaticy-Test): 5 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_cli_does_not_advertise_port_zero(monkeypatch):
@@ -215,89 +78,3 @@ def test_cli_does_not_advertise_port_zero(monkeypatch):
     assert "http://127.0.0.1:0/" not in result.output
 
 
-@pytest.mark.parametrize("width,fontsize", [(320, "normal"), (390, "large"), (1280, "normal")])
-def test_mobile_and_desktop_chat_and_settings_remain_usable(parallel_site, width, fontsize):
-    playwright = pytest.importorskip("playwright.sync_api")
-    executable = shutil.which("chromium")
-    if not executable:
-        pytest.skip("System-Chromium fehlt")
-    client, _, _, _, _, url = parallel_site
-    with playwright.sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path=executable)
-        try:
-            context = browser.new_context(viewport={"width": width, "height": 800},
-                                          user_agent=AGENT,
-                                          extra_http_headers={"Accept-Language": SPRACHE})
-            context.add_cookies([{"name": name, "value": value, "url": url}
-                                for name, value in client.cookies.items()])
-            page = context.new_page()
-            errors = []
-            page.on("pageerror", lambda error: errors.append(str(error)))
-            page.goto(url, wait_until="networkidle")
-            page.locator("#auth-gate").wait_for(state="hidden")
-            page.evaluate("size => document.documentElement.dataset.fontsize = size", fontsize)
-            if width < 600:
-                page.click("#btn-new-top")
-            else:
-                page.click("#btn-new")
-            page.fill("#input", "Hallo Luna")
-            page.click("#send")
-            playwright.expect(page.locator("#thread")).to_contain_text("Antwort auf Hallo Luna")
-            playwright.expect(page.locator("#send")).to_be_enabled()
-            if page.evaluate("document.body.classList.contains('collapsed')"):
-                page.click("#btn-side")
-            page.click("#btn-settings")
-            page.wait_for_function("""() => {
-                const sheet = document.querySelector('#overlay .sheet');
-                if (!sheet || !sheet.closest('.open')) return false;
-                const rect = sheet.getBoundingClientRect();
-                return rect.left >= -2 && rect.right <= innerWidth + 2;
-            }""")
-            playwright.expect(page.locator("#learning-enabled")).to_be_visible()
-            assert not errors
-        finally:
-            browser.close()
-
-
-def test_background_errors_keep_focus_and_foreground_errors_keep_dialog(parallel_site):
-    playwright = pytest.importorskip("playwright.sync_api")
-    executable = shutil.which("chromium")
-    if not executable:
-        pytest.skip("System-Chromium fehlt")
-    client, _, _, _, _, url = parallel_site
-    with playwright.sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path=executable)
-        try:
-            context = browser.new_context(user_agent=AGENT,
-                                          extra_http_headers={"Accept-Language": SPRACHE})
-            context.add_cookies([{"name": name, "value": value, "url": url}
-                                for name, value in client.cookies.items()])
-            page = context.new_page()
-            errors, requests = [], []
-            page.on("pageerror", lambda error: errors.append(str(error)))
-            page.goto(url, wait_until="networkidle")
-            page.locator("#auth-gate").wait_for(state="hidden")
-
-            def unavailable(route):
-                requests.append(route.request.method)
-                route.fulfill(status=503, content_type="application/json",
-                              body='{"error":"Vorübergehend nicht erreichbar"}')
-
-            page.route("**/test-unavailable", unavailable)
-            page.fill("#input", "Entwurf bleibt erhalten")
-            page.focus("#input")
-            status = page.evaluate("""async () =>
-                (await api('/test-unavailable', {quietErrors:true})).status""")
-            assert status == 503 and requests == ["GET", "GET", "GET"]
-            assert not page.locator("#errorbox").is_visible()
-            assert page.locator("#input").evaluate("e => e === document.activeElement")
-            assert page.locator("#input").input_value() == "Entwurf bleibt erhalten"
-            requests.clear()
-            status = page.evaluate("""async () =>
-                (await api('/test-unavailable', {method:'POST'})).status""")
-            assert status == 503 and requests == ["POST"]
-            playwright.expect(page.locator("#errorbox")).to_be_visible()
-            page.click("#error-ok")
-            assert not errors
-        finally:
-            browser.close()

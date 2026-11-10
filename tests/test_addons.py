@@ -9,7 +9,6 @@ gestellt; der echte Behaelter kommt in test_addons_live.py dran.
 from __future__ import annotations
 
 import base64
-import dataclasses
 import json
 import subprocess
 from pathlib import Path
@@ -49,23 +48,20 @@ def _mock(antworten: dict[str, Any], gefragt: list[httpx.Request]) -> httpx.Clie
 
 
 def test_the_catalogue_has_what_was_asked_for_plus_suggestions() -> None:
-    for gewuenscht in ("github", "whatsapp", "signal", "blender"):
-        assert gewuenscht in addons.CATALOG
+    assert "github" in addons.CATALOG
+    # 16.0.1 (Aquaticy-Test): WhatsApp, Signal und Blender brauchten die virtual machine.
+    for weg in ("whatsapp", "signal", "blender"):
+        assert weg not in addons.CATALOG and weg in addons.RETIRED
     vorschlaege = [a for a in addons.CATALOG.values() if a.vorschlag]
     assert len(vorschlaege) >= 2
     for addon in addons.CATALOG.values():
-
-        assert addon.login in {"token", "qr", "keine", "feeds", "apikey"}, addon.id
+        assert addon.login in {"token", "keine", "feeds", "apikey"}, addon.id
         assert addon.summary and addon.anmelden, addon.id
-        if addon.programm == "webapp":
-            assert addon.adresse.startswith("https://")
-        if addon.login == "qr":
-            assert addon.werkstatt, "QR-Anmeldungen laufen in der virtual machine"
 
 
-def test_signal_says_honestly_that_there_is_no_signal_web() -> None:
-    assert "Signal Web" in addons.CATALOG["signal"].summary
-    assert addons.CATALOG["signal"].programm == "signal"
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_every_addon_has_install_even_without_download(konto: Settings) -> None:
@@ -79,12 +75,9 @@ def test_every_addon_has_install_even_without_download(konto: Settings) -> None:
 # Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
-def test_telegram_web_is_no_longer_an_addon(konto: Settings) -> None:
-    """12.6.6 Luna: Telegram Web wurde auf Wunsch aus den Add-ons genommen."""
-    assert "telegram" not in addons.CATALOG and "telegram" not in addons.MESSENGERS
-    with pytest.raises(addons.AddOnError, match="gibt es nicht"):
-        addons.get("telegram")
-    assert "telegram" not in addons.RIGHTS and "telegram" not in addons.APP_OF
+# 16.0.1 (Aquaticy-Test): 10 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 # 16.0.0 (Aquaticy-Test): test_workshop_addons_only_count_with_the_user_mode entfaellt.
@@ -95,62 +88,9 @@ def test_telegram_web_is_no_longer_an_addon(konto: Settings) -> None:
 # Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
-def test_accounts_never_share_volumes(tmp_path: Path) -> None:
-    a = Settings(data_dir=tmp_path / "a")
-    b = Settings(data_dir=tmp_path / "b")
-    assert addons.volume_name(a, "whatsapp") != addons.volume_name(b, "whatsapp")
-    from aquaticy.sandbox import ADDON_VOLUME_RE
-
-    assert ADDON_VOLUME_RE.fullmatch(addons.volume_name(a, "_firefox"))
-
-
 def test_switching_needs_an_install(konto: Settings) -> None:
     with pytest.raises(addons.AddOnError, match="nicht installiert"):
         addons.set_enabled(konto, "wetter", True, pro=True)
-
-
-def test_uninstall_removes_state_token_and_volumes(
-    konto: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from aquaticy import sandbox as werkstatt
-
-    geloescht: list[str] = []
-    monkeypatch.setattr(werkstatt, "find_runtime", lambda: SimpleNamespace(binary="docker"))
-    monkeypatch.setattr(werkstatt, "remove_addon_volume",
-                        lambda runtime, volume: geloescht.append(volume) or True)
-    _pro(konto)
-    addons._update(konto, "whatsapp", installed=True, enabled=True)
-    addons._update(konto, addons.FIREFOX, installed=True)
-    addons.uninstall(konto, "whatsapp")
-    assert addons.volume_name(konto, "whatsapp") in geloescht
-    firefox = addons.volume_name(konto, addons.FIREFOX)
-    assert firefox in geloescht, "letzte Web-App nimmt Firefox mit"
-    assert addons.load_state(konto) == {}
-
-    addons.install(konto, "github", pro=True)
-    addons._write_secret(konto, addons.GITHUB_TOKEN_KEY, "ghp_" + "a" * 36)
-    addons.uninstall(konto, "github")
-    assert f"{addons.GITHUB_TOKEN_KEY}=\n" in konto.env_path.read_text()
-    assert addons.github_token(konto) == ""
-
-
-def test_firefox_stays_while_another_web_app_needs_it(
-    konto: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from aquaticy import sandbox as werkstatt
-
-    geloescht: list[str] = []
-    monkeypatch.setattr(werkstatt, "find_runtime", lambda: SimpleNamespace(binary="docker"))
-    monkeypatch.setattr(werkstatt, "remove_addon_volume",
-                        lambda runtime, volume: geloescht.append(volume) or True)
-
-    monkeypatch.setitem(addons.CATALOG, "zweite",
-                        dataclasses.replace(addons.CATALOG["whatsapp"], id="zweite",
-                                            name="Zweite"))
-    for addon_id in ("whatsapp", "zweite"):
-        addons._update(konto, addon_id, installed=True, enabled=True)
-    addons.uninstall(konto, "whatsapp")
-    assert addons.volume_name(konto, addons.FIREFOX) not in geloescht
 
 
 def test_the_browser_view_carries_no_secret(konto: Settings) -> None:
@@ -436,10 +376,10 @@ def test_tools_exist_only_for_switched_on_addons(konto: Settings) -> None:
     addons.install(konto, "github", pro=False)
     assert namen() == [], "ohne Anmeldung kein GitHub-Werkzeug"
     konto.github_token = "ghp_" + "a" * 36
-    # Seit 15.0.0 darf GitHub ab Werk auch aendern (jeder Schritt mit Rueckfrage).
-    assert namen() == ["github", "github_write"]
-    addons.set_rights(konto, "github", {"inhalte": "ja"})
-    assert namen() == ["github"], "nur lesen: kein Schreibwerkzeug"
+    # 16.0.1 (Aquaticy-Test): GitHub liest nur -- Aendern brauchte die virtual machine.
+    assert namen() == ["github"]
+    addons.set_rights(konto, "github", {"inhalte": "nein"})
+    assert namen() == ["github"], "die Uebersicht bleibt"
     addons.install(konto, "wetter", pro=False)
     addons.install(konto, "feeds", pro=False)
     assert namen() == ["github", "weather"], "ohne eingetragene Feeds kein Feed-Werkzeug"
@@ -457,8 +397,9 @@ def test_the_prompt_names_only_active_addons(konto: Settings) -> None:
     assert addons.prompt_for(konto) == ""
     addons.install(konto, "wetter", pro=False)
     text = addons.prompt_for(konto)
-    assert "Wetter" in text and "nur nach ausdruecklichem" in text
-    assert "WhatsApp Web" not in text.split("\n")[1]
+    # 16.0.1 (Aquaticy-Test): keine Messenger mehr -- GitHub liest nur.
+    assert "Wetter" in text and "Aendern geht nicht" in text
+    assert "WhatsApp" not in text
 
 
 def test_the_toolbox_refuses_switched_off_addons(konto: Settings) -> None:
@@ -483,24 +424,6 @@ def test_the_chat_cannot_switch_addons(name: str) -> None:
     assert refusal(name), name
 
 
-def test_the_helper_and_the_host_agree_on_the_addon_apps() -> None:
-    import importlib.machinery
-    import importlib.util
-
-    from aquaticy import desktop
-
-    loader = importlib.machinery.SourceFileLoader(
-        "aquaticy_desktop_helfer_addons",
-        str(Path(__file__).resolve().parent.parent / "docker" / "desktop" / "aquaticy-desktop"),
-    )
-    spec = importlib.util.spec_from_loader(loader.name, loader)
-    assert spec is not None
-    helfer = importlib.util.module_from_spec(spec)
-    loader.exec_module(helfer)
-    assert set(desktop.ADDON_APPS) == {name for name, befehl in helfer.APPS.items() if not befehl}
-    assert set(addons.APP_OF.values()) == set(desktop.ADDON_APPS)
-
-
 def _sitzung(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plan: str,
              user_mode: bool = True) -> Any:
     from aquaticy import web
@@ -513,22 +436,6 @@ def _sitzung(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plan: str,
         (profil / ".env").write_text("AQUATICY_VM_USER_MODE=true\n", encoding="utf-8")
     monkeypatch.setattr(web, "SESSION", sitzung)
     return sitzung
-
-
-def test_normal_accounts_can_use_the_addons_without_workshop(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from aquaticy import web
-
-    _sitzung(tmp_path, monkeypatch, "normal")
-    antwort, status = web.addon_action({"action": "install", "id": "wetter"})
-    assert status == 200 and "wetter" in antwort["active"]
-    antwort, status = web.addon_action({"action": "install", "id": "whatsapp"})
-    assert status == 400 and "nicht mehr" in antwort["error"]  # 16.0.0: ohne VM
-    antwort, status = web.addon_action({"action": "disable", "id": "wetter"})
-    assert status == 200 and antwort["active"] == []
-    antwort, status = web.addon_action({"action": "uninstall", "id": "wetter"})
-    assert status == 200 and not any(a["installed"] for a in antwort["addons"])
 
 
 def test_unknown_actions_and_addons_are_refused(
@@ -570,16 +477,6 @@ def test_the_token_goes_in_but_never_comes_back(
 # Grund: Add-ons in der virtual machine (WhatsApp, Signal, Blender) sind geloescht
 
 
-def test_a_busy_session_keeps_its_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy import web
-
-    sitzung = _sitzung(tmp_path, monkeypatch, "pro")
-    addons._update(sitzung.settings(), "blender", installed=True, enabled=True)
-    monkeypatch.setattr(sitzung, "busy", lambda: True)
-    _, status = web.addon_action({"action": "disable", "id": "blender"})
-    assert status == 409 and addons.load_state(sitzung.settings())["blender"]["enabled"]
-
-
 class FakeVm:
     alive = True
     user_mode = True
@@ -593,86 +490,6 @@ class FakeVm:
         return subprocess.CompletedProcess(args, 0, b"{}", b"")
 
 
-def test_the_human_types_directly_into_the_workshop(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from aquaticy import sandbox as werkstatt
-    from aquaticy import web
-
-    _sitzung(tmp_path, monkeypatch, "ultra")
-    box = FakeVm()
-    monkeypatch.setattr(werkstatt, "shared", lambda settings: box)
-    assert web.workshop_input({"art": "click", "x": 640, "y": 400, "double": True})[1] == 200
-    passwort = "Geheim!Passwort-123 äöü"
-    assert web.workshop_input({"art": "type", "text": passwort})[1] == 200
-    assert web.workshop_input({"art": "key", "key": "Return"})[1] == 200
-    assert box.aufrufe == [
-        (("click", "640", "400", "--double"), None, False),
-        (("type",), passwort.encode(), False),
-        (("key", "Return"), None, False),
-    ], "nur an die laufende virtual machine, nichts startet"
-
-    for datei in (tmp_path / "konto-pro").rglob("*"):
-        if datei.is_file():
-            assert passwort.encode() not in datei.read_bytes(), datei
-
-
-@pytest.mark.parametrize(
-    "eingabe",
-    [
-        {"art": "click", "x": 5000, "y": 1}, {"art": "click", "x": "a", "y": 1},
-        {"art": "key", "key": "ctrl+alt+Delete"}, {"art": "key", "key": "Return; rm"},
-        {"art": "type", "text": ""}, {"art": "type", "text": "x" * 1001},
-        {"art": "shell", "text": "ls"}, {"art": "open", "url": "file:///etc/passwd"},
-        {"art": "open", "url": "javascript:alert(1)"},
-    ],
-)
-def test_wrong_input_never_reaches_the_workshop(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, eingabe: dict[str, Any]
-) -> None:
-    from aquaticy import sandbox as werkstatt
-    from aquaticy import web
-
-    _sitzung(tmp_path, monkeypatch, "ultra")
-    box = FakeVm()
-    monkeypatch.setattr(werkstatt, "shared", lambda settings: box)
-    assert web.workshop_input(eingabe)[1] == 400
-    assert box.aufrufe == []
-
-
-def test_direct_input_is_ultra_and_user_mode_only(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from aquaticy import sandbox as werkstatt
-    from aquaticy import web
-
-    box = FakeVm()
-    monkeypatch.setattr(werkstatt, "shared", lambda settings: box)
-    _sitzung(tmp_path, monkeypatch, "normal")
-    assert web.workshop_input({"art": "key", "key": "Return"})[1] == 403
-
-    _sitzung(tmp_path, monkeypatch, "pro")
-    assert web.workshop_input({"art": "key", "key": "Return"})[1] == 403
-    _sitzung(tmp_path, monkeypatch, "ultra", user_mode=False)
-    assert web.workshop_input({"art": "key", "key": "Return"})[1] == 400
-    assert box.aufrufe == []
-
-
-def test_opening_a_page_is_the_one_input_that_may_start_the_workshop(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from aquaticy import sandbox as werkstatt
-    from aquaticy import web
-
-    _sitzung(tmp_path, monkeypatch, "ultra")
-    box = FakeVm()
-    box.alive = False
-    monkeypatch.setattr(werkstatt, "shared", lambda settings: box)
-    assert web.workshop_input({"art": "key", "key": "Return"})[1] == 404
-    assert web.workshop_input({"art": "open", "url": "https://github.com/login"})[1] == 200
-    assert box.aufrufe == [(("open", "browser", "https://github.com/login"), None, True)]
-
-
 def test_the_ui_has_the_addon_window_and_login_apps() -> None:
     from aquaticy import web
 
@@ -684,22 +501,6 @@ def test_the_ui_has_the_addon_window_and_login_apps() -> None:
     for weg in ('id="btn-loginapps"', 'id="screenbox"', "/api/werkstatt/eingabe",
                 'id="usermode"'):
         assert weg not in html, weg
-
-
-def test_the_login_screen_asks_quietly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ohne virtual machine: 204 statt 404 -- sonst fuellt das Nachfragen die Konsole."""
-    from aquaticy import sandbox as werkstatt
-    from aquaticy import web
-    from tests.test_desktop import _hole
-
-    sitzung = web.ChatSession()
-    sitzung._settings = Settings(data_dir=tmp_path / "d", vm_user_mode=True)
-    monkeypatch.setattr(web, "SESSION", sitzung)
-    box = FakeVm()
-    box.alive = False
-    monkeypatch.setattr(werkstatt, "shared", lambda settings: box)
-    assert _hole("/api/werkstatt/bildschirm?leise=1&t=1", sitzung)[0] == 204
-    assert _hole("/api/werkstatt/bildschirm", sitzung)[0] == 404
 
 
 def test_github_survives_unexpected_answers() -> None:

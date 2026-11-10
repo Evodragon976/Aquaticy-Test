@@ -44,7 +44,6 @@ def _antwort(text: str = "ok") -> SimpleNamespace:
         message=SimpleNamespace(content=text, tool_calls=None))])
 
 
-
 @pytest.fixture
 def knapp(tmp_path: Path) -> Settings:
     settings = Settings(model="mistral/mistral-large-latest", data_dir=tmp_path / "d",
@@ -102,7 +101,6 @@ def test_all_model_calls_go_through_the_meter() -> None:
     """Kein Aufruf am Zaehler vorbei: ausser im Hauptagenten (der zaehlt selbst)
     ruft niemand litellm.completion direkt."""
     import re
-
 
 
     aufruf = re.compile(r"(=|return)\s*(litellm|llmcall)\.completion\(")
@@ -172,7 +170,6 @@ def test_removed_image_tool_cannot_consume_quota_or_create_files(
         assert not (knapp.data_dir / "media").exists()
     finally:
         box.close()
-
 
 
 def _profil(tmp_path: Path, env: str = "") -> Path:
@@ -254,7 +251,6 @@ def test_the_probe_never_hands_the_servers_key_to_a_typed_address(
     assert gesehen[1][2] != "https://fremd.example/v1", "pro: die eingetippte Adresse zaehlt nicht"
 
 
-
     _sitzung(tmp_path, monkeypatch, "ultra")
     handler._probe({"AQUATICY_MODEL": "mistral/mistral-large-latest",
                     "AQUATICY_API_BASE": "https://fremd.example/v1", "__API_KEY__": "eigener"})
@@ -279,7 +275,6 @@ def test_a_chat_setting_stays_in_the_account(tmp_path: Path,
     assert "AQUATICY_SEARCH_VARIANTS=2" in (profil / ".env").read_text()
     assert server_env.read_text() == "AQUATICY_SEARCH_VARIANTS=3\n", "der Server bleibt unberuehrt"
     assert os.environ.get("AQUATICY_SEARCH_VARIANTS") != "2", "und die Umgebung des Servers auch"
-
 
 
 @pytest.fixture
@@ -351,60 +346,9 @@ def test_odd_plans_never_become_pro(server: int, plan: Any) -> None:
     assert status == 400 or daten["account"]["plan"] == "normal"
 
 
-@pytest.mark.parametrize(
-    ("pfad", "body"),
-    [
-        ("/api/config", {"AQUATICY_VM_USER_MODE": "true"}),
-        ("/api/config", {"AQUATICY_LEGAL_GUARD": "false"}),
-        ("/api/config", {"AQUATICY_VM_SIZE": "plus"}),
-        ("/api/config", {"AQUATICY_LAN_ENABLED": "true"}),
-        ("/api/config", {"AQUATICY_HA_URL": "http://homeassistant.local:8123"}),
-        ("/api/config", {"AQUATICY_STORAGE_ACCESS": "write"}),
-        ("/api/config", {"AQUATICY_API_BASE": "http://192.168.1.1"}),
-        ("/api/addons", {"action": "install", "id": "whatsapp"}),
-        ("/api/addons", {"action": "install", "id": "blender"}),
-        ("/api/ha", {"url": "http://192.168.1.2:8123"}),
-        ("/api/storage", {"url": "http://192.168.1.3"}),
-        ("/api/werkstatt/eingabe", {"art": "key", "key": "Return"}),
-    ],
-)
-def test_pro_locks_hold_over_http(server: int, pfad: str, body: dict[str, Any]) -> None:
-    cookie = _konto(server)
-    status, _, daten = _anfrage(server, "POST", pfad, body, cookie)
-    assert status in (400, 403), (pfad, status, daten)
-    status, _, werte = _anfrage(server, "GET", "/api/config", None, cookie)
-    werte = werte["values"]
-    assert werte["AQUATICY_VM_USER_MODE"] == "false" and werte["AQUATICY_LEGAL_GUARD"] == "true"
-    assert werte["AQUATICY_VM_SIZE"] == "normal" and werte["AQUATICY_LAN_ENABLED"] == "false"
-
-
-def test_the_pro_system_view_stays_closed(server: int) -> None:
-    cookie = _konto(server)
-    assert _anfrage(server, "GET", "/api/system", None, cookie)[0] == 403
-
-
-def test_a_pro_account_does_not_see_the_load_either(server: int) -> None:
-    """Seit 9.5.21 nur Ultra -- auch ein echtes Pro-Konto bekommt 403."""
-    cookie = _konto(server, "pro", "PRO234567")
-    status, _, daten = _anfrage(server, "GET", "/api/system", None, cookie)
-    assert status == 403 and "cpu" not in daten
-
-
-def test_accounts_cannot_see_each_other(server: int) -> None:
-    eins, zwei = _konto(server), _konto(server)
-    _anfrage(
-        server,
-        "POST",
-        "/api/coworkers",
-        {
-            "action": "create",
-            "goal": "Wetter Bremen",
-            "schedule": {"rhythm": "daily", "kind": "research"},
-        },
-        eins,
-    )
-    assert _anfrage(server, "GET", "/api/coworkers", None, zwei)[2]["coworkers"] == []
-    assert _anfrage(server, "GET", "/api/chatexport?session_id=abc", None, zwei)[0] == 404
+# 16.0.1 (Aquaticy-Test): 4 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def _roh(port: int, anfrage: bytes) -> str:
@@ -449,7 +393,6 @@ def test_normal_accounts_cannot_blow_up_the_local_model(tmp_path: Path) -> None:
     assert web._profile_settings(profil, "pro").context_tokens <= max(
         web.get_settings().context_tokens, web.NORMAL_CONTEXT_CAP)
     assert web._profile_settings(profil, "ultra").context_tokens == 2_000_000
-
 
 
 def _mit_kopf(port: int, method: str, path: str, body: Any = None,

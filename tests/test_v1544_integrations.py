@@ -2,42 +2,13 @@
 
 from pathlib import Path
 
-import httpx
 import pytest
 
-from aquaticy import media, router, storage, system
+from aquaticy import media, router, system
 
-
-@pytest.mark.parametrize('quantity', [1.5, True, -1])
-def test_i01_invalid_inventory_numbers_never_change_stock(quantity):
-    calls = []
-    def handle(request):
-        calls.append(request)
-        return httpx.Response(201, json={'id': 1})
-    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
-        client = storage.Storage('http://inventory.local', 'write', client=http)
-        with pytest.raises(storage.StorageError):
-            client.add_item(1, 'Screws', quantity)
-    assert calls == []
-
-
-def test_inventory_ids_are_not_silently_truncated():
-    calls = []
-    with httpx.Client(transport=httpx.MockTransport(lambda request:
-            calls.append(request) or httpx.Response(200, json={'id': 1}))) as http:
-        client = storage.Storage('http://inventory.local', 'write', client=http)
-        with pytest.raises(storage.StorageError):
-            client.update_item(1.5, quantity=5)
-    assert calls == []
-
-
-@pytest.mark.parametrize('payload', [[], None, {}, {'error': 'rejected'}])
-def test_i02_invalid_inventory_write_responses_are_not_reported_as_success(payload):
-    with httpx.Client(transport=httpx.MockTransport(lambda request:
-            httpx.Response(201, json=payload))) as http:
-        client = storage.Storage('http://inventory.local', 'write', client=http)
-        with pytest.raises(storage.StorageError):
-            client.add_room('Office')
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 @pytest.mark.parametrize('kind', ['file', 'directory'])

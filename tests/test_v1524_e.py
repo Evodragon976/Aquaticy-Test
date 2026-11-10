@@ -10,7 +10,6 @@ import pytest
 from aquaticy import (
     addons,
     auth,
-    bridge,
     devices,
     google,
     jsonutil,
@@ -25,7 +24,6 @@ from aquaticy import (
     usage,
 )
 from aquaticy.agent import Agent
-from aquaticy.tools import Toolbox
 from tests.stream_helpers import get_stream
 
 
@@ -98,19 +96,14 @@ def test_f086_network_json_rejects_nonstandard_nonfinite_literals(text):
         jsonutil.raw_decode(text)
 
 
-def test_f087_storage_tool_calls_can_create_zero_stock(settings, monkeypatch):
-    box = Toolbox(settings)
-    monkeypatch.setattr(box, 'storage_add', lambda **kw: kw)
-    try:
-        assert box._call('storage_add', {'name': 'Spare part', 'furniture_id': 1,
-                                         'quantity': 0})['quantity'] == 0
-    finally:
-        box.close()
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
-def test_f088_plain_messenger_text_keeps_literal_multiplication_operators():
-    text = bridge.to_chat_text('Das Ergebnis ist 2*3=6. **Richtig.**')
-    assert '2*3=6' in text and '**' not in text
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_f089_models_are_not_hidden_before_their_announced_deprecation_date():

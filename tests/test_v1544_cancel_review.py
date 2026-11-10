@@ -226,30 +226,9 @@ def test_c06_prefetched_news_is_cancellable_too(settings, monkeypatch):
     assert not errors
 
 
-def test_r01_review_vm_has_no_network_or_messenger_volumes(settings):
-    settings.vm_user_mode = True
-    settings.vm_internet = True
-    settings.vm_lan = True
-    box = Toolbox(settings)
-    box.review_mode = True
-    review = box._sandbox()
-    assert not review.user_mode and not review.internet and not review.lan
-    assert not review.addon_mounts
-    box.close()
-
-
-def test_r02_review_execution_limit_and_timeout_are_enforced(settings):
-    box = Toolbox(settings)
-    box.review_mode = True
-    calls = []
-    fake = SimpleNamespace(run=lambda *args, **kwargs: calls.append((args, kwargs)) or
-                           SimpleNamespace(as_dict=lambda: {'exit_code': 0}))
-    box._review_box = fake
-    box._sandbox_box = fake
-    for _ in range(5):
-        assert not box.vm_run('python3 test.py', timeout=3600).get('error')
-    assert box.vm_run('python3 test.py', timeout=3600).get('error')
-    assert len(calls) == 5 and all(c[1]['timeout'] <= 20 for c in calls)
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 @pytest.mark.parametrize('number', ['NaN', 'Infinity', '-Infinity'])

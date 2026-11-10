@@ -5,13 +5,11 @@ from __future__ import annotations
 import pytest
 
 from aquaticy.auth import (
-    Account,
     AuthStore,
     RateLimiter,
     new_pro_code,
     pro_code_for,
 )
-from aquaticy.web import ChatSession
 
 TERMS = {"terms_accepted": True, "terms_version": "test"}
 
@@ -145,23 +143,20 @@ def test_rate_limiter_opens_again_after_window(monkeypatch: pytest.MonkeyPatch) 
     assert limiter.allow("client")
 
 
-def test_normal_profile_cannot_enable_pro_integrations(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("AQUATICY_DATA_DIR", str(tmp_path / "base"))
-    profile = tmp_path / "normal"
-    profile.mkdir()
-    (profile / ".env").write_text(
-        "AQUATICY_LAN_ENABLED=true\n"
-        "AQUATICY_HA_URL=http://homeassistant:8123\n"
-        "HA_TOKEN=secret\n"
-        "AQUATICY_STORAGE_URL=http://lager:3000\n"
-        "AQUATICY_STORAGE_ACCESS=write\n"
-        "AQUATICY_VM_SIZE=plus\n",
-        encoding="utf-8",
-    )
-    account = Account("u1", "a@example.org", "normal", 0)
-    settings = ChatSession(account, profile).settings()
-    assert settings.lan_enabled is False
-    assert settings.ha_url == "" and settings.ha_token == ""
-    assert settings.storage_url == "" and settings.storage_access == "off"
-    assert settings.vm_size == "normal"
-    assert (settings.vm_cpus, settings.vm_memory_mb, settings.vm_disk_gb) == (2, 3072, 4)
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
+
+
+def test_an_old_single_account_logs_in_by_username_in_the_account_system(tmp_path) -> None:
+    """16.0.1 (Aquaticy-Test): Ein Einzelkonto hat nur eine interne Adresse -- der Name reicht."""
+    ultra = "Ab3-defghijklm"
+    alt = AuthStore(tmp_path, "PRO123456", ultra_code=ultra, single=True)
+    konto = alt.register("", "eine sehr lange Passphrase", "ultra", ultra, username="Louis")
+    neu = AuthStore(tmp_path, "PRO123456", ultra_code=ultra, single=False)
+    assert neu.login("louis", "eine sehr lange Passphrase") == konto
+    assert neu.login(" Louis ", "eine sehr lange Passphrase") == konto
+    assert neu.login("Louis", "falsch und trotzdem lang genug") is None
+    assert neu.login("niemand", "eine sehr lange Passphrase") is None
+    assert neu.login(konto.email, "eine sehr lange Passphrase") == konto
+    assert neu.login_key("LOUIS") == neu.login_key(konto.email.upper()) == konto.email

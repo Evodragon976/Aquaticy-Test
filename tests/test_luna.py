@@ -24,7 +24,6 @@ def test_version_label() -> None:
     assert aquaticy.VERSION_LABEL == LABEL
 
 
-
 @pytest.fixture
 def betreiber(settings, monkeypatch):
     """Der Betreiber hat Home Assistant eingerichtet."""
@@ -35,40 +34,9 @@ def betreiber(settings, monkeypatch):
     return base
 
 
-def test_an_account_never_inherits_the_operators_ha_token(betreiber, tmp_path: Path) -> None:
-    profil = tmp_path / "konto"
-    profil.mkdir()
-    konto = web._profile_settings(profil, "ultra")
-    assert konto.ha_token == "" and konto.ha_url == ""
-
-    (profil / ".env").write_text("AQUATICY_HA_URL=http://angreifer.example:8123\n")
-    konto = web._profile_settings(profil, "ultra")
-    assert konto.ha_url == "http://angreifer.example:8123" and konto.ha_token == ""
-
-
-def test_a_ha_token_only_goes_to_its_own_address(betreiber, tmp_path: Path) -> None:
-    profil = tmp_path / "konto"
-    profil.mkdir()
-    tresor = web.account_vault(profil)
-    tresor.set_secret("HA_TOKEN", "eigener-token-12345")
-    tresor.set_secret("HA_TOKEN_URL", "http://ha.local:8123")
-    (profil / ".env").write_text("AQUATICY_HA_URL=ha.local\n")
-    assert web._profile_settings(profil, "ultra").ha_token == "eigener-token-12345"
-    (profil / ".env").write_text("AQUATICY_HA_URL=http://anders.example:8123\n")
-    assert web._profile_settings(profil, "ultra").ha_token == ""
-
-
-def test_an_old_ha_token_is_bound_once_to_the_current_address(betreiber, tmp_path: Path) -> None:
-    profil = tmp_path / "konto"
-    profil.mkdir()
-    tresor = web.account_vault(profil)
-    tresor.set_secret("HA_TOKEN", "alter-token-123456")
-    (profil / ".env").write_text("AQUATICY_HA_URL=http://ha.local:8123\n")
-    assert web._profile_settings(profil, "ultra").ha_token == "alter-token-123456"
-    assert tresor.secret("HA_TOKEN_URL") == "http://ha.local:8123"
-    (profil / ".env").write_text("AQUATICY_HA_URL=http://anders.example:8123\n")
-    assert web._profile_settings(profil, "ultra").ha_token == ""
-
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_a_flow_state_needs_its_browser() -> None:
@@ -169,7 +137,6 @@ def test_the_flow_cookie_is_lax_short_and_only_for_the_return() -> None:
     assert "HttpOnly; SameSite=Strict{secure}" in quelle
 
 
-
 def test_the_backup_model_follows_the_active_provider(settings, monkeypatch) -> None:
     """Hauptmodell Mistral, im Code-Modus antwortet NVIDIA: Ersatz von NVIDIA."""
     from aquaticy.agent import Agent
@@ -186,12 +153,10 @@ def test_the_backup_model_follows_the_active_provider(settings, monkeypatch) -> 
     agent.close()
 
 
-
 def test_a_stream_without_done_is_treated_as_broken() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
     assert 'if (!completed) throw new TypeError("Verbindung abgebrochen");' in html
     assert "if (!completed && answer) renderer.flush();" not in html
-
 
 
 def test_a_second_server_on_the_same_data_is_refused(tmp_path: Path) -> None:
@@ -217,7 +182,6 @@ def test_the_cli_does_not_restart_a_second_server(monkeypatch) -> None:
     ergebnis = CliRunner().invoke(cli.app, ["web", "--no-open"])
     assert ergebnis.exit_code == 1 and aufrufe == [1]
     assert "schon" in ergebnis.output
-
 
 
 def test_the_phone_gets_its_own_header_and_full_screen_windows() -> None:

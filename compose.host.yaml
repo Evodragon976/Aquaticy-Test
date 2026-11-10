@@ -1,6 +1,0 @@
-
-
-
-services:
-  aquaticy:
-    network_mode: host

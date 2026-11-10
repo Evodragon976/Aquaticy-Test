@@ -3,7 +3,6 @@
 import pytest
 
 from aquaticy.agent import GERMAN_ORTHOGRAPHY_PROMPT, Agent
-from aquaticy.bridge import bridge_agent_class, to_chat_text
 from tests.test_agent import ScriptedLLM, _message, _stream
 
 
@@ -21,15 +20,9 @@ def test_german_rule_reaches_every_mode_and_language_switch(settings, mode):
         agent.close()
 
 
-def test_messenger_inherits_german_rule_and_preserves_umlauts(settings):
-    agent = bridge_agent_class()(settings, frozenset({"calculate"}), "Messenger")
-    try:
-        assert GERMAN_ORTHOGRAPHY_PROMPT in agent.messages[0]["content"]
-        for wide in (False, True):
-            assert "Übung öffnen für größere Bäume" in to_chat_text(
-                "Übung öffnen für größere Bäume", wide=wide)
-    finally:
-        agent.close()
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 @pytest.mark.parametrize("stream", [False, True])

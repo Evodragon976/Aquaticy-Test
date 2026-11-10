@@ -1,52 +1,19 @@
 """15.4.5: Profiluebertragung und Konfigurationsdateien bleiben vollstaendig."""
 
-import base64
 import contextlib
 import os
-import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
-from aquaticy import budget, cluster, config, web
+from aquaticy import budget, config, web
 from aquaticy.memory import Memory
 
-
-@pytest.mark.parametrize('response', [{}, {'files': None}, {'files': []}, {'files': False}])
-def test_f047_a_missing_profile_manifest_never_means_delete_the_local_profile(
-        tmp_path, monkeypatch, response):
-    node = cluster.Cluster(tmp_path)
-    user = 'a' * 32
-    folder = node._user_dir(user)
-    folder.mkdir(parents=True)
-    target = folder / 'keep.txt'
-    target.write_bytes(b'Keep this private information')
-    monkeypatch.setattr(node, 'call', lambda *args, **kwargs: response)
-    with pytest.raises(cluster.ClusterError):
-        node.sync_user(user, 'remote')
-    assert target.read_bytes() == b'Keep this private information'
-
-
-@pytest.mark.parametrize('direction', ['file-to-directory', 'directory-to-file'])
-def test_f048_profile_sync_handles_a_legitimate_file_directory_replacement(
-        tmp_path, monkeypatch, direction):
-    node = cluster.Cluster(tmp_path)
-    user = 'a' * 32
-    folder = node._user_dir(user)
-    folder.mkdir(parents=True)
-    if direction == 'file-to-directory':
-        (folder / 'entry').write_bytes(b'Previous file')
-        relative = 'entry/new.txt'
-    else:
-        (folder / 'entry').mkdir()
-        (folder / 'entry' / 'previous.txt').write_bytes(b'Previous child')
-        relative = 'entry'
-    monkeypatch.setattr(node, 'call', lambda *args, **kwargs: {'files': {relative: '3:1'}})
-    monkeypatch.setattr(node, '_fetch', lambda *args, **kwargs: b'New')
-    node.sync_user(user, 'remote')
-    assert (folder / relative).read_bytes() == b'New'
+# 16.0.1 (Aquaticy-Test): 8 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_f049_local_speech_model_weights_do_not_exhaust_the_personal_storage_budget(settings):
@@ -58,27 +25,6 @@ def test_f049_local_speech_model_weights_do_not_exhaust_the_personal_storage_bud
     memory.remember('A small personal note.')
     assert budget.used_bytes(settings.data_dir, fresh=True) < 1_000_000
     assert model.stat().st_size == budget.MAX_BYTES + 1
-
-
-@pytest.mark.parametrize('response', [
-    {'data': '', 'eof': False},
-    {'data': base64.b64encode(b'ab').decode(), 'eof': 'false'},
-    {'data': base64.b64encode(b'ab').decode(), 'eof': True},
-])
-def test_f050_cluster_file_chunks_cannot_silently_end_before_the_announced_file(
-        tmp_path, monkeypatch, response):
-    node = cluster.Cluster(tmp_path)
-    monkeypatch.setattr(node, 'call', lambda *args, **kwargs: response)
-    with pytest.raises(cluster.ClusterError):
-        node._fetch('remote', {'user': 'a' * 32, 'rel': 'note.txt', 'sig': '4:1'})
-
-
-def test_f051_cluster_transfers_cannot_grow_past_the_announced_file_size(tmp_path, monkeypatch):
-    node = cluster.Cluster(tmp_path)
-    monkeypatch.setattr(node, 'call', lambda *args, **kwargs: {
-        'data': base64.b64encode(b'Too much').decode(), 'eof': True})
-    with pytest.raises(cluster.ClusterError):
-        node._fetch('remote', {'user': 'a' * 32, 'rel': 'note.txt', 'sig': '2:1'})
 
 
 def test_f052_parallel_setting_updates_preserve_both_changes(tmp_path, monkeypatch):
@@ -150,78 +96,3 @@ def test_utf8_bom_env_files_keep_the_first_setting(tmp_path, monkeypatch):
     assert os.environ.get('AQUATICY_LOCATION') == 'Bremen'
 
 
-@pytest.mark.skipif(os.name != 'posix', reason='POSIX-Dateirechte')
-def test_f056_cluster_database_snapshots_keep_private_file_permissions(tmp_path):
-    source = tmp_path / 'source.db'
-    with sqlite3.connect(source) as connection:
-        connection.execute('CREATE TABLE info (text TEXT)')
-    previous = os.umask(0o022)
-    try:
-        target = tmp_path / 'snapshot.db'
-        cluster.snapshot_sqlite(source, target)
-    finally:
-        os.umask(previous)
-    assert target.stat().st_mode & 0o077 == 0
-
-
-def test_f057_failed_database_snapshot_does_not_destroy_the_previous_copy(tmp_path, monkeypatch):
-    source, target = tmp_path / 'source.db', tmp_path / 'snapshot.db'
-    with sqlite3.connect(source) as connection:
-        connection.execute('CREATE TABLE info (text TEXT)')
-    target.write_bytes(b'Previous valid backup')
-    connect = cluster.sqlite3.connect
-
-    def failure(path, *args, **kwargs):
-        if Path(path) == source:
-            raise sqlite3.OperationalError('database temporarily unavailable')
-        return connect(path, *args, **kwargs)
-
-    monkeypatch.setattr(cluster.sqlite3, 'connect', failure)
-    with pytest.raises(sqlite3.OperationalError):
-        cluster.snapshot_sqlite(source, target)
-    assert target.read_bytes() == b'Previous valid backup'
-
-
-@pytest.mark.parametrize('directory_first', [True, False])
-def test_failed_file_directory_replacement_restores_the_original_data(
-        tmp_path, monkeypatch, directory_first):
-    node = cluster.Cluster(tmp_path)
-    user = 'a' * 32
-    folder = node._user_dir(user)
-    folder.mkdir(parents=True)
-    original = folder / 'entry' / 'previous.txt' if directory_first else folder / 'entry'
-    original.parent.mkdir(parents=True, exist_ok=True)
-    original.write_bytes(b'Original personal data')
-    relative = 'entry' if directory_first else 'entry/new.txt'
-    monkeypatch.setattr(node, 'call', lambda *args, **kwargs: {'files': {relative: '3:1'}})
-    monkeypatch.setattr(node, '_fetch', lambda *args, **kwargs: b'New')
-
-    def failure(*args, **kwargs):
-        raise OSError('disk full')
-
-    monkeypatch.setattr(cluster, 'write_atomic', failure)
-    with pytest.raises(OSError, match='disk full'):
-        node.sync_user(user, 'remote')
-    assert original.read_bytes() == b'Original personal data'
-    assert not list(folder.rglob('.sync-*'))
-
-
-def test_profile_sync_preserves_files_with_valid_pre_epoch_timestamps(tmp_path, monkeypatch):
-    source = cluster.Cluster(tmp_path / 'source')
-    destination = cluster.Cluster(tmp_path / 'destination')
-    user = 'a' * 32
-    folder = source._user_dir(user)
-    folder.mkdir(parents=True)
-    original = folder / 'old-note.txt'
-    original.write_bytes(b'Historical note')
-    os.utime(original, (-86400, -86400))
-
-    def request(node, operation, args, **kwargs):
-        if operation == 'manifest':
-            return {'files': cluster.manifest(folder)}
-        assert operation == 'file'
-        return source._serve_file(args)
-
-    monkeypatch.setattr(destination, 'call', request)
-    destination.sync_user(user, 'remote')
-    assert (destination._user_dir(user) / original.name).read_bytes() == b'Historical note'

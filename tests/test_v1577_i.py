@@ -1,21 +1,15 @@
 """15.7.7: Datenquellen, Review-Snapshots und genaue Aufgabenregeln."""
 
 import base64
-import socket
 
 import httpx
 import pytest
 
-from aquaticy import addons, github_repo, homeassistant, lan, secure_tasks
+from aquaticy import addons, github_repo
 
-
-def test_f075_lan_autodiscovery_never_probes_public_dns_answers(monkeypatch):
-    probes = []
-    monkeypatch.setattr(socket, 'gethostbyname', lambda host: '8.8.8.8')
-    monkeypatch.setattr(lan, 'port_open', lambda address, *a, **kw: probes.append(address) or True)
-    monkeypatch.setattr(lan, 'find_port', lambda *a: [])
-    assert homeassistant.discover() == []
-    assert not probes
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_f076_currency_results_cannot_silently_use_a_different_base(monkeypatch):
@@ -67,14 +61,3 @@ def test_f080_bom_encoded_source_files_can_be_reviewed(encoding):
     assert result.get('text') == source
 
 
-@pytest.mark.parametrize('text', ['Melde dich nicht, wenn ein neues Gerät ins Netz kommt.',
-                                'Do not notify me when a new device joins the network.'])
-def test_f081_negated_notifications_cannot_create_positive_tasks(text):
-    with pytest.raises(ValueError):
-        secure_tasks.parse(text)
-
-
-def test_f082_an_existing_risky_service_is_not_a_new_port_event():
-    task = secure_tasks.parse('Melde dich bei einem neuen Port.')
-    assert not secure_tasks.matches(task, {'kind': 'risk_port', 'port': 21})
-    assert secure_tasks.matches(task, {'kind': 'new_port', 'port': 21})

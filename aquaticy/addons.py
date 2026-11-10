@@ -51,7 +51,6 @@ Chat heraus laesst sich keins installieren, einschalten oder anmelden.
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import json
 import math
 import re
@@ -81,12 +80,6 @@ class AddOn:
     summary: str
 
     login: str
-
-    werkstatt: bool = False
-
-    programm: str = ""
-
-    adresse: str = ""
 
     vorschlag: bool = False
 
@@ -133,40 +126,6 @@ CATALOG: dict[str, AddOn] = {
             "Request und Kommentar braucht dein Ja. Aquaticy pusht nie mit force. Der "
             "Schlüssel bleibt auf diesem Rechner, auch wenn die VM das Repo bearbeitet. Nach "
             "privaten Repo-Inhalten braucht öffentliche Recherche deine Bestätigung.",
-        ),
-        AddOn(
-            "whatsapp", "WhatsApp Web", "💬", "Messenger",
-            "WhatsApp im Browser der virtual machine: Aquaticy kann Chats lesen und Antworten "
-            "vorbereiten. Senden nur nach deinem Ja.",
-            login="qr", werkstatt=True, programm="webapp",
-            adresse="https://web.whatsapp.com/",
-            anmelden="„Anmelden“ zeigt den QR-Code direkt in Aquaticy. Auf dem Handy: "
-            "WhatsApp → Einstellungen → Verknüpfte Geräte → Gerät hinzufügen, dann den "
-            "QR-Code im Anmeldefenster scannen.",
-            hinweis="WhatsApp mag keine Automatisierung. Nutze es nur für dich, nie für "
-            "Massennachrichten, sonst droht eine Sperre. Was Aquaticy liest, geht an dein Modell. "
-            "Braucht Firefox (kommt beim Installieren mit).",
-        ),
-        AddOn(
-            "signal", "Signal", "🔵", "Messenger",
-            "Signal Desktop in der virtual machine (ein „Signal Web“ gibt es nicht): Aquaticy "
-            "liest mit und bereitet Antworten vor. Senden nur nach deinem Ja.",
-            login="qr", werkstatt=True, programm="signal",
-            anmelden="„Anmelden“ zeigt den QR-Code direkt in Aquaticy. Auf dem Handy: Signal → "
-            "Einstellungen → Gekoppelte Geräte → +, dann den QR-Code im Anmeldefenster "
-            "scannen.",
-            hinweis="Signal Desktop gibt es nur für x86_64. Nachrichten, die Aquaticy liest, "
-            "gehen an dein Modell. Signal ist Ende-zu-Ende-verschlüsselt — überleg dir das also "
-            "gut.",
-        ),
-        AddOn(
-            "blender", "Blender", "🧊", "Programme",
-            "Das 3D-Programm von blender.org: mit Oberfläche im Desktop der virtual machine und "
-            "für Skripte (blender_run). Damit baust du Modelle, richtest Szenen ein und renderst.",
-            login="keine", werkstatt=True, programm="blender",
-            anmelden="Keine Anmeldung nötig.",
-            hinweis="Rund 350 MB Download, ausgepackt über 1 GB. Mit der virtual machine in Größe "
-            "„Plus“ läuft es viel ruhiger.",
         ),
         AddOn(
             "wetter", "Wetter", "🌦️", "Dienste",
@@ -284,31 +243,13 @@ class Recht:
     nur_wenn: tuple[str, str] | None = None
 
 
-_MESSENGER_RECHTE = (
-    Recht("zugriff", "Was Aquaticy darf",
-          (("lesen", "Nur lesen"), ("schreiben", "Lesen und schreiben")), "lesen"),
-    Recht("wo", "Schreiben in",
-          (("einzeln", "Nur Einzelchats"), ("alle", "Einzelchats und Gruppen")), "einzeln",
-          nur_wenn=("zugriff", "schreiben")),
-)
-
 RIGHTS: dict[str, tuple[Recht, ...]] = {
     "github": (
         Recht("repos", "Welche Repos",
               (("oeffentlich", "Nur öffentliche"), ("alle", "Auch private")), "alle"),
-        # Seit 15.0.0 auch aendern wie Codex. Jeder Schritt braucht trotzdem dein Ja.
-        # Den Standard-Branch, das Mergen und GitHub Actions macht Aquaticy nie: Das bleibt
-        # beim Menschen auf GitHub (wie bei Codex: Branch und Pull Request).
+        # 16.0.1 (Aquaticy-Test): nur lesen -- Aendern brauchte die virtual machine.
         Recht("inhalte", "Dateien und Änderungen",
-              (("nein", "Nur Übersicht"), ("ja", "Auch Inhalte lesen"),
-               ("aendern", "Lesen und ändern: eigene Branches, Commits, Pull Requests")),
-              "aendern"),
-    ),
-    "whatsapp": _MESSENGER_RECHTE,
-    "signal": _MESSENGER_RECHTE,
-    "blender": (
-        Recht("nutzung", "Blender nutzen",
-              (("skripte", "Nur Skripte"), ("alles", "Skripte und Oberfläche")), "alles"),
+              (("nein", "Nur Übersicht"), ("ja", "Auch Inhalte lesen")), "ja"),
     ),
     "wetter": (
         Recht("orte", "Orte", (("alle", "Jeder Ort"), ("meiner", "Nur mein Ort")), "alle"),
@@ -344,16 +285,9 @@ RIGHTS: dict[str, tuple[Recht, ...]] = {
 }
 
 
-MESSENGERS = ("whatsapp", "signal")
-
-
-OTHER_MESSENGERS = ("telegram",)
-
-
-RETIRED = ("telegram",)
-
-
-STRICTEST = {"zugriff": "lesen", "wo": "einzeln"}
+#: Weggefallene Add-ons: Telegram (12.6.6 Luna), WhatsApp, Signal und Blender (16.0.1,
+#: Aquaticy-Test -- sie brauchten die virtual machine).
+RETIRED = ("telegram", "whatsapp", "signal", "blender")
 
 
 def rights_of(settings: Any, addon_id: str) -> dict[str, str]:
@@ -400,44 +334,6 @@ def rights_text(addon_id: str, rechte: dict[str, str]) -> str:
     return "; ".join(teile)
 
 
-def messenger_of(klasse: str, titel: str) -> str:
-    """Welcher Messenger ist dieses Fenster? "" = keiner.
-
-    Zuerst die Fensterklasse, die das Add-on selbst setzt (Firefox mit
-    --class aquaticy-whatsapp, Signal Desktop). Dann der Titel -- das faengt
-    auch WhatsApp Web im gewoehnlichen Browser.
-    """
-    klasse, titel = (klasse or "").lower(), (titel or "").lower()
-    for name in MESSENGERS:
-        if f"aquaticy-{name}" in klasse:
-            return name
-    if "signal" in klasse:
-        return "signal"
-    for name, merkmal in (("whatsapp", "whatsapp"), ("telegram", "telegram"),
-                          ("signal", "signal")):
-        if merkmal in titel:
-            return name
-    return ""
-
-
-def messenger_rights(settings: Any, name: str) -> dict[str, str]:
-    """Die Rechte fuer ein Messenger-Fenster -- ohne eingeschaltetes Add-on die strengsten."""
-    if name in MESSENGERS and name in active_ids(settings, pro=True):
-        return rights_of(settings, name)
-    return dict(STRICTEST)
-
-
-FIREFOX = "_firefox"
-
-
-MOUNT_ROOT = "/addons"
-
-
-INSTALL_TIMEOUT = 1800
-
-
-INSTALL_SOURCE = ""
-
 MAX_FEEDS = 20
 MAX_FEED_BYTES = 2_000_000
 MAX_FEED_ITEMS = 40
@@ -455,8 +351,6 @@ NAGER = "https://date.nager.at/api/v3/PublicHolidays/{jahr}/{land}"
 STATE_FILE = "addons.json"
 _locks: dict[str, Any] = {}
 _locks_lock = threading.Lock()
-
-_jobs: dict[tuple[str, str], threading.Thread] = {}
 
 
 class AddOnError(ValueError):
@@ -495,7 +389,7 @@ def load_state(settings: Any) -> dict[str, dict[str, Any]]:
     return {
         key: value
         for key, value in addons.items()
-        if (key in CATALOG or key == FIREFOX) and isinstance(value, dict)
+        if key in CATALOG and isinstance(value, dict)
     }
 
 
@@ -535,20 +429,8 @@ def get(addon_id: str) -> AddOn:
 #: 16.0.0 (Aquaticy-Test): keine virtual machine mehr -- damit auch kein WhatsApp, Signal und
 #: Blender. Die Eintraege bleiben im Katalog, damit alte Daten lesbar bleiben; zu sehen, zu
 #: installieren oder zu nutzen sind sie nicht mehr.
-ENTFERNT = frozenset({"whatsapp", "signal", "blender"})
-ENTFERNT_TEXT = "Das gibt es in Aquaticy-Test nicht mehr: Es braucht die virtual machine."
-
-
 def usable(addon: AddOn, settings: Any, pro: bool) -> tuple[bool, str]:
     """Kann dieses Konto das Add-on gerade nutzen? Returns: (ja, warum nicht)."""
-    if addon.id in ENTFERNT:
-        return False, ENTFERNT_TEXT
-    if not addon.werkstatt:
-        return True, ""
-    if not pro:
-        return False, "Braucht den User mode — und der gehört zu Ultra."
-    if not getattr(settings, "vm_user_mode", False):
-        return False, "Wirkt erst mit eingeschaltetem User mode (Einstellungen → virtual machine)."
     return True, ""
 
 
@@ -573,45 +455,8 @@ def active(settings: Any, addon_id: str, pro: bool = True) -> bool:
     return addon_id in active_ids(settings, pro)
 
 
-def volume_prefix(settings: Any) -> str:
-    """Datentraeger je Konto: der Kontoordner, gehasht -- nie der Name selbst."""
-    kennung = hashlib.sha256(str(_data_dir(settings).resolve()).encode()).hexdigest()[:12]
-    return f"aquaticy-addon-{kennung}-"
-
-
-def volume_name(settings: Any, addon_id: str) -> str:
-    return volume_prefix(settings) + addon_id
-
-
-def mounts(settings: Any) -> dict[str, str]:
-    """Welche Datentraeger in die virtual machine gehoeren: nur eingeschaltete.
-
-    Ausgeschaltete bleiben liegen, sind aber nicht eingehaengt -- Aquaticy
-    kommt dann weder an das Programm noch an die Anmeldung heran.
-    """
-    if not getattr(settings, "vm_user_mode", False):
-        return {}
-    state = load_state(settings)
-    ergebnis: dict[str, str] = {}
-    webapp = False
-    for addon_id in active_ids(settings, pro=True):
-        addon = CATALOG[addon_id]
-        if not addon.programm:
-            continue
-        ergebnis[volume_name(settings, addon_id)] = f"{MOUNT_ROOT}/{addon_id}"
-        webapp = webapp or addon.programm == "webapp"
-    if webapp and (state.get(FIREFOX) or {}).get("installed"):
-        ergebnis[volume_name(settings, FIREFOX)] = f"{MOUNT_ROOT}/{FIREFOX}"
-    return ergebnis
-
-
-def github_write_level(rechte: dict[str, str]) -> str:
-    """Was Aquaticy bei GitHub aendern darf: "nein", "branches" oder "alles" (15.0.0)."""
-    return "branches" if rechte.get("inhalte") == "aendern" else "nein"
-
-
 def github_reads_content(rechte: dict[str, str]) -> bool:
-    return rechte.get("inhalte") in ("ja", "aendern")
+    return rechte.get("inhalte") == "ja"
 
 
 def github_token(settings: Any) -> str:
@@ -627,9 +472,7 @@ def feeds_of(settings: Any) -> list[str]:
 def retire_removed(settings: Any) -> list[str]:
     """Raeumt weggefallene Add-ons auf (12.6.6 Luna: Telegram Web) -- einmal.
 
-    Der Eintrag verschwindet aus ``addons.json``; war das Add-on installiert, geht auch
-    sein Datentraeger samt Anmeldung weg (soweit Docker oder Podman gerade antwortet --
-    sonst bleibt er unbenutzt liegen und geht mit dem Konto).
+    Der Eintrag verschwindet aus ``addons.json``.
 
     Returns: die aufgeraeumten Kennungen.
     """
@@ -643,14 +486,6 @@ def retire_removed(settings: Any) -> list[str]:
     weg = [key for key in RETIRED if key in eintraege]
     if not weg:
         return []
-    if any(isinstance(eintraege[key], dict) and eintraege[key].get("installed") for key in weg):
-        with contextlib.suppress(Exception):
-            from aquaticy import sandbox as werkstatt
-
-            runtime = werkstatt.find_runtime()
-            if runtime is not None:
-                for key in weg:
-                    werkstatt.remove_addon_volume(runtime, volume_name(settings, key))
     with _lock(settings):
         _save_state(settings, load_state(settings))
     return weg
@@ -662,18 +497,13 @@ def public_view(settings: Any, pro: bool) -> dict[str, Any]:
     state = load_state(settings)
     liste = []
     for addon in CATALOG.values():
-        if addon.id in ENTFERNT:
-            continue
         eintrag = state.get(addon.id) or {}
         ok, warum = usable(addon, settings, pro)
         roh = eintrag.get("login")
         anmeldung: dict[str, Any] = roh if isinstance(roh, dict) else {}
         if addon.login == "token":
             anmeldung = {**anmeldung, "token_set": bool(github_token(settings))}
-        laeuft = installing(settings, addon.id)
         status = str(eintrag.get("status") or ("bereit" if eintrag.get("installed") else ""))
-        if status == "installiert gerade" and not laeuft:
-            status, eintrag["message"] = "fehler", "Die Installation wurde unterbrochen."
         liste.append({
             "id": addon.id,
             "name": addon.name,
@@ -681,7 +511,6 @@ def public_view(settings: Any, pro: bool) -> dict[str, Any]:
             "group": addon.group,
             "summary": addon.summary,
             "login_kind": addon.login,
-            "werkstatt": addon.werkstatt,
             "vorschlag": addon.vorschlag,
             "anmelden": addon.anmelden,
             "hinweis": addon.hinweis,
@@ -713,149 +542,15 @@ def public_view(settings: Any, pro: bool) -> dict[str, Any]:
     return {
         "addons": liste,
         "pro": pro,
-        "user_mode": bool(getattr(settings, "vm_user_mode", False)),
         "active": active_ids(settings, pro),
     }
 
 
-def _konto(settings: Any) -> str:
-    return str(_data_dir(settings).resolve())
-
-
-def installing(settings: Any, addon_id: str) -> bool:
-    job = _jobs.get((_konto(settings), addon_id))
-    return job is not None and job.is_alive()
-
-
-def _check_allowed(addon: AddOn, settings: Any, pro: bool) -> None:
-    if addon.id in ENTFERNT:
-        raise AddOnError(ENTFERNT_TEXT)
-    if addon.werkstatt and not pro:
-        raise AddOnError(
-            f"{addon.name} läuft in der virtual machine im User mode — das gehört zu Ultra."
-        )
-
-
-def install(
-    settings: Any, addon_id: str, pro: bool, *, wait: bool = False, on_done: Any = None
-) -> dict[str, Any]:
-    """Installiert ein Add-on. Mit Programm laeuft das im Hintergrund weiter.
-
-    Returns: der neue Eintrag.
-    """
+def install(settings: Any, addon_id: str, pro: bool = True) -> dict[str, Any]:
+    """Installiert ein Add-on. Returns: der neue Eintrag."""
     addon = get(addon_id)
-    _check_allowed(addon, settings, pro)
-    if installing(settings, addon.id):
-        raise AddOnError(f"{addon.name} wird gerade schon installiert.")
-    if not addon.programm:
-        return _update(settings, addon.id, installed=True, enabled=True, status="bereit",
-                       message="", installed_at=int(time.time()))
-    eintrag = _update(settings, addon.id, status="installiert gerade",
-                      message="Wird geladen und geprüft …", installed=bool(
-                          (load_state(settings).get(addon.id) or {}).get("installed")))
-    job = threading.Thread(
-        target=_install_job, args=(settings, addon, on_done), name=f"addon-{addon.id}",
-        daemon=True,
-    )
-    _jobs[(_konto(settings), addon.id)] = job
-    job.start()
-    if wait:
-        job.join()
-        return load_state(settings).get(addon.id) or {}
-    return eintrag
-
-
-def _last_json(text: str) -> dict[str, Any]:
-    for zeile in reversed((text or "").strip().splitlines()):
-        zeile = zeile.strip()
-        if zeile.startswith("{"):
-            with contextlib.suppress(ValueError):
-                wert = json.loads(zeile)
-                if isinstance(wert, dict):
-                    return wert
-    return {}
-
-
-def _helper(box: Any, *args: str, timeout: int = INSTALL_TIMEOUT) -> dict[str, Any]:
-    """Ruft aquaticy-addons in der Installations-virtual machine auf."""
-    fertig = box.addon_helper(*args, timeout=timeout)
-    antwort = _last_json(fertig.stdout)
-    if not antwort:
-        raise AddOnError(
-            "Der Installer hat nicht geantwortet: "
-            + (fertig.stderr.strip() or fertig.stdout.strip() or "keine Ausgabe")[:300]
-        )
-    if not antwort.get("ok"):
-        raise AddOnError(str(antwort.get("fehler") or "Installation fehlgeschlagen."))
-    return antwort
-
-
-def _quelle() -> tuple[str, ...]:
-    return ("--quelle", INSTALL_SOURCE) if INSTALL_SOURCE else ()
-
-
-def _install_job(settings: Any, addon: AddOn, on_done: Any = None) -> None:
-    from aquaticy import sandbox as werkstatt
-
-    box = None
-    try:
-        runtime = werkstatt.find_runtime()
-        if runtime is None:
-            raise AddOnError(
-                "Auf diesem Rechner gibt es keine virtual machine (Docker oder Podman) — ohne sie "
-                "installiert Aquaticy nichts."
-            )
-        image = getattr(settings, "vm_desktop_image", "") or werkstatt.DESKTOP_IMAGE
-
-        werkstatt.ensure_image(
-            runtime, image, build=True,
-            progress=lambda text: _update(settings, addon.id, message=text))
-        vols = {volume_name(settings, addon.id): f"{MOUNT_ROOT}/{addon.id}"}
-        if addon.programm == "webapp":
-            vols[volume_name(settings, FIREFOX)] = f"{MOUNT_ROOT}/{FIREFOX}"
-        for volume in vols:
-            werkstatt.ensure_addon_volume(runtime, volume, image)
-        box = werkstatt.Sandbox(
-            image=image, user_mode=True, headless=True, addon_mounts=vols,
-            browser_agent=werkstatt.browser_agent(settings), memory_mb=1024, cpus=1,
-        )
-        box.runtime = runtime
-        box.ensure()
-        info: dict[str, Any]
-        if addon.programm == "webapp":
-            firefox = load_state(settings).get(FIREFOX) or {}
-            vorhanden = _helper(box, "status", f"{MOUNT_ROOT}/{FIREFOX}", timeout=60)
-            if not (firefox.get("installed") and vorhanden.get("installiert")):
-                _update(settings, addon.id, message="Lädt Firefox (ESR) von mozilla.org …")
-                geladen = _helper(box, "install", "firefox", f"{MOUNT_ROOT}/{FIREFOX}", *_quelle())
-                _update(settings, FIREFOX, installed=True, version=geladen.get("version", ""),
-                        installed_at=int(time.time()))
-            info = _helper(
-                box, "webapp", f"{MOUNT_ROOT}/{addon.id}",
-                "--firefox", f"{MOUNT_ROOT}/{FIREFOX}",
-                "--adresse", addon.adresse,
-                "--zusatz", werkstatt.browser_agent(settings).split("Falkon/3.2", 1)[-1].strip(),
-                timeout=60,
-            )
-            info["version"] = (load_state(settings).get(FIREFOX) or {}).get("version", "")
-        else:
-            quelle = {"signal": "signal.org", "blender": "blender.org"}.get(addon.programm, "")
-            _update(settings, addon.id, message=f"Lädt {addon.name} von {quelle} …")
-            info = _helper(box, "install", addon.programm, f"{MOUNT_ROOT}/{addon.id}", *_quelle())
-        _update(settings, addon.id, installed=True, enabled=True, status="bereit", message="",
-                version=str(info.get("version") or ""), installed_at=int(time.time()))
-    except Exception as exc:
-        meldung = str(exc) or type(exc).__name__
-        vorher = load_state(settings).get(addon.id) or {}
-        _update(settings, addon.id, status="fehler", message=meldung[:400],
-                installed=bool(vorher.get("installed") and vorher.get("version")))
-    finally:
-        if box is not None:
-            with contextlib.suppress(Exception):
-                box.stop("Installation fertig")
-        if on_done is not None:
-            with contextlib.suppress(Exception):
-                on_done()
+    return _update(settings, addon.id, installed=True, enabled=True, status="bereit",
+                   message="", installed_at=int(time.time()))
 
 
 def set_enabled(settings: Any, addon_id: str, on: bool, pro: bool) -> dict[str, Any]:
@@ -866,45 +561,16 @@ def set_enabled(settings: Any, addon_id: str, on: bool, pro: bool) -> dict[str, 
     if addon.id in MODEL_ADDONS:
         raise AddOnError(f"{addon.name} hat keinen Schalter. Zum Abschalten deinstallieren — "
                          "dann ist auch der Schlüssel weg.")
-    if on:
-        _check_allowed(addon, settings, pro)
     return _update(settings, addon.id, enabled=bool(on))
 
 
 def uninstall(settings: Any, addon_id: str, pro: bool = True) -> dict[str, Any]:
-    """Entfernt ein Add-on ganz: Programm, Anmeldung, Token, Feed-Liste.
-
-    Die laufende virtual machine muss vorher weg (der Aufrufer baut sie ab), sonst
-    haelt sie den Datentraeger fest.
-    """
+    """Entfernt ein Add-on ganz: Anmeldung, Token, Feed-Liste."""
     addon = get(addon_id)
-    if installing(settings, addon.id):
-        raise AddOnError(f"{addon.name} wird gerade installiert — erst danach deinstallieren.")
-    entfernt: list[str] = []
-    if addon.programm:
-        from aquaticy import sandbox as werkstatt
-
-        runtime = werkstatt.find_runtime()
-        if runtime is not None:
-            if werkstatt.remove_addon_volume(runtime, volume_name(settings, addon.id)):
-                entfernt.append(addon.id)
-            andere_webapps = [
-                other for other in active_or_installed(settings)
-                if other != addon.id and CATALOG[other].programm == "webapp"
-            ]
-            if addon.programm == "webapp" and not andere_webapps:
-                if werkstatt.remove_addon_volume(runtime, volume_name(settings, FIREFOX)):
-                    entfernt.append("firefox")
-                _drop(settings, FIREFOX)
-        elif (load_state(settings).get(addon.id) or {}).get("installed"):
-            raise AddOnError(
-                "Ohne Docker oder Podman kommt Aquaticy nicht an den Datentraeger heran — "
-                "deinstallieren geht erst, wenn die virtual machine wieder erreichbar ist."
-            )
     if addon.login == "token":
         forget_github_token(settings)
     _drop(settings, addon.id)
-    return {"removed": addon.id, "volumes": entfernt}
+    return {"removed": addon.id}
 
 
 def installed(settings: Any, addon_id: str) -> bool:
@@ -1034,47 +700,11 @@ def mark_login(settings: Any, addon_id: str, state: str) -> dict[str, Any]:
 
 
 def logout(settings: Any, addon_id: str) -> dict[str, Any]:
-    """Meldet ab: Token weg, bzw. Profil/Daten in der virtual machine geloescht."""
+    """Meldet ab: der Token ist weg."""
     addon = get(addon_id)
     if addon.login == "token":
         forget_github_token(settings)
-    elif addon.programm in ("webapp", "signal"):
-        _reset_profile(settings, addon)
     return mark_login(settings, addon.id, "")
-
-
-def _reset_profile(settings: Any, addon: AddOn) -> None:
-    """Loescht die Anmeldung auf dem Datentraeger -- in einem Wegwerf-Behaelter.
-
-    Ohne Netz, ohne Faehigkeiten: dafuer braucht es beides nicht.
-    """
-    from aquaticy import sandbox as werkstatt
-
-    runtime = werkstatt.find_runtime()
-    if runtime is None:
-        raise AddOnError("Ohne Docker oder Podman kommt Aquaticy nicht an die Anmeldung heran.")
-    image = getattr(settings, "vm_desktop_image", "") or werkstatt.DESKTOP_IMAGE
-    teil = "profil" if addon.programm == "webapp" else "daten"
-    fertig = werkstatt._runs(
-        runtime.binary, "run", "--rm", "--network", "none", "--cap-drop", "ALL",
-        "--security-opt", "no-new-privileges", "--user", werkstatt.RUN_AS,
-        "-v", f"{volume_name(settings, addon.id)}:{MOUNT_ROOT}/{addon.id}",
-        image, "aquaticy-addons", "reset", f"{MOUNT_ROOT}/{addon.id}", teil,
-        timeout=120,
-    )
-    if fertig.returncode != 0:
-        raise AddOnError("Abmelden hat nicht geklappt: " + fertig.stdout.strip()[-300:])
-    if addon.programm == "webapp":
-        fertig = werkstatt._runs(
-            runtime.binary, "run", "--rm", "--network", "none", "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges", "--user", werkstatt.RUN_AS,
-            "-v", f"{volume_name(settings, addon.id)}:{MOUNT_ROOT}/{addon.id}",
-            "-v", f"{volume_name(settings, FIREFOX)}:{MOUNT_ROOT}/{FIREFOX}",
-            image, "aquaticy-addons", "webapp", f"{MOUNT_ROOT}/{addon.id}",
-            "--firefox", f"{MOUNT_ROOT}/{FIREFOX}", "--adresse", addon.adresse,
-            "--zusatz", werkstatt.browser_agent(settings).split("Falkon/3.2", 1)[-1].strip(),
-            timeout=120,
-        )
 
 
 FEED_HOST_RE = re.compile(
@@ -2037,36 +1667,11 @@ def read_feeds(
     return {"eintraege": alle[:grenze], "feeds": len(feeds), "probleme": probleme}
 
 
-APP_OF = {"whatsapp": "whatsapp", "signal": "signal", "blender": "blender"}
-
-
-def desktop_apps(settings: Any, pro: bool = True) -> list[str]:
-    """Welche Add-on-Programme sich im Desktop oeffnen lassen."""
-    return [
-        APP_OF[a] for a in active_ids(settings, pro)
-        if a in APP_OF
-        and not (a == "blender" and rights_of(settings, "blender")["nutzung"] == "skripte")
-    ]
-
-
 PROMPT = """\
 ## Add-ons
 Der Nutzer hat diese Add-ons eingeschaltet: %(liste)s.
-- Messenger (WhatsApp, Signal) oeffnest du mit desktop_open (app = \
-whatsapp/signal) und bedienst sie wie ein Mensch. Lies nur, was die \
-Frage braucht. Eine Nachricht abschicken ist "senden": nur nach ausdruecklichem \
-Ja des Nutzers, und nur an die Person, die er genannt hat. Nie an mehrere \
-gleichzeitig, nie Werbung, nie etwas im Namen des Nutzers versprechen.
-- Ist ein Messenger abgemeldet (QR-Code zu sehen), meldest du ihn NICHT an -- \
-das macht der Nutzer im Add-on-Fenster selbst.
-- Namen, Nummern und Inhalte aus Chats oder privaten GitHub-Repos gehoeren nie \
-in eine Websuche.
-- GitHub lesen mit github (auch commit und vergleich). Aendern mit github_write, wenn \
-das Recht es erlaubt: checkout holt das Repo in die VM (Code-Chat), dort aendern und \
-testen, push committet und pusht die Aenderungen auf einen eigenen Branch; ohne VM \
-commit mit files. Danach pull_request. Jeder Schritt fragt den Nutzer. Nie auf den \
-Standard-Branch, kein Mergen, keine GitHub Actions; nie Schluessel oder Passwoerter.
-- Blender: Skripte mit blender_run, die Oberflaeche mit desktop_open app=blender.
+- Namen und Inhalte aus privaten GitHub-Repos gehoeren nie in eine Websuche.
+- GitHub lesen mit github (auch commit und vergleich). Aendern geht nicht.
 - Code-Review und Security-Review sind Prueflisten, keine Werkzeuge: sie gelten, \
 wenn der Nutzer /code-review oder /security-review schreibt.
 - Jedes eingeschaltete Add-on hat im Chat einen Befehl (/github, /wetter ...). \
@@ -2092,10 +1697,3 @@ def prompt_for(settings: Any, pro: bool = True) -> str:
     return text
 
 
-def werkstatt_command_for_blender() -> str:
-    """Blender aus dem Add-on, sonst das aus dem Abbild (Shell-Anfang eines Befehls)."""
-    return (
-        "B=$(python3 -c \"import json;print('/addons/blender/'+json.load(open("
-        "'/addons/blender/aquaticy.json'))['start'])\" 2>/dev/null); "
-        '[ -x "$B" ] || B=blender; "$B"'
-    )

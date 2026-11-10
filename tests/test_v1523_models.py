@@ -57,10 +57,9 @@ def test_ollama_provider_aliases_keep_the_configured_server_route():
     assert kwargs["api_base"] == "http://host:11999"
 
 
-def test_operator_ollama_management_honors_a_configured_custom_port(monkeypatch):
-    monkeypatch.setenv("OLLAMA_API_BASE", "http://host:11999/v1")
-    monkeypatch.setattr(web, "get_settings", lambda: Settings(model="mistral/mistral-large-latest"))
-    assert web.OLLAMA_URL() == "http://host:11999"
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_local_chat_and_metadata_use_the_same_native_server(tmp_path):
@@ -88,12 +87,6 @@ def test_cloud_main_keeps_the_native_ollama_route_for_a_local_code_model(monkeyp
     monkeypatch.setenv('OLLAMA_API_BASE', 'http://host:11999/v1')
     settings = Settings(model='mistral/mistral-large-latest', code_model='ollama_chat/qwen3:8b')
     assert settings.llm_kwargs_for(settings.code_model)['api_base'] == 'http://host:11999'
-
-
-def test_upgrade_backend_uses_the_operator_route_without_assuming_a_port():
-    from aquaticy.upgrading import OllamaBackend
-
-    assert OllamaBackend('http://host:11999/v1').url == 'http://host:11999'
 
 
 @pytest.mark.skipif(not _browser_da(), reason='Playwright oder Browser fehlen')

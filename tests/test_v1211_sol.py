@@ -27,56 +27,9 @@ def test_setup_checks_ollama_before_asking_for_models(monkeypatch, tmp_path):
     assert not (tmp_path / ".env").exists()
 
 
-@pytest.mark.parametrize("local", [False, True])
-def test_complete_setup_reuses_ollama_and_persists_it(monkeypatch, tmp_path, local):
-    calls = []
-    monkeypatch.setattr(cli, "_ensure_ollama", lambda **kw: calls.append("ollama") or True)
-    monkeypatch.setattr(cli, "_ask_website", lambda **kw: {})
-    monkeypatch.setattr(cli, "_vm_beim_start", lambda settings: None)
-
-    def model(**kwargs):
-        assert kwargs == {"assume_yes": True, "ollama_ready": True}
-        calls.append("model")
-        return "ollama_chat/qwen3:8b"
-
-    monkeypatch.setattr(cli, "_run_local_setup", model)
-    monkeypatch.setattr(cli, "_einzelkonto_einrichten", lambda settings: None)
-    target = tmp_path / ".env"
-    result = CliRunner().invoke(
-        cli.app, ["setup", "--yes", "--no-probe", "--env-file", str(target)],
-        # 14.1.3 Luna: keine Frage mehr nach den Agenten (immer an).
-        input=("3\n" if local else "1\n") + "1\n\n\n\n\n",
-    )
-    assert result.exit_code == 0, result.output
-    assert calls == (["ollama", "model"] if local else ["ollama"])
-    assert "OLLAMA_NUM_PARALLEL" not in target.read_text()
-    if local:
-        assert "AQUATICY_API_BASE=http://localhost:11434" in target.read_text()
-
-
-@pytest.mark.parametrize("background", [False, True])
-def test_cloud_only_setup_keeps_the_existing_installation_optional(
-        monkeypatch, tmp_path, background):
-    monkeypatch.setattr(cli, "_ensure_ollama", lambda **kw: pytest.fail("Kein Ollama angefordert"))
-    monkeypatch.setattr(cli, "_ask_website", lambda **kw: {})
-    monkeypatch.setattr(cli, "_vm_beim_start", lambda settings: None)
-    starts = []
-    monkeypatch.setattr(cli, "web_command", lambda **kwargs: starts.append(kwargs))
-    monkeypatch.setattr(cli, "_einzelkonto_einrichten", lambda settings: None)
-    target = tmp_path / ".env"
-    result = CliRunner().invoke(
-        cli.app, ["setup", "--no-ollama", "--no-probe", "--env-file", str(target)],
-        # 13.0.0 Luna: vor dem Hintergrund die Frage nach dem Kontensystem (leer = aus).
-        # 14.1.3 Luna: keine Frage mehr nach den Agenten (immer an).
-        input="1\n1\n\n\n\n\n\n" + ("y\n" if background else "n\n"),
-    )
-    assert result.exit_code == 0, result.output
-    assert "OLLAMA_NUM_PARALLEL" not in target.read_text()
-    assert f"AQUATICY_BACKGROUND={'true' if background else 'false'}" in target.read_text()
-    assert len(starts) == int(background)
-    if background:
-        assert starts[0]["background"] is True
-        assert starts[0]["lan"] is True
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 @pytest.mark.parametrize("installed", [True, False])

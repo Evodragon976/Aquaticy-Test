@@ -314,9 +314,6 @@ def test_stable_failures_stay_cached(settings: Settings, tmp_path: Path) -> None
     assert attempts["n"] == 1
 
 
-
-
-
 def test_search_news_carries_date_and_source(
     monkeypatch: pytest.MonkeyPatch, settings: Settings
 ) -> None:
@@ -425,7 +422,6 @@ def test_remember_without_cache_reports_it(settings: Settings) -> None:
     assert "error" in box.remember("etwas")
 
 
-
 def test_ask_user_without_anyone_to_ask(settings: Settings) -> None:
     """Ohne Gegenueber ist das kein Fehler -- das Modell soll weiterarbeiten."""
     box = Toolbox(settings)
@@ -508,66 +504,9 @@ def test_ask_user_is_reachable_through_call(settings: Settings) -> None:
     assert result["answer"] == "Wo?|hier,dort"
 
 
-
-def test_lan_scan_can_be_switched_off(settings: Settings) -> None:
-    settings.lan_enabled = False
-    assert "abgeschaltet" in Toolbox(settings).lan_scan()["error"]
-    assert "abgeschaltet" in Toolbox(settings).lan_check("192.168.1.5")["error"]
-
-
-def test_lan_scan_refuses_public_networks(settings: Settings) -> None:
-    """Fremde Netze durchsucht aquaticy nicht."""
-    result = Toolbox(settings).lan_scan("8.8.8.0/24")
-    assert "kein privates Netz" in result["error"]
-
-
-def test_lan_scan_without_a_known_network_says_what_to_do(
-    settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("aquaticy.lan.own_subnet", lambda: "")
-    result = Toolbox(settings).lan_scan()
-    assert "AQUATICY_LAN_SUBNET" in result["error"]
-
-
-def test_lan_scan_reports_devices(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy.lan import Device
-
-    monkeypatch.setattr(
-        "aquaticy.lan.scan",
-        lambda subnet, quick=True: [
-            Device(address="192.168.1.5", name="ha.local", ports=[8123],
-                   services=["Home Assistant"], title="Home Assistant")
-        ],
-    )
-    box = Toolbox(settings)
-    result = box.lan_scan("192.168.1.0/24")
-    assert result["count"] == 1
-    assert result["devices"][0]["title"] == "Home Assistant"
-    assert "kein Beweis" in result["note"]
-    assert box.stats.lan_scans == 1
-
-
-def test_lan_check_refuses_addresses_outside_the_home(settings: Settings) -> None:
-    result = Toolbox(settings).lan_check("8.8.8.8")
-    assert result["reachable"] is False
-    assert "ausserhalb" in result["error"]
-
-
-def test_lan_check_reports_an_unresolvable_name(settings: Settings) -> None:
-    result = Toolbox(settings).lan_check("gibt-es-nicht.invalid")
-    assert result["reachable"] is False
-    assert "aufloesbar" in result["error"]
-
-
-def test_lan_check_says_silent_not_absent(settings: Settings,
-                                          monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ein stilles Geraet kann schlafen -- das ist kein Beweis fuer 'weg'."""
-    monkeypatch.setattr("socket.gethostbyname", lambda host: "192.168.1.99")
-    monkeypatch.setattr("aquaticy.lan.check_host", lambda address, ports, **kw: None)
-    result = Toolbox(settings).lan_check("192.168.1.99")
-    assert result["reachable"] is False
-    assert "Ruhezustand" in result["note"]
-
+# 16.0.1 (Aquaticy-Test): 32 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def _ha_settings(settings: Settings, control: bool = False) -> Settings:
@@ -575,131 +514,6 @@ def _ha_settings(settings: Settings, control: bool = False) -> Settings:
     settings.ha_token = "geheim"
     settings.ha_control = control
     return settings
-
-
-def test_ha_without_setup_points_at_the_command(settings: Settings) -> None:
-    result = Toolbox(settings).ha_states()
-    assert "connect-ha" in result["error"]
-
-
-def test_ha_states_gives_an_overview_first(settings: Settings,
-                                           monkeypatch: pytest.MonkeyPatch) -> None:
-    """Bei tausend Entitaeten ist die Uebersicht der einzige brauchbare Einstieg."""
-    monkeypatch.setattr(
-        "aquaticy.homeassistant.HomeAssistant.domains", lambda self: {"light": 12, "sensor": 40}
-    )
-    result = Toolbox(_ha_settings(settings)).ha_states()
-    assert result["overview"] == {"light": 12, "sensor": 40}
-    assert "domain" in result["note"]
-
-
-def test_ha_states_finds_entities(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy.homeassistant import Entity
-
-    monkeypatch.setattr(
-        "aquaticy.homeassistant.HomeAssistant.find",
-        lambda self, search="", domain="", limit=60: [
-            Entity(entity_id="light.kueche", state="on", name="Kueche")
-        ],
-    )
-    box = Toolbox(_ha_settings(settings))
-    result = box.ha_states(search="kueche")
-    assert result["entities"] == [{"entity_id": "light.kueche", "name": "Kueche", "state": "on"}]
-    assert box.stats.ha_reads == 1
-
-
-def test_ha_errors_reach_the_model_as_text(settings: Settings,
-                                           monkeypatch: pytest.MonkeyPatch) -> None:
-    from aquaticy.homeassistant import HomeAssistantError
-
-    def boom(self, search="", domain="", limit=60):
-        raise HomeAssistantError("Token abgelehnt")
-
-    monkeypatch.setattr("aquaticy.homeassistant.HomeAssistant.find", boom)
-    assert Toolbox(_ha_settings(settings)).ha_states(search="x")["error"] == "Token abgelehnt"
-
-
-def test_switching_is_off_unless_allowed(settings: Settings) -> None:
-    """Standardmaessig sieht aquaticy nur nach."""
-    result = Toolbox(_ha_settings(settings)).ha_call("light", "turn_on", "light.kueche")
-    assert "nur nachsehen" in result["error"]
-    assert "AQUATICY_HA_CONTROL" in result["error"]
-
-
-def test_unknown_domains_are_refused(settings: Settings) -> None:
-    result = Toolbox(_ha_settings(settings, control=True)).ha_call("shell_command", "rm", "")
-    assert "schaltet im Bereich" in result["error"]
-
-
-def test_a_lock_needs_a_confirmation(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ein missverstandener Satz darf nicht die Haustuer aufschliessen."""
-    called: list[tuple] = []
-    monkeypatch.setattr(
-        "aquaticy.homeassistant.HomeAssistant.call",
-        lambda self, d, s, e="", data=None: called.append((d, s, e)) or [],
-    )
-    box = Toolbox(_ha_settings(settings, control=True))
-    box.ask_handler = lambda question, options: "nein"
-    result = box.ha_call("lock", "unlock", "lock.haustuer")
-    assert result["done"] is False
-    assert not called, "trotz Ablehnung geschaltet"
-
-
-def test_a_confirmed_lock_is_actually_opened(settings: Settings,
-                                             monkeypatch: pytest.MonkeyPatch) -> None:
-    called: list[tuple] = []
-    monkeypatch.setattr(
-        "aquaticy.homeassistant.HomeAssistant.call",
-        lambda self, d, s, e="", data=None: called.append((d, s, e)) or [{"x": 1}],
-    )
-    box = Toolbox(_ha_settings(settings, control=True))
-    box.ask_handler = lambda question, options: "ja"
-    result = box.ha_call("lock", "unlock", "lock.haustuer")
-    assert result["done"] is True
-    assert called == [("lock", "unlock", "lock.haustuer")]
-
-
-def test_without_anyone_to_confirm_the_lock_stays_shut(settings: Settings,
-                                                       monkeypatch: pytest.MonkeyPatch) -> None:
-    called: list = []
-    monkeypatch.setattr(
-        "aquaticy.homeassistant.HomeAssistant.call",
-        lambda self, d, s, e="", data=None: called.append(1) or [],
-    )
-    box = Toolbox(_ha_settings(settings, control=True))
-    result = box.ha_call("alarm_control_panel", "alarm_disarm", "alarm_control_panel.haus")
-    assert "bestaetigungspflichtig" in result["error"]
-    assert not called
-
-
-def test_a_light_needs_no_confirmation(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Licht anmachen ist umkehrbar -- danach zu fragen waere nur laestig."""
-    asked: list = []
-    monkeypatch.setattr(
-        "aquaticy.homeassistant.HomeAssistant.call", lambda self, d, s, e="", data=None: [{"x": 1}]
-    )
-    box = Toolbox(_ha_settings(settings, control=True))
-    box.ask_handler = lambda question, options: asked.append(question) or "ja"
-    result = box.ha_call("light", "turn_on", "light.kueche")
-    assert result["done"] is True
-    assert not asked
-    assert box.stats.ha_calls == 1
-
-
-def test_ha_call_needs_domain_and_service(settings: Settings) -> None:
-    box = Toolbox(_ha_settings(settings, control=True))
-    assert "muessen angegeben sein" in box.ha_call("", "turn_on")["error"]
-
-
-def test_the_home_tools_are_reachable_through_call(settings: Settings,
-                                                   monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("aquaticy.lan.scan", lambda subnet, quick=True: [])
-    box = Toolbox(settings)
-    assert box.call("lan_scan", {"subnet": "192.168.1.0/24"})["count"] == 0
-    assert "connect-ha" in box.call("ha_states", {})["error"]
-
-
-
 
 
 def test_one_call_searches_several_phrasings(
@@ -825,9 +639,6 @@ def test_the_fan_out_survives_a_dead_phrasing(
     assert result["queries"] == ["Wie viel kostet ein gebrauchtes Lastenrad in Bremen?"]
 
 
-
-
-
 class FakeGoogle:
     """Steht fuer das verbundene Konto -- ohne Netz."""
 
@@ -932,9 +743,6 @@ def test_reading_mail_counts_against_the_budget(settings: Settings) -> None:
     assert box.stats.tool_calls == before + 1
 
 
-
-
-
 class FakeStorage:
     """Steht fuer die Lagerverwaltung -- ohne Netz."""
 
@@ -988,91 +796,6 @@ def _storage_box(settings: Settings, access: str = "write") -> tuple[Toolbox, Fa
     fake = FakeStorage()
     box._storage_client = fake
     return box, fake
-
-
-def test_the_storage_is_off_until_an_address_is_entered(settings: Settings) -> None:
-    box = Toolbox(settings, cache=None, fetcher=_mock_fetcher(_html_handler("<html></html>")))
-    assert "keine Lagerverwaltung eingetragen" in box.storage_find("schraube")["error"]
-
-
-def test_switching_the_storage_off_blocks_even_reading(settings: Settings) -> None:
-    box, _ = _storage_box(settings, access="off")
-    assert "abgeschaltet" in box.storage_find("schraube")["error"]
-    assert "abgeschaltet" in box.storage_browse()["error"]
-
-
-def test_finding_an_item_returns_its_place(settings: Settings) -> None:
-    box, fake = _storage_box(settings, access="read")
-    result = box.storage_find("schraube", limit=5)
-    assert result["items"][0]["number"] == "A2"
-    assert fake.calls == [("search", {"query": "schraube", "limit": 5})]
-    assert box.stats.storage_reads == 1
-
-
-def test_an_empty_result_says_not_recorded_not_not_owned(settings: Settings) -> None:
-    """"Hast du nicht" waere eine Behauptung, die das Lager gar nicht hergibt."""
-    box, _ = _storage_box(settings, access="read")
-    empty = FakeStorage()
-    empty.search = lambda query, limit=20: []
-    box._storage_client = empty
-    assert "nicht eingetragen" in box.storage_find("gibtesnicht")["note"]
-
-
-def test_browsing_walks_the_three_levels(settings: Settings) -> None:
-    box, fake = _storage_box(settings, access="read")
-    assert box.storage_browse()["level"] == "rooms"
-    assert box.storage_browse(room_id=1)["level"] == "furniture"
-    assert box.storage_browse(furniture_id=1)["level"] == "items"
-    assert [name for name, _ in fake.calls] == ["rooms", "furniture", "items"]
-
-
-def test_adding_picks_the_level_from_the_given_id(settings: Settings) -> None:
-    box, fake = _storage_box(settings)
-    assert box.storage_add("Schraube", furniture_id=3)["created"] == "Artikel"
-    assert box.storage_add("Regal", room_id=1)["created"] == "Moebel"
-    assert box.storage_add("Dachboden")["created"] == "Raum"
-    assert [name for name, _ in fake.calls] == ["add_item", "add_furniture", "add_room"]
-
-
-def test_editing_prefers_delta_over_setting(settings: Settings) -> None:
-    """Gesetzt wuerde ueberschreiben, was jemand anderes gerade geaendert hat."""
-    box, fake = _storage_box(settings)
-    box.storage_edit(item_id=5, delta=-12, quantity=999)
-    assert fake.calls == [("change_quantity", {"item_id": 5, "delta": -12})]
-
-
-def test_writes_count_against_the_budget(settings: Settings) -> None:
-    box, _ = _storage_box(settings)
-    before = box.stats.tool_calls
-    box.storage_add("Dachboden")
-    assert box.stats.tool_calls == before + 1
-
-
-def test_a_storage_failure_is_reported_not_raised(settings: Settings) -> None:
-    from aquaticy.storage import StorageError
-
-    box, _ = _storage_box(settings)
-    broken = FakeStorage()
-    broken.search = lambda query, limit=20: (_ for _ in ()).throw(StorageError("Server weg"))
-    box._storage_client = broken
-    assert "Server weg" in box.storage_find("x")["error"]
-
-
-def test_the_storage_tools_are_dispatched(settings: Settings) -> None:
-    box, fake = _storage_box(settings)
-    box.call("storage_find", {"query": "schraube"})
-    box.call("storage_browse", {"room_id": 1})
-    box.call("storage_add", {"name": "Kiste", "room_id": 1})
-    box.call("storage_edit", {"item_id": 2, "delta": 1})
-    assert [name for name, _ in fake.calls] == [
-        "search",
-        "furniture",
-        "add_furniture",
-        "change_quantity",
-    ]
-
-
-
 
 
 def test_the_appearance_is_changed_in_the_browser_not_in_a_file(
@@ -1209,9 +932,6 @@ def test_a_read_page_claims_its_domain_when_asked_to(settings: Settings) -> None
     assert "beispiel.de" in box.avoid_domains
 
 
-
-
-
 class SchreibenderGoogle(FakeGoogle):
     """Merkt sich, was geschrieben werden sollte."""
 
@@ -1300,9 +1020,6 @@ def test_the_dispatch_knows_the_writing_tools(settings: Settings) -> None:
     assert [name for name, _ in fake.calls] == ["create_event", "update_event", "create_draft"]
 
 
-
-
-
 def test_the_location_filter_reaches_the_search(
     monkeypatch: pytest.MonkeyPatch, settings: Settings
 ) -> None:
@@ -1371,9 +1088,6 @@ def test_the_news_search_knows_the_place_too(
     box = Toolbox(settings, cache=None, fetcher=_mock_fetcher(_html_handler("<html></html>")))
     box.search_news("Baustellen")
     assert gestellt == ["Baustellen Bremen"]
-
-
-
 
 
 def test_profiles_are_searched_per_platform(
@@ -1481,45 +1195,6 @@ def test_the_platform_list_stays_short() -> None:
     assert len(PROFILE_SITES) >= 10, "wählen kann man aus mehr"
 
     assert [label for label, _ in PROFILE_SITES][:2] == ["Instagram", "LinkedIn"]
-
-
-
-
-
-def test_vm_schemas_carry_the_real_numbers() -> None:
-    from aquaticy.tools import vm_schemas_for
-
-    settings = Settings(vm_cpus=1, vm_memory_mb=1024, vm_disk_gb=4)
-    schemas = vm_schemas_for(settings)
-    namen = {schema["function"]["name"] for schema in schemas}
-    assert {"vm_run", "vm_write", "vm_read", "vm_files", "blender_run"} <= namen
-
-    vm_run = next(s for s in schemas if s["function"]["name"] == "vm_run")
-    assert "1024 MB" in vm_run["function"]["description"]
-    assert "1 Prozessorkern" in vm_run["function"]["description"]
-    assert "1 Prozessorkerne" not in vm_run["function"]["description"]
-    assert "4 GB" in vm_run["function"]["description"]
-
-
-def test_vm_schemas_follow_the_plus_size() -> None:
-    from aquaticy.tools import vm_schemas_for
-
-    settings = Settings(vm_cpus=4, vm_memory_mb=6144, vm_disk_gb=20)
-    schemas = vm_schemas_for(settings)
-    vm_run = next(s for s in schemas if s["function"]["name"] == "vm_run")
-    assert "6144 MB" in vm_run["function"]["description"]
-    assert "4 Prozessorkerne" in vm_run["function"]["description"]
-    assert "20 GB" in vm_run["function"]["description"]
-
-
-def test_vm_schemas_do_not_mutate_the_shared_template() -> None:
-    """Sonst haengt der Text der ersten Anfrage an allen weiteren."""
-    from aquaticy.tools import VM_SCHEMAS, vm_schemas_for
-
-    vm_schemas_for(Settings(vm_cpus=4, vm_memory_mb=6144, vm_disk_gb=20))
-    original = next(s for s in VM_SCHEMAS if s["function"]["name"] == "vm_run")
-    assert "3072 MB" in original["function"]["description"]
-    assert "6144 MB" not in original["function"]["description"]
 
 
 def test_a_wordy_hit_count_does_not_break_the_call(settings: Settings) -> None:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -53,95 +52,15 @@ def _flags(**kwargs: Any) -> list[str]:
     return box._run_flags()
 
 
-def test_a_vm_without_network_has_none() -> None:
-    flags = _flags()
-    assert "--network" in flags and flags[flags.index("--network") + 1] == "none"
-    assert "NET_ADMIN" not in flags
-
-
-def test_internet_keeps_the_lock_and_needs_net_admin_for_it() -> None:
-    flags = _flags(internet=True)
-    assert "--network" not in flags and "NET_ADMIN" in flags
-
-
-def test_lan_drops_the_lock_and_needs_no_net_admin() -> None:
-    from aquaticy.sandbox import Sandbox
-
-    box = Sandbox(internet=True, lan=True)
-    assert box.lan and box.netz_offen
-    flags = _flags(internet=True, lan=True)
-    assert "--network" not in flags and "NET_ADMIN" not in flags
-
-
-def test_lan_without_any_network_means_nothing() -> None:
-    from aquaticy.sandbox import Sandbox
-
-    assert Sandbox(lan=True).lan is False
-
-
-@pytest.mark.parametrize(("lan", "gesperrt"), [(False, True), (True, False)])
-def test_the_lock_is_set_up_unless_lan_is_on(monkeypatch: pytest.MonkeyPatch, lan: bool,
-                                             gesperrt: bool) -> None:
-    from aquaticy import sandbox
-
-    box = sandbox.Sandbox(internet=True, lan=lan)
-    box.runtime = _laufzeit()
-    aufrufe: list[str] = []
-    monkeypatch.setattr(box, "_lock_network", lambda: aufrufe.append("sperre"))
-    monkeypatch.setattr(box, "_create_volume", lambda: None)
-    monkeypatch.setattr(box, "_start_container", lambda: None)
-    monkeypatch.setattr(box, "_check_nested_network", lambda: None)
-    monkeypatch.setattr(sandbox, "ensure_ssh_image", lambda runtime: None)
-    monkeypatch.setattr(box, "_touch_locked", lambda: None)
-    box.ensure()
-    assert bool(aufrufe) is gesperrt
-
-
-def test_shared_builds_the_lan_vm_with_internet(tmp_path: Path) -> None:
-    from aquaticy import sandbox
-
-    einstellungen = Settings(data_dir=tmp_path / "d", env_path=tmp_path / ".env")
-    einstellungen.vm_lan = True
-    try:
-        box = sandbox.shared(einstellungen)
-        assert box.lan and box.internet and not box.user_mode
-    finally:
-        sandbox.forget_shared(einstellungen)
-
-
-@pytest.mark.parametrize("plan", ["normal", "pro"])
-def test_normal_and_pro_have_no_vm_network_at_all(tmp_path: Path, plan: str) -> None:
-
-    profil = tmp_path / "konto"
-    profil.mkdir()
-    (profil / ".env").write_text("AQUATICY_VM_INTERNET=true\nAQUATICY_VM_LAN=true\n")
-    einstellungen = web._profile_settings(profil, plan)
-    assert einstellungen.vm_internet is False and einstellungen.vm_lan is False
-
-
-def test_ultra_chooses_lan_itself(tmp_path: Path) -> None:
-    profil = tmp_path / "konto"
-    profil.mkdir()
-    (profil / ".env").write_text("AQUATICY_VM_LAN=true\n")
-    assert web._profile_settings(profil, "ultra").vm_lan is True
-    (profil / ".env").write_text("AQUATICY_VM_LAN=false\n")
-    assert web._profile_settings(profil, "ultra").vm_lan is False
+# 16.0.1 (Aquaticy-Test): 9 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_the_model_cannot_switch_the_lan_on() -> None:
     from aquaticy import preferences
 
     assert "AQUATICY_VM_LAN" in preferences.PROTECTED
-
-
-def test_the_model_is_told_about_lan() -> None:
-    from aquaticy.tools import VM_NET_LAN, vm_schemas_for
-
-    einstellungen = Settings()
-    einstellungen.vm_lan = True
-    text = next(s for s in vm_schemas_for(einstellungen)
-                if s["function"]["name"] == "vm_run")["function"]["description"]
-    assert VM_NET_LAN in text
 
 
 def test_an_insulting_answer_is_withdrawn(monkeypatch: pytest.MonkeyPatch,

@@ -18,7 +18,7 @@ import pytest
 from aquaticy import web
 from aquaticy.agent import Agent
 from aquaticy.config import Settings
-from aquaticy.ownservices import calendar_days, home_domain, missing_text, own_sources
+from aquaticy.ownservices import missing_text, own_sources
 from tests.test_guardrails import _reply
 from tests.test_web import client, session, web_settings  # noqa: F401
 
@@ -34,16 +34,8 @@ JA = [
     ("was steht morgen an", "calendar"),
     ("What's on my calendar today?", "calendar"),
     ("what meetings do I have today", "calendar"),
-    ("schalte meine Lichter an", "home"),
-    ("Schalte das Licht im Wohnzimmer aus", "home"),
-    ("mach die Lampen im Flur an", "home"),
-    ("Turn off the lights", "home"),
-    ("dimme das Licht im Schlafzimmer auf 30 %", "home"),
-    ("ist das Licht im Flur an", "home"),
-    ("schalte über Home Assistant die Heizung an", "home"),
-    ("was ist in meinem Lager", "storage"),
-    ("Haben wir noch Schrauben im Lager?", "storage"),
-    ("wo ist das Ladekabel in der Lagerverwaltung", "storage"),
+    # 16.0.1 (Aquaticy-Test): Home Assistant und Lager gibt es nicht mehr -- Fragen nach
+    # Lichtern oder dem Lager sind normale Fragen (siehe NEIN).
 ]
 
 NEIN = [
@@ -58,6 +50,8 @@ NEIN = [
     "What is a calendar?",
     "Wie viele Lichter hat der Eiffelturm?",
     "Erkläre mir das Lager von Kugellagern",
+    "schalte meine Lichter an",
+    "was ist in meinem Lager",
     "",
 ]
 
@@ -76,21 +70,15 @@ def test_one_question_can_name_two_services() -> None:
     assert set(own_sources("Lies meine Mails und zeig meine Termine")) == {"mail", "calendar"}
 
 
-def test_days_and_device_come_from_the_question() -> None:
-    assert calendar_days("Termine heute") == 1
-    assert calendar_days("Termine morgen") == 2
-    assert calendar_days("meine Termine") == 7
-    assert home_domain("schalte die Lichter an") == "light"
-    assert home_domain("mach die Heizung wärmer") == "climate"
-    assert home_domain("was ist im Haus los") == ""
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_the_missing_text_says_where_to_connect() -> None:
     assert "Gmail & Kalender" in missing_text(("mail",))
     assert missing_text(("mail",)).startswith("Das kann ich noch nicht nachsehen: Dein Postfach")
-    assert "Zuhause & Netz" in missing_text(("home", "storage"))
     assert "Gmail & Calendar" in missing_text(("calendar",), "en")
-
 
 
 class Modell:
@@ -166,31 +154,9 @@ def test_calendar_is_read_for_the_asked_day(google: Settings,
     assert tage == [2]
 
 
-def test_lights_are_looked_up_in_home_assistant(settings: Settings,
-                                                monkeypatch: pytest.MonkeyPatch) -> None:
-    settings.ha_url, settings.ha_token, settings.ha_control = "http://ha.local:8123", "t", True
-    modell = Modell()
-    agent = _agent(settings, monkeypatch, modell, [])
-    bereiche: list[str] = []
-    monkeypatch.setattr(agent.toolbox, "ha_states",
-                        lambda search="", domain="": bereiche.append(domain) or {"states": []})
-    agent.ask("Schalte meine Lichter an", stream=False, structured=True, online=True)
-    assert bereiche == ["light"]
-    assert {"ha_states", "ha_call"} <= modell.werkzeuge[0]
-    assert "web_search" not in modell.werkzeuge[0]
-
-
-def test_storage_is_browsed(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
-    settings.storage_url, settings.storage_access = "http://lager.local:3000", "read"
-    modell = Modell()
-    agent = _agent(settings, monkeypatch, modell, [])
-    gestoebert: list[int] = []
-    monkeypatch.setattr(agent.toolbox, "storage_browse",
-                        lambda room_id=0, furniture_id=0: gestoebert.append(room_id)
-                        or {"rooms": []})
-    agent.ask("Was ist in meinem Lager?", stream=False)
-    assert gestoebert == [0]
-    assert "storage_find" in modell.werkzeuge[0] and "web_search" not in modell.werkzeuge[0]
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_not_connected_means_a_clear_sentence_and_no_search(
@@ -202,7 +168,7 @@ def test_not_connected_means_a_clear_sentence_and_no_search(
     assert ergebnis.answer == missing_text(("mail",))
     assert modell.werkzeuge == [], "ohne Dienst braucht es kein Modell"
     agent.set_answer_language("en")
-    assert "isn’t connected" in agent.ask("Schalte meine Lichter an", stream=False).answer
+    assert "isn’t connected" in agent.ask("Do I have new emails?", stream=False).answer
 
 
 def test_a_web_search_the_model_tries_anyway_is_refused(
@@ -237,7 +203,6 @@ def test_the_council_does_not_answer_from_memory(google: Settings,
     monkeypatch.setattr(agent, "_council_turn", _kein_planer)
     monkeypatch.setattr(agent.toolbox, "mail_search", lambda query="", count=8: {"mails": []})
     assert agent.ask("Was sind meine Mails?", stream=False).answer == "Fertig."
-
 
 
 GOOGLE_NAMEN = ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "AQUATICY_GOOGLE",
@@ -290,60 +255,6 @@ def test_connecting_without_a_secret_says_so_before_google(
     assert "Client-Secret" in daten["error"]
 
 
-
 HA_NAMEN = ("AQUATICY_HA_URL", "HA_TOKEN", "AQUATICY_HA_TOKEN", "AQUATICY_HA_CONTROL")
 
 
-@pytest.fixture
-def ha_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> Any:
-    """Eigene .env, ein gestelltes Home Assistant -- nichts bleibt nach dem Test."""
-    ziel = tmp_path / "ha.env"
-    monkeypatch.setattr(web, "find_env_file", lambda: ziel)
-    for name in HA_NAMEN:
-        monkeypatch.setenv(name, "")
-    monkeypatch.setattr("aquaticy.homeassistant.HomeAssistant.ping", lambda self: "Home 2026.5.1")
-    monkeypatch.setattr("aquaticy.homeassistant.HomeAssistant.domains",
-                        lambda self: {"light": 8, "sensor": 80})
-    web.SESSION.reload()
-    return ziel
-
-
-def test_a_successful_ha_test_is_saved_right_away(client, ha_env: Any) -> None:  # noqa: F811
-    """Fund: "Verbunden mit Home 2026.5.1 — 88 Geräte und Werte. Zum Übernehmen unten
-    speichern." -- wer das übersah, hatte im Chat kein Home Assistant."""
-    status, body = client("POST", "/api/ha", {"url": "192.168.1.5:8123",
-                                              "token": "ha-token-123456", "save": True})
-    daten = json.loads(body)
-    assert status == 200 and daten["ok"] is True and daten["saved"] is True
-    assert daten["entities"] == 88 and daten["control"] is False
-    inhalt = ha_env.read_text(encoding="utf-8")
-    assert "AQUATICY_HA_URL=http://192.168.1.5:8123" in inhalt
-    assert "HA_TOKEN=ha-token-123456" in inhalt
-    gilt = web.SESSION.settings()
-    assert gilt.ha_url == "http://192.168.1.5:8123" and gilt.ha_token == "ha-token-123456"
-
-    namen = {t["function"]["name"] for t in Agent(gilt, cache=None).tools}
-    assert "ha_states" in namen and "ha_call" not in namen
-
-
-def test_without_save_the_ha_test_only_tests(client, ha_env: Any) -> None:  # noqa: F811
-    _, body = client("POST", "/api/ha", {"url": "192.168.1.5:8123", "token": "ha-token-123456"})
-    daten = json.loads(body)
-    assert daten["ok"] is True and daten["saved"] is False
-    assert not ha_env.exists()
-
-
-def test_the_model_hears_where_switching_is_turned_on(
-        settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
-    settings.ha_url, settings.ha_token, settings.ha_control = "http://ha.local:8123", "t", False
-    modell = Modell(_reply("Schalten ist aus."))
-    agent = _agent(settings, monkeypatch, modell, [])
-    monkeypatch.setattr(agent.toolbox, "ha_states", lambda search="", domain="": {"states": []})
-    agent.ask("Schalte meine Lichter an", stream=False)
-    verlauf = json.dumps(modell.verlaeufe[0], ensure_ascii=False)
-    assert "Aquaticy darf auch schalten" in verlauf and "ha_call" not in modell.werkzeuge[0]
-    settings.ha_control = True
-    agent = _agent(settings, monkeypatch, modell, [])
-    monkeypatch.setattr(agent.toolbox, "ha_states", lambda search="", domain="": {"states": []})
-    agent.ask("Schalte meine Lichter an", stream=False)
-    assert "Schalten ist aus" not in json.dumps(modell.verlaeufe[-1], ensure_ascii=False)

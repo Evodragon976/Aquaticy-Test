@@ -40,8 +40,6 @@
   --shadow:0 0 0 1px rgba(255,255,255,.06),0 2px 14px rgba(0,0,0,.4);
 }
 
-
-
 :root[data-palette="mono"]{
   --switch-off:#767676;
   --bg:#ffffff;--surface:#ffffff;--surface-2:#f4f4f4;--sidebar:#ffffff;
@@ -80,7 +78,6 @@ button{font:inherit;color:inherit}
   color:var(--text);padding:8px 12px;border:2px solid var(--accent);border-radius:8px;
   transform:translateY(-160%)}
 .skip-link:focus{transform:none}
-
 
 aside{width:260px;flex:0 0 auto;background:var(--sidebar);border-right:1px solid var(--line);
   display:flex;flex-direction:column;transition:margin-left .18s ease}
@@ -141,11 +138,6 @@ body.collapsed aside{margin-left:-260px}
 .recent mark{background:var(--accent-soft);color:var(--accent-text);border-radius:3px;
   padding:0 1px}
 .recents-leer{color:var(--text-3);font-size:calc(12.5px * var(--fs));padding:14px 10px;line-height:1.5}
-
-
-#cw-task-bild-vorschau{max-width:120px;max-height:90px;border-radius:8px;
-  border:1px solid var(--line-2);object-fit:cover;align-self:flex-end}
-
 
 .answer-tools{display:flex;gap:6px;margin-top:8px;opacity:0;
   transition:opacity var(--t-fast) var(--ease-out)}
@@ -217,7 +209,6 @@ body.hat-neues #btn-side::after{content:"";position:absolute;top:5px;right:5px;
   text-align:left}
 @media (hover:hover){.side-btn:hover{background:var(--surface);color:var(--text)}}
 
-
 .pane{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
 .topbar{display:flex;align-items:center;gap:10px;padding:12px 18px;flex:0 0 auto}
 .iconbtn{background:transparent;border:0;border-radius:9px;padding:6px 8px;cursor:pointer;
@@ -226,7 +217,6 @@ body.hat-neues #btn-side::after{content:"";position:absolute;top:5px;right:5px;
 .topbar .where{font-size:calc(13px * var(--fs));color:var(--text-3);overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap;min-width:0}
 .topbar .spacer{flex:1}
-
 
 .modelpick{display:flex;align-items:center;gap:6px;background:var(--surface);
   border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer;
@@ -286,7 +276,6 @@ body.hat-neues #btn-side::after{content:"";position:absolute;top:5px;right:5px;
 .backdrop{position:fixed;inset:0;z-index:25}
 main{flex:1;overflow-y:auto;scroll-behavior:smooth;min-height:0}
 
-
 body.start .pane{justify-content:center}
 body.start .topbar{position:absolute;top:0;left:0;right:0}
 body.start main{flex:0 0 auto;overflow:visible}
@@ -300,7 +289,6 @@ body:not(.start) .hello{display:none}
 #secure-panel label{display:block;margin:12px 0}
 #secure-panel button,#secure-controls button{margin:4px 4px 4px 0}
 
-
 .hello{max-width:46rem;margin:0 auto;padding:0 24px 26px;text-align:center}
 .hello .star{width:44px;height:44px;margin-bottom:18px;display:inline-block;object-fit:contain}
 .hello h1{font:400 calc(34px * var(--fs))/1.25 var(--serif);margin:0 0 10px;letter-spacing:-.01em}
@@ -312,7 +300,6 @@ body:not(.start) .hint{display:none}
 .chip{background:var(--surface);border:1px solid var(--line);border-radius:999px;
   padding:8px 15px;font-size:calc(13.5px * var(--fs));cursor:pointer;color:var(--text-2)}
 @media (hover:hover){.chip:hover{border-color:var(--accent);color:var(--accent-text)}}
-
 
 .msg{margin-bottom:28px;animation:rise .2s ease-out}
 @keyframes rise{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
@@ -359,7 +346,6 @@ body:not(.start) .hint{display:none}
   font-size:calc(12.5px * var(--fs));color:var(--text-2)}
 .result-card dt{color:var(--text-3)} .result-card dd{margin:0;overflow-wrap:anywhere}
 .result-card .source{display:inline-block;margin-top:9px;font-size:calc(12px * var(--fs))}
-
 
 .steps.ablauf{gap:2px}
 .phase{display:flex;flex-direction:column;align-items:flex-start}
@@ -418,7 +404,6 @@ body.tracing .phase:not(.think) .phase-pfeil{transform:rotate(90deg)}
   .phase.aktiv .phase-logo img,.phase.aktiv .phase-name,.phase-name.wechsel{animation:none}
 }
 
-
 .steps{display:flex;flex-direction:column;gap:4px;margin:0 0 14px}
 .step{font-size:calc(13px * var(--fs));color:var(--text-3);display:flex;gap:9px;align-items:flex-start;
   animation:rise .15s ease-out}
@@ -445,8 +430,6 @@ body.denken .trace.think .txt{white-space:pre-wrap;word-break:break-word;
 .cursor{display:inline-block;width:2px;height:1.05em;background:var(--accent);
   vertical-align:-2px;animation:blink 1.1s steps(2) infinite;margin-left:1px}
 @keyframes blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
-
-
 
 .overlay.ask{z-index:100;align-items:center}
 .ask-sheet{max-width:29rem;padding:22px 24px 20px}
@@ -477,12 +460,10 @@ body.denken .trace.think .txt{white-space:pre-wrap;word-break:break-word;
 .overlay.ask .note{margin-top:12px}
 .overlay.ask .actions{margin-top:16px}
 
-
 .askcard{border-left:2px solid var(--accent);padding:2px 0 2px 12px;margin:2px 0 16px;
   font-size:calc(13.5px * var(--fs));color:var(--text-2)}
 .askcard .q{font-weight:600;color:var(--text)}
 .askcard .given{color:var(--accent-text);margin-top:2px}
-
 
 footer{position:absolute;bottom:0;left:0;right:0;padding:0 24px 22px;
   background:linear-gradient(transparent,var(--bg) 32%);pointer-events:none}
@@ -561,7 +542,6 @@ body.start .slash-liste{top:calc(100% + 8px);bottom:auto}
 @keyframes mic-puls{from{transform:scale(1);opacity:.7}to{transform:scale(1.55);opacity:0}}
 @media (prefers-reduced-motion:reduce){.mic.hoert::before{animation:none;opacity:0}}
 
-
 .modes{display:flex;gap:2px;background:var(--surface);border:1px solid var(--line);
   border-radius:999px;padding:2px;margin:2px 12px 10px;width:calc(100% - 24px)}
 .mode{flex:1 1 0;background:transparent;border:0;border-radius:999px;padding:5px 8px;
@@ -601,8 +581,6 @@ body:not(.pro-mode) .only-pro{display:none}
 .agent-range input[type="range"]{width:100%;margin:9px 0 2px;accent-color:var(--accent)}
 .agent-range .why{display:block;color:var(--text-3);font-size:calc(11.5px * var(--fs));line-height:1.5}
 
-
-
 .schalter{appearance:none;-webkit-appearance:none;flex:0 0 auto;margin:0;
   position:relative;width:44px;height:26px;border:0;border-radius:999px;
   background:var(--line-2);cursor:pointer;outline:none;
@@ -638,7 +616,6 @@ body.dragging::after{content:"Datei hier ablegen";position:fixed;inset:14px;z-in
   color:var(--accent-text);display:grid;place-items:center;font:400 calc(19px * var(--fs)) var(--serif);
   pointer-events:none}
 
-
 .sheet-head{position:sticky;top:-24px;z-index:2;background:var(--bg);
   margin:-24px -26px 0;padding:20px 26px 12px;border-radius:18px 18px 0 0;
   border-bottom:1px solid var(--line)}
@@ -663,8 +640,6 @@ body.dragging::after{content:"Datei hier ablegen";position:fixed;inset:14px;z-in
   color:var(--accent-text);font-weight:600}
 fieldset{scroll-margin-top:13rem}
 
-
-
 :root{
   --ease-out:cubic-bezier(.16,1,.3,1);
   --ease-in:cubic-bezier(.4,0,1,1);
@@ -686,7 +661,6 @@ fieldset{scroll-margin-top:13rem}
   100%{transform:none}}
 @keyframes nudge{50%{transform:scale(1.14)}100%{transform:none}}
 
-
 .overlay.open{animation:fade-in var(--t-mid) var(--ease-out)}
 .overlay.open>.sheet{animation:sheet-in var(--t-slow) var(--ease-out)}
 .overlay.ask.open>.sheet{animation:pop var(--t-mid) var(--ease-pop)}
@@ -698,7 +672,6 @@ fieldset{scroll-margin-top:13rem}
 .picker,.minwin{animation:slide-up var(--t-mid) var(--ease-out)}
 .picker.closing{animation:fade-out var(--t-fast) var(--ease-in) forwards}
 .chatmenu{animation:pop var(--t-fast) var(--ease-out);transform-origin:top right}
-
 
 .recents.fresh .recent{animation:slide-left var(--t-mid) var(--ease-out) both}
 .step{animation:slide-left var(--t-fast) var(--ease-out)}
@@ -713,12 +686,10 @@ fieldset{scroll-margin-top:13rem}
 .file{animation:pop var(--t-fast) var(--ease-pop)}
 body.dragging::after{animation:fade-in var(--t-fast) var(--ease-out)}
 
-
 .flash{animation:nudge var(--t-mid) var(--ease-pop)}
 .where.flash{animation:fade-in var(--t-mid) var(--ease-out)}
 
 .thread.fresh .msg{animation:rise var(--t-mid) var(--ease-out) both}
-
 
 .btn:active,.tool:active,.side-btn:active,.mode:active,.tmode:active,
 .secnav button:active,.chip:active{transform:scale(.97)}
@@ -736,10 +707,8 @@ body.dragging::after{animation:fade-in var(--t-fast) var(--ease-out)}
 .iconbtn:active{transform:scale(.9)}
 .meter span{transition:width 420ms var(--ease-out)}
 
-
 :root.theming *{transition:background-color var(--t-slow) ease,
   color var(--t-slow) ease,border-color var(--t-slow) ease!important}
-
 
 .limits{display:grid;gap:14px;margin-top:10px}
 .limits-head{font:600 calc(13.5px * var(--fs))/1.3 var(--sans);margin:4px 0 0}
@@ -779,13 +748,10 @@ body.dragging::after{animation:fade-in var(--t-fast) var(--ease-out)}
   .limit-banner .limit-bar{flex:1 1 100%;order:3}
   .limit-banner .txt{flex:1 1 0}}
 
-
-
 .pick-group{font-size:calc(11px * var(--fs));letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);
   margin:10px 12px 4px;display:flex;gap:8px;align-items:baseline}
 .pick-group span{text-transform:none;letter-spacing:0}
 .pick .src{font-size:calc(10.5px * var(--fs));color:var(--accent-text);margin-left:6px}
-
 
 .zaehler{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
 .kachel{background:var(--surface);border:1px solid var(--line-2);border-radius:12px;
@@ -794,8 +760,6 @@ body.dragging::after{animation:fade-in var(--t-fast) var(--ease-out)}
 .kachel .was{font-size:calc(11.5px * var(--fs));color:var(--text-3);margin-top:3px}
 .kachel .dazu{font-size:calc(11.5px * var(--fs));color:var(--text-2);margin-top:5px}
 @media (max-width:520px){.zaehler{grid-template-columns:1fr}}
-
-
 
 #membox,#vmbox{z-index:90}
 .merk-sheet{max-width:38rem}
@@ -819,8 +783,6 @@ body.dragging::after{animation:fade-in var(--t-fast) var(--ease-out)}
 .merk{animation:rise var(--t-mid) var(--ease-out) both}
 .merk.geht{animation:fade-out var(--t-fast) var(--ease-in) forwards}
 .merk-leer{color:var(--text-3);font-size:calc(14px * var(--fs));padding:18px 2px}
-
-
 
 .theme-sheet{max-width:34rem}
 
@@ -862,7 +824,6 @@ body.dragging::after{animation:fade-in var(--t-fast) var(--ease-out)}
 .own-models code{font:calc(12.5px * var(--fs)) var(--mono);color:var(--text)}
 .colorline input[type=color]{width:52px;height:30px;padding:0;border:1px solid var(--line-2);
   border-radius:8px;background:none;cursor:pointer;flex:0 0 auto}
-
 
 .aiguard-hint{ text-align:center; font-size:calc(.72rem * var(--fs)); color:var(--muted,#8a8a80);
   margin:1.2rem auto .2rem; max-width:44rem; line-height:1.5; opacity:.85; }
@@ -935,7 +896,6 @@ input:focus,select:focus{border-color:var(--accent)}
 .gauge .bar.hot span{background:var(--err)}
 .gauge .g-sub{font-size:calc(11.5px * var(--fs));color:var(--text-3);margin-top:5px}
 
-
 @media (max-width:900px){
 
   .overlay.ask{align-items:flex-end;padding:0}
@@ -983,8 +943,6 @@ input:focus,select:focus{border-color:var(--accent)}
   .topbar .spacer:first-of-type{flex:0 0 auto}
 }
 
-
-
 @media (min-width:600px) and (max-width:900px){
 
   .thread,.composer,.hello,.files,.hint,.chips{max-width:46rem}
@@ -1012,7 +970,6 @@ input:focus,select:focus{border-color:var(--accent)}
   .topbar .where{font-size:calc(12.5px * var(--fs))}
 }
 
-
 @media (max-width:430px){
 
   .topbar{flex-wrap:wrap;row-gap:2px}
@@ -1032,7 +989,6 @@ input:focus,select:focus{border-color:var(--accent)}
   .crow .tool{padding:5px 9px}
 }
 
-
 @supports (padding:max(0px)){
   @media (max-width:900px){
     footer{padding-bottom:max(12px, env(safe-area-inset-bottom))}
@@ -1040,13 +996,11 @@ input:focus,select:focus{border-color:var(--accent)}
   }
 }
 
-
 @media (max-height:520px) and (max-width:900px){
   .hello{padding-bottom:10px}
   .hello h1{font-size:calc(20px * var(--fs));margin-bottom:4px}
   .hello p,.chips{display:none}
 }
-
 
 .auth-gate{position:fixed;inset:0;z-index:1000;background:var(--bg);display:grid;
   place-items:center;padding:24px;overflow:auto}
@@ -1083,7 +1037,6 @@ input:focus,select:focus{border-color:var(--accent)}
 .step .shot{display:block;margin-top:6px;max-width:260px;width:100%;border-radius:8px;
   border:1px solid var(--line-2)}
 .account-grid{display:grid;grid-template-columns:1fr auto;gap:8px 18px;align-items:center}
-
 
 .usermode-row{align-items:flex-start}
 .usermode-row label{flex:1;min-width:0}
@@ -1152,69 +1105,9 @@ input:focus,select:focus{border-color:var(--accent)}
 .side-badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;
   background:var(--accent);color:var(--bg);font:600 calc(11px * var(--fs))/18px var(--mono);
   text-align:center}
-.coworker-lock{margin-top:12px;padding:12px 14px;border:1px dashed var(--line-2);
-  border-radius:13px;color:var(--text-2)}
-.coworker-list{display:flex;flex-direction:column;gap:12px;margin-top:12px}
-.cw-karte{background:var(--surface);border:1px solid var(--line-2);border-radius:13px;
-  padding:12px 14px;animation:rise var(--t-mid) var(--ease-out) both}
-.cw-karte.arbeitet{border-color:var(--accent)}
-.coworker-list.ruhig .cw-karte{animation:none}
-.cw-kopf{display:flex;gap:12px;align-items:flex-start}
-.cw-avatar{font-size:calc(26px * var(--fs));line-height:1.1;flex:none;width:34px;
-  text-align:center}
-.cw-karte.arbeitet .cw-avatar{animation:atmen 2.4s ease-in-out infinite}
-@keyframes atmen{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
-.cw-kopf-text{flex:1;min-width:0}
-.cw-name{font-weight:600;font-size:calc(15px * var(--fs))}
-.cw-status{display:block;font-size:calc(12.5px * var(--fs));color:var(--text-2);margin-top:2px}
-.cw-aufgabe{font-size:calc(13.5px * var(--fs));color:var(--text);margin-top:8px;
-  line-height:1.5;white-space:pre-line;overflow-wrap:anywhere}
-.cw-abschnitt{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line-2)}
-.cw-abschnitt>.how{font-size:calc(12.5px * var(--fs));color:var(--text-2);margin-bottom:6px}
-.cw-freigabe{border:1px solid var(--accent);border-radius:11px;padding:9px 11px;margin-top:6px;
-  background:var(--bg)}
-.cw-freigabe .was{font-size:calc(13px * var(--fs));overflow-wrap:anywhere}
-.cw-freigabe summary{cursor:pointer;margin-top:6px;color:var(--accent-text);
-  font-size:calc(12.5px * var(--fs));font-weight:600}
-.cw-freigabe pre{white-space:pre-wrap;overflow-wrap:anywhere;font:calc(12px * var(--fs)) var(--mono);
-  max-height:12em;overflow:auto;margin:6px 0 0;color:var(--text-2)}
-.cw-freigabe .reihe{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
-.cw-verlauf{display:flex;flex-direction:column;gap:6px;max-height:22rem;overflow-y:auto;
-  overscroll-behavior:contain}
-.cw-eintrag{display:flex;gap:8px;font-size:calc(13px * var(--fs));line-height:1.5}
-.cw-eintrag .art{flex:none;width:1.4em;text-align:center}
-.cw-eintrag .inhalt{flex:1;min-width:0;overflow-wrap:anywhere}
-.cw-eintrag .zeit{color:var(--text-3);font-size:calc(11.5px * var(--fs))}
-.cw-eintrag.du .inhalt{color:var(--text-2)}
-.cw-eintrag.neu .zeit{color:var(--accent-text);font-weight:600}
-.cw-eintrag .inhalt p{margin:0 0 4px}
-.cw-schreiben{display:flex;gap:8px;margin-top:10px;align-items:flex-end}
-.cw-schreiben textarea{flex:1;min-width:0;border:1px solid var(--line-2);border-radius:10px;
-  background:var(--bg);padding:8px 10px;min-height:2.6em;max-height:9em;resize:vertical}
-.cw-knoepfe{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.cw-knoepfe .btn,.cw-freigabe .btn,.cw-schreiben .btn{padding:7px 13px;
-  font-size:calc(13px * var(--fs))}
-.cw-mehr{margin-top:10px;font-size:calc(13px * var(--fs))}
-.cw-mehr summary{cursor:pointer;color:var(--accent-text);font-weight:600}
-.cw-mehr .inhalt{margin-top:8px;color:var(--text-2);overflow-wrap:anywhere}
-.cw-mehr textarea{width:100%;border:1px solid var(--line-2);border-radius:10px;background:var(--bg);
-  padding:8px 10px;min-height:5em;resize:vertical;margin-top:6px}
-.coworker-new{margin-top:16px;background:var(--surface);border:1px solid var(--line-2);
-  border-radius:13px;padding:12px 14px}
-.coworker-new summary{cursor:pointer;font-weight:600;color:var(--accent-text)}
-.coworker-new label.block{display:block;margin-top:10px}
-.coworker-new textarea{width:100%;border:1px solid var(--line-2);border-radius:10px;
-  background:var(--bg);padding:8px 10px;min-height:5em;resize:vertical}
-.cw-avatars{max-height:180px;overflow:auto;display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
-.cw-avatars button{width:40px;height:40px;border-radius:10px;border:1px solid var(--line-2);
-  background:var(--bg);font-size:calc(19px * var(--fs));cursor:pointer}
-.cw-avatars button[aria-checked="true"]{border-color:var(--accent);background:var(--accent-soft)}
-.cw-beispiele{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 
-.cw-beispiel{background:var(--surface);border:1px solid var(--line);border-radius:999px;
-  padding:7px 13px;font:inherit;font-size:calc(12.5px * var(--fs));cursor:pointer;
-  color:var(--text-2);text-align:left}
-@media (hover:hover){.cw-beispiel:hover{border-color:var(--accent);color:var(--accent-text)}}
+@keyframes atmen{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+
 .recht{display:flex;gap:10px;align-items:center;justify-content:space-between;
   flex-wrap:wrap;margin-top:7px}
 .recht-name{font-size:calc(13px * var(--fs));color:var(--text-2)}
@@ -1262,7 +1155,6 @@ input:focus-visible,select:focus-visible,.side-search input:focus-visible,
 
 .retry{margin-top:8px}
 
-
 .danger-zone{border:1px solid var(--err);border-radius:12px;padding:12px 14px;margin-top:12px}
 .danger-zone .btn.danger{border-color:var(--err);color:var(--err)}
 .device-list{list-style:none;padding:0;margin:8px 0;font-size:calc(13px * var(--fs))}
@@ -1297,7 +1189,6 @@ input:focus-visible,select:focus-visible,.side-search input:focus-visible,
   .tool.stop{min-height:34px;min-width:34px;position:relative}
   .tool.stop::after{content:"";position:absolute;inset:-5px}
 }
-
 
 .topbrand,.topnew{display:none}
 body.collapsed .topnew{display:inline-flex}
@@ -1345,7 +1236,6 @@ button{touch-action:manipulation}
   .picker{max-height:calc(100vh - 200px)}
   @supports (height:100dvh){.picker{max-height:calc(100dvh - 200px)}}
 
-
   .overlay:not(.ask){padding:0;align-items:stretch}
   .overlay:not(.ask)>.sheet{max-width:100%;border-radius:0;border:0;min-height:100%;
     max-height:100vh;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
@@ -1363,7 +1253,6 @@ button{touch-action:manipulation}
   .account-grid{grid-template-columns:auto minmax(0,1fr);gap:8px 14px}
   .actions{flex-wrap:wrap}
 
-
   .auth-gate{padding:0;place-items:stretch}
   .auth-card{width:100%;border-radius:0;border:0;box-shadow:none;
     padding:max(22px, env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom))}
@@ -1374,7 +1263,6 @@ button{touch-action:manipulation}
   .bubble pre{font-size:calc(12.5px * var(--fs));padding:11px 12px}
 }
 
-
 @media (max-width:339px){
   .modelpick #model-name{display:none}
   .modelpick::before{content:"✦";color:var(--accent);font-size:calc(13px * var(--fs))}
@@ -1382,8 +1270,6 @@ button{touch-action:manipulation}
   .modelpick .caret{display:none}
   .hello h1{font-size:calc(20px * var(--fs))}
 }
-
-
 
 body.collapsed aside{box-shadow:none}
 @media (max-width:900px){
@@ -1431,11 +1317,9 @@ html.vv,html.vv body{height:var(--app-h)}
   body.start .pane{justify-content:flex-start;padding-top:max(22vh, 120px)}
 }
 
-
 .picker-think.vm-netz{margin-left:22px;border-left:2px solid var(--line);padding-left:12px}
 .vm-status{margin:2px 16px 8px 34px}
 .vm-status.bad{color:var(--err)}
-
 
 .vl{margin-top:14px;display:flex;flex-direction:column;gap:12px}
 .vl-titel{font-weight:600;color:var(--text)}
@@ -1618,7 +1502,6 @@ html.vv,html.vv body{height:var(--app-h)}
   </div>
   <div class="recents" id="recents"></div>
   <div class="side-foot">
-    <button class="side-btn" id="btn-coworker" title="Coworker: arbeiten die ganze Zeit für dich">Coworker<span class="side-badge" id="coworker-badge" hidden></span></button>
     <button class="side-btn" id="btn-settings">Einstellungen</button>
     <button class="side-btn" id="btn-theme">◐ Design</button>
     <nav class="legal-links" aria-label="Rechtliches">
@@ -1893,115 +1776,6 @@ html.vv,html.vv body{height:var(--app-h)}
 </div>
 
 
-<div class="overlay" id="coworkerbox">
-  <div class="sheet addon-sheet" role="dialog" aria-modal="true" aria-labelledby="coworker-title">
-    <h2 id="coworker-title">Coworker</h2>
-    <p class="lead">Ein Coworker arbeitet immer weiter an einer Aufgabe. Er sucht im Web, liest
-      Gmail, Kalender und GitHub und meldet Neues. Er arbeitet nach Zeitplan oder wenn er es für
-      nötig hält. Er hält sich an deine Regeln. Wichtige Schritte macht er nur mit deinem Ja.</p>
-    <div class="note" id="coworker-note" role="status" aria-live="polite"></div>
-    <div class="coworker-lock" id="coworker-lock" hidden>Zeitpläne und Beobachtungen hat jedes
-      Konto. Coworker, die immer weiterarbeiten, gibt es mit Pro und Ultra. Mit Ultra bekommen sie
-      auch eine eigene virtual machine.</div>
-    <div class="coworker-list" id="coworker-list"></div>
-    <details class="coworker-new" id="coworker-new">
-      <summary>＋ Neuer Coworker</summary>
-      <label class="block"><span class="lbl">Name</span>
-        <input type="text" id="cw-name" maxlength="40" placeholder="z. B. Ava"
-               autocomplete="off"></label>
-      <div class="cw-avatars" id="cw-avatars" role="radiogroup" aria-label="Bild des Coworkers"></div>
-      <label class="block"><span class="lbl">Aufgabe</span>
-        <textarea id="cw-goal" rows="3" maxlength="2000"
-                  placeholder="z. B. Sag mir jeden Morgen, welche Mails wichtig sind und welche Termine anstehen."></textarea></label>
-        <div class="row">
-          <label><span class="lbl">Art</span>
-            <select id="cw-task-kind">
-              <option value="adaptive">immer weiter an der Aufgabe arbeiten</option>
-              <option value="research">regelmäßig recherchieren</option>
-              <option value="visual">Kamera, Satellit oder Straße beobachten</option>
-              <option value="price">Preis beobachten</option>
-              <option value="image">Bild hochladen und danach suchen</option>
-            </select></label>
-          <label id="cw-task-rhythm-feld"><span class="lbl">Rhythmus</span>
-            <select id="cw-task-rhythm">
-              <option value="daily">täglich</option>
-              <option value="hourly">stündlich</option>
-              <option value="weekly">wöchentlich</option>
-              <option value="minutes30">alle 30 Minuten</option>
-              <option value="minutes15">alle 15 Minuten</option>
-              <option value="minutes5">alle 5 Minuten</option>
-              <option value="minutes1">jede Minute</option>
-              <option value="always">die ganze Zeit</option>
-            </select>
-            <span class="why" id="cw-task-takt-hinweis" hidden>Je öfter geprüft wird, desto
-              schneller ist deine Grenze erreicht.</span></label>
-        </div>
-        <div class="row" id="cw-task-source-feld" hidden>
-          <label style="flex:1"><span class="lbl">Öffentliche Quelladresse
-            <span class="why" id="cw-task-source-warum">Die genaue Seite der Webcam, Karte, des
-              Satelliten oder Produkts. Private Kameras und Seiten mit Anmeldung gehen nicht.</span></span>
-            <input type="url" id="cw-task-source" placeholder="https://…"
-                   inputmode="url" autocomplete="off"></label>
-        </div>
-        <div class="row" id="cw-task-bild-feld" hidden>
-          <label style="flex:1"><span class="lbl">Bild des gesuchten Gegenstands
-            <span class="why">Ein Foto oder Produktbild. Aquaticy sucht damit, bis es ein Angebot
-              findet. Dann schickt es dir die Adresse in einem Chat.</span></span>
-            <input type="file" id="cw-task-bild" accept="image/jpeg,image/png,image/webp,image/gif">
-          </label>
-          <img id="cw-task-bild-vorschau" alt="Gewähltes Bild" hidden>
-        </div>
-        <div class="row">
-          <label id="cw-task-tag-feld"><span class="lbl">Wochentag</span>
-            <select id="cw-task-weekday">
-              <option value="0">Montag</option>
-              <option value="1">Dienstag</option>
-              <option value="2">Mittwoch</option>
-              <option value="3">Donnerstag</option>
-              <option value="4">Freitag</option>
-              <option value="5">Samstag</option>
-              <option value="6">Sonntag</option>
-            </select></label>
-          <label id="cw-task-zeit-feld"><span class="lbl">Uhrzeit <span class="why">Bei „stündlich"
-            zählt nur die Minute</span></span>
-            <input type="time" id="cw-task-zeit" value="08:00"></label>
-        </div>
-        <div class="check" id="cw-task-struktur-feld">
-          <input type="checkbox" id="cw-task-struktur" checked>
-          <label for="cw-task-struktur" style="margin:0">Richtig recherchieren
-            <span class="why">Mit Teilfragen, Helfern und Quellen, wie bei „Strukturieren“. Aus:
-              Aquaticy antwortet kurz mit dem, was es weiß.</span></label>
-        </div>
-      <details class="cw-mehr">
-        <summary>Notizen und was er lesen darf</summary>
-        <p class="note">Freiwillig. Der Coworker darf passende Stellen aus Quellen lesen, die du
-          freigibst. Wichtiges schreibt er in seine Notizen. Schaltest du das aus, bleiben diese
-          Notizen. Du kannst sie löschen. Andere Konten liest er nie.</p>
-        <label class="check"><input type="checkbox" id="cw-sharing-chats">
-          Wissen aus deinen Chats nutzen</label>
-        <label class="check"><input type="checkbox" id="cw-sharing-coworkers">
-          Notizen deiner anderen Coworker nutzen</label>
-        <label class="block">Platz für Notizen
-          <select id="cw-notes-limit"><option value="6000">6.000 Zeichen</option>
-            <option value="12000">12.000 Zeichen</option>
-            <option value="24000">24.000 Zeichen</option></select></label>
-      </details>
-      <div class="cw-beispiele" id="cw-beispiele">
-        <button type="button" class="cw-beispiel">Fasse mir jeden Morgen meine wichtigen Mails und die Termine des Tages zusammen.</button>
-        <button type="button" class="cw-beispiel">Behalte meine GitHub-Repos im Blick: neue Issues und Pull Requests, die auf mich warten.</button>
-        <button type="button" class="cw-beispiel">Recherchiere laufend Neuigkeiten zu meinem Thema und melde dich, wenn sich etwas Wichtiges ändert.</button>
-      </div>
-      <p class="note" id="cw-info"></p>
-      <div class="actions section">
-        <button type="button" class="btn primary" id="cw-create">Coworker anlegen</button>
-      </div>
-    </details>
-    <div class="actions">
-      <button type="button" class="btn primary" id="coworker-close">Fertig</button>
-    </div>
-  </div>
-</div>
-
 <div class="overlay" id="membox">
   <div class="sheet merk-sheet" role="dialog" aria-modal="true" aria-labelledby="merk-title">
     <h2 id="merk-title">Was Aquaticy über dich weiß</h2>
@@ -2187,7 +1961,7 @@ html.vv,html.vv body{height:var(--app-h)}
         <div class="danger-zone">
           <strong>Daten und Konto löschen</strong>
           <p class="note">„Alle Daten löschen“ löscht Chats, Bilder, Dateien, Erinnerungen,
-            Coworker, Einstellungen, Schlüssel, die Google-Verbindung und Geräte. Das Konto bleibt.
+            Einstellungen, Schlüssel, die Google-Verbindung und Geräte. Das Konto bleibt.
             „Konto löschen“ löscht auch das Konto. Beides kannst du nicht zurückholen.</p>
           <div class="actions section">
             <button type="button" class="btn danger" id="account-wipe">Alle Daten löschen</button>
@@ -2343,7 +2117,7 @@ html.vv,html.vv body{height:var(--app-h)}
           <input type="checkbox" role="switch" class="schalter" id="google-direct" name="AQUATICY_GOOGLE_DIRECT">
           <label for="google-direct" style="margin:0">Auf Befehl ohne Rückfrage ändern
             <span class="why">Du sagst „Trag morgen um 10 Uhr Zahnarzt ein“, und es steht gleich
-              im Kalender. Das gilt auch für Aufgaben von Coworkern. Nur Termine und
+              im Kalender. Nur Termine und
               Mail-Entwürfe. Hat Aquaticy Mails oder Webseiten gelesen, fragt es auch hier.
               Braucht „Ändern erlaubt“.</span></label>
         </div>
@@ -2456,7 +2230,6 @@ const $ = (s) => document.querySelector(s);
 
 
 
-
 (() => {
   const vv = window.visualViewport;
   if (!vv) return;
@@ -2486,7 +2259,6 @@ function nutzerFehler(text, ersatz = FEHLER_ALLGEMEIN){
 
 
 
-
 document.querySelectorAll(".note").forEach((note) => {
   const gang = document.createTreeWalker(note, NodeFilter.SHOW_TEXT);
   for (let knoten = gang.nextNode(); knoten; knoten = gang.nextNode())
@@ -2496,7 +2268,7 @@ const thread = $("#thread"), main = $("#main"), input = $("#input"), send = $("#
 let busy = false;
 let currentChat = "";
 let secureChat = false;
-const aquaticyVersion = window.__AQUATICY_VERSION__ || "16.0.0";
+const aquaticyVersion = window.__AQUATICY_VERSION__ || "16.0.1";
 $("#version").textContent = "v" + aquaticyVersion;
 // Laeuft noch die alte Version, obwohl eine neue installiert ist? (15.0.0)
 const aquaticyInstalliert = window.__AQUATICY_INSTALLED__ || "";
@@ -2519,15 +2291,11 @@ document.title = `Aquaticy AI ${aquaticyVersion}`;
 
 
 
-
-
-
 let mode = "normal";
 let structured = false;
 let recheck = false;
 let effort = "medium";
 let online = true;
-let sandbox = false;
 let visualSources = false;
 let currentUsername = "";
 let agents = 12;
@@ -2537,17 +2305,12 @@ let denken = false;
 
 
 
-
-
 let zustandTimer = null;
 let zustandOffen = {};
 
 
 
-
-
 let kopfTimer = null;
-
 
 
 
@@ -2611,10 +2374,7 @@ function setMode(wanted, { merken = true } = {}){
   $("#input").placeholder = PLATZHALTER[mode] || PLATZHALTER.normal;
   if (merken) merkeZustand({ mode });
   setAgents(agents, { merken });
-  zeigeVmKnopf();
   refreshHeader();
-
-
 
 
 
@@ -2643,9 +2403,6 @@ function setRecheck(on, { merken = true } = {}){
   refreshHeader();
 }
 
-// 16.0.0 (Aquaticy-Test): keine virtual machine mehr -- Code wird nie ausgefuehrt.
-function setSandbox(){ sandbox = false; }
-function zeigeVmKnopf(){}
 
 function setOnline(on, { merken = true } = {}){
   online = !!on;
@@ -2695,8 +2452,6 @@ document.querySelectorAll("#modes .mode").forEach(button =>
 
 
 
-
-
     const artVorher = chatArt();
     setMode(button.dataset.mode);
     greet();
@@ -2719,8 +2474,6 @@ $("#agents").addEventListener("input", (e) => setAgents(e.target.value));
 
 
 
-
-
 const START = (typeof window.__AQUATICY_STATE__ === "object" && window.__AQUATICY_STATE__)
   ? window.__AQUATICY_STATE__ : {};
 setMode(START.mode || "normal", { merken: false });
@@ -2729,10 +2482,8 @@ setRecheck(START.recheck === true, { merken: false });
 setEffort(START.effort || "medium", { merken: false });
 setOnline(START.online !== false, { merken: false });
 setVisualSources(START.visual_sources === true, { merken: false });
-setSandbox(START.sandbox === true, { merken: false });
 setDenken(START.denken === true, { merken: false });
 setAgents(START.agents || 12, { merken: false });
-
 
 
 
@@ -2875,6 +2626,13 @@ function setAuthMode(mode){
   $("#auth-password").minLength = registering ? 12 : 1;
   $("#auth-password-hint").hidden = !registering;
   $("#auth-error").textContent = "";
+  if (!einzelKonto){
+    // Anmelden geht mit E-Mail oder Nutzername; registrieren nur mit E-Mail.
+    const email = $("#auth-email");
+    email.type = registering ? "email" : "text";
+    email.autocomplete = registering ? "email" : "username";
+    $("#email-label").textContent = registering ? "E-Mail-Adresse" : "E-Mail oder Nutzername";
+  }
 
   $("#human-check").hidden = true;
   menschAufgabe = null; menschNachweis = null;
@@ -2948,9 +2706,6 @@ function geraeteInfo(){
   } catch {}
   return info;
 }
-
-
-
 
 
 
@@ -3136,7 +2891,6 @@ function md(text){
 
 
 
-
   const bloecke = [], stuecke = [];
   const block = (lang, code) => {
     bloecke.push(`<div class="codeblock"><div class="code-head"><span class="lang">${
@@ -3261,7 +3015,6 @@ function mark(bubble, text){
 
 
 
-
 function answerTools(bubble, text, question){
   if (!bubble || !bubble.parentNode || !text) return;
   bubble.parentNode.querySelector(".answer-tools")?.remove();
@@ -3315,7 +3068,6 @@ function renderResultMedia(bubble, products = [], visuals = []){
   const grid = document.createElement("div"); grid.className = "result-media";
   const seen = new Set();
   (Array.isArray(visuals) ? visuals : []).slice(0, 6).forEach(visual => {
-
 
 
 
@@ -3441,11 +3193,6 @@ function step(box, tag, text, kind){
 
 
 
-
-
-
-
-
 const WICHTIGE_SCHRITTE = new Set(["[Fehler]", "[Limit]", "[Ai-guard]", "[Verbindung]",
   "[Abgebrochen]", "[Weiter]", "[Rechtsrahmen]", "[Schutz]"]);
 const PHASEN = { think: "Denken", web: "Websuche", code: "Code ausführen",
@@ -3453,11 +3200,6 @@ const PHASEN = { think: "Denken", web: "Websuche", code: "Code ausführen",
   netz: "Netzwerk", haus: "Smart Home", mail: "E-Mail", termine: "Kalender", lager: "Lager",
   erinnern: "Erinnern", modell: "Modell laden", work: "Arbeiten" };
 
-const VM_GRUENDE_EN = { "seit 20 Minuten unbenutzt": "unused for 20 minutes",
-  "aufgeräumt": "cleaned up", "Programm beendet": "program closed",
-  "neu aufgebaut": "rebuilt", "Installation fertig": "installation finished",
-  "Coworker beendet": "coworker finished",
-  "Die Einstellungen der virtual machine wurden geändert": "virtual machine settings changed" };
 const KATEGORIEN_EN = { code: "programming",
   schnell: "short chat", schreiben: "writing", recherche: "research and questions" };
 function autoGrundEn(ev){
@@ -3492,7 +3234,6 @@ function phaseVon(tag, text){
     case "[Aufruf]": {
       const t = String(text || "");
       if (/^(web_search|search|news|fetch|read|open_url|page|visual)/.test(t)) return "web";
-      if (/^(vm_|desktop_)/.test(t)) return "code";
       return "";
     }
     default: return "";
@@ -3625,8 +3366,6 @@ const scroll = (immer = false) => {
   if (!immer && !autoScroll) return;
   main.scrollTop = main.scrollHeight;
 };
-
-
 
 
 
@@ -3763,10 +3502,6 @@ input.addEventListener("paste", (e) => {
 
 
 
-
-
-
-
 const askBox = $("#askbox");
 
 function openAsk(bubble, question, options, index, total){
@@ -3861,7 +3596,6 @@ addEventListener("keydown", (e) => {
 
 
 
-
 async function runCommand(line){
   const view = chatView;
   setBusy(true);
@@ -3903,7 +3637,6 @@ async function ask(text){
 
 
 
-
   const eingabe = text.trim();
 
 
@@ -3927,9 +3660,8 @@ async function ask(text){
     return api("/api/chat", {
       method: "POST", headers: {"Content-Type":"application/json"},
       body: JSON.stringify({
-        message: text, attachments, mode, structured, recheck, effort, sandbox, agents,
+        message: text, attachments, mode, structured, recheck, effort, agents,
         visual_sources: mode === "code" ? false : visualSources,
-
 
 
 
@@ -3950,7 +3682,6 @@ function wiederholenKnopf(bubble, text){
   knopf.addEventListener("click", () => { knopf.remove(); ask(String(text)); });
   bubble.appendChild(knopf);
 }
-
 
 
 
@@ -3981,8 +3712,6 @@ async function verfolge(hole, steps, bubble, text){
 
 
 
-
-
   let answer = "", reading = null, readCount = 0, planning = null, thoughtLine = null;
   let completed = false;
   const renderer = streamRenderer(bubble, () => answer, () => view === chatView);
@@ -3992,7 +3721,6 @@ async function verfolge(hole, steps, bubble, text){
   let laden = null;
 
   const ablauf = new Ablauf(steps, mode);
-
 
 
 
@@ -4255,49 +3983,6 @@ async function verfolge(hole, steps, bubble, text){
                `Double-checked — ${ev.checked} partial results against other sources, `
                + "nothing contradicted"));
         break;
-      case "vm_ssh_setup":
-        step(steps, "[virtual machine]", sp("Prüft OpenSSH; alte Abbilder werden aktualisiert.",
-          "Checking OpenSSH; old images are updated.")); break;
-      case "vm_start":
-        step(steps, "[virtual machine]", sp(`wird gestartet (${ev.runtime})`,
-                                            `starting (${ev.runtime})`)); break;
-      case "vm_run":
-        step(steps, "[virtual machine]", ev.command); break;
-      case "vm_write":
-        step(steps, "[virtual machine]", sp("schreibt ", "writes ") + ev.path); break;
-      case "vm_done":
-        step(steps, "[virtual machine]", ev.exit_code === 0
-          ? sp(`lief durch (${ev.seconds}s)`, `ran through (${ev.seconds}s)`)
-          : sp(`Rückgabewert ${ev.exit_code} (${ev.seconds}s)`,
-               `exit code ${ev.exit_code} (${ev.seconds}s)`),
-          ev.exit_code === 0 ? "" : "warn"); break;
-      case "vm_stop":
-        step(steps, "[virtual machine]", sp(`abgeräumt — ${ev.reason}`,
-          `removed — ${VM_GRUENDE_EN[ev.reason] || ev.reason}`)); break;
-      case "vm_net":
-        step(steps, "[virtual machine]", "Internet an, Heimnetz gesperrt"); break;
-      case "vm_desktop":
-        step(steps, "[virtual machine]", "Desktop bereit (User mode)"); break;
-      case "desktop": {
-        const was = (sprache === "en"
-          ? {sieht: "looks", klickt: "clicks", tippt: "types", drueckt: "presses",
-             scrollt: "scrolls", oeffnet: "opens", abgelehnt: "declined",
-             "nicht bestaetigt": "not confirmed"}
-          : {sieht: "sieht", klickt: "klickt", tippt: "tippt", drueckt: "drückt",
-             scrollt: "scrollt", oeffnet: "öffnet", abgelehnt: "abgelehnt",
-             "nicht bestaetigt": "nicht bestätigt"})[ev.action] || ev.action || "";
-        const zeile = step(steps, "[Desktop]", `${was}: ${ev.detail || ""}`,
-          ev.action === "abgelehnt" || ev.action === "nicht bestaetigt" ? "warn" : "");
-        if (/^[0-9]{13}-[0-9a-f]{16}\.(jpg|png|webp|gif)$/.test(String(ev.media_id || ""))){
-          const bild = document.createElement("img");
-          bild.className = "shot";
-          bild.alt = sp("Bildschirm der virtual machine", "Screen of the virtual machine");
-          bild.loading = "lazy"; bild.src = "/api/media?id=" + encodeURIComponent(ev.media_id);
-          bild.addEventListener("error", () => bild.remove());
-          zeile.querySelector(".txt").appendChild(bild);
-        }
-        break;
-      }
       case "model_auto":
         step(steps, "[Modell]",
              sp("automatisch: ", "automatic: ") + String(ev.model || "").split("/").pop()
@@ -4322,7 +4007,6 @@ async function verfolge(hole, steps, bubble, text){
       case "waiting": step(steps, "[Warte]", sp(ev.reason, ev.reason_en || ev.reason)); break;
       case "upload": step(steps, "[Datei]", `${ev.name} (${prettySize(ev.bytes)})`); break;
       case "ask": openAsk(bubble, ev.question, ev.options || [], ev.index, ev.total); break;
-
 
 
 
@@ -4409,15 +4093,6 @@ async function verfolge(hole, steps, bubble, text){
         step(steps, "[Ai-guard]",
              "Dieser Chat ist gesperrt (unangemessene Sprache). Ein neuer Chat geht.", "err");
         break;
-      case "mode_switch":
-
-
-
-        setMode(ev.mode || "normal", { merken: false });
-        setSandbox(false, { merken: false });
-        mark(bubble, ev.text || "");
-        step(steps, "[Ai-guard]", "In den Normal-Modus gewechselt (virtual machine aus).");
-        break;
       case "error":
         step(steps, "[Fehler]", nutzerFehler(ev.message), "err");
         if (!answer) wiederholenKnopf(bubble, text);
@@ -4458,15 +4133,6 @@ async function verfolge(hole, steps, bubble, text){
 
   pruefeLimits();
 }
-
-
-
-
-
-
-
-
-
 
 
 
@@ -4741,9 +4407,6 @@ document.querySelectorAll(".chip").forEach(c =>
 
 
 
-
-
-
 const micKnopf = $("#mic"), voiceBox = $("#voicebox");
 const Erkenner = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 let stimmeOk = START.voice_ok === true;
@@ -4912,14 +4575,6 @@ async function neuerChat({ leiste = true } = {}){
 $("#btn-new").addEventListener("click", () => neuerChat());
 
 $("#btn-new-top").addEventListener("click", () => neuerChat());
-
-
-
-
-
-
-
-
 
 
 
@@ -5095,7 +4750,6 @@ themeBox.addEventListener("click", (e) => { if (e.target === themeBox) closeThem
 
 
 
-
 if (THEMES.includes(START.theme)) themeMode = START.theme;
 
 const SCHRIFTEN = ["small", "normal", "large"];
@@ -5146,133 +4800,36 @@ try {
 
 
 
-
-
-
-
 const EN = {
 "Dateien und Änderungen": "Files and changes",
-"Lesen und ändern: eigene Branches, Commits, Pull Requests": "Read and change: own branches, commits, pull requests",
-"Router oder Repeater": "Router or repeater",
-"Kleinrechner": "Single-board computer",
 "Smart-Home-Gerät": "Smart home device",
-"Echo, Fire TV oder Kindle": "Echo, Fire TV or Kindle",
-"Nest oder Chromecast": "Nest or Chromecast",
 "Kamera": "Camera",
-"Router, Repeater oder Steckdose": "Router, repeater or smart plug",
-"Netzwerkgerät": "Network device",
-"Lautsprecher": "Speaker",
-"Smart-Home-Gerät oder Handy": "Smart home device or phone",
-"PC oder Laptop": "PC or laptop",
 "Drucker": "Printer",
-"Virtuelle Maschine": "Virtual machine",
-"Handy oder Laptop (private WLAN-Adresse)": "Phone or laptop (private Wi-Fi address)",
-"Medienserver": "Media server",
-"Smart-Home-Zentrale": "Smart home hub",
-"KI-Server": "AI server",
-"Höchstens 256 bekannte Geräte.": "At most 256 known devices.",
-"Aufträge per WhatsApp/Signal": "Tasks via WhatsApp/Signal",
 "Deine Repos, Commits, Issues, Pull Requests und Dateien. Aquaticy kann auch ändern, committen, pushen und Pull Requests öffnen. Code prüfen: „Prüfe https://github.com/besitzer/repo“.": "Your repos, commits, issues, pull requests and files. Aquaticy can also make changes, commit, push and open pull requests. Review code: “Review https://github.com/owner/repo”.",
 "Erstelle ein Fine-grained-Token auf GitHub. Wähle deine Repos unter Repository access. Zum Lesen reicht Contents: Read-only. Zum Ändern erlaube Contents: Read and write und Pull requests: Read and write. Füge das Token hier ein.": "Create a fine-grained token on GitHub. Choose your repos under Repository access. Contents: Read-only is enough for reading. To make changes, allow Contents: Read and write and Pull requests: Read and write. Paste the token here.",
 "Ausgewählte Dateien gehen an dein Chat-Modell. Jeder Commit, Push, Pull Request und Kommentar braucht dein Ja. Aquaticy pusht nie mit force. Der Schlüssel bleibt auf diesem Rechner, auch wenn die VM das Repo bearbeitet. Nach privaten Repo-Inhalten braucht öffentliche Recherche deine Bestätigung.": "Selected files go to your chat model. Every commit, push, pull request and comment needs your yes. Aquaticy never force-pushes. The token stays on this computer, even when the VM works on the repo. After private repo content, public research needs your confirmation.",
 "nmap für Schwachstellen nutzen": "Use nmap for vulnerabilities",
-"alle 30 Sekunden": "every 30 seconds",
-"nmap findet eine Schwachstelle.": "nmap finds a vulnerability.",
-"nmap prüft nur das freigegebene private Netz.": "nmap only checks the authorized private network.",
-"Nenne eine IP-Adresse aus deinem freigegebenen Netz.": "Name an IP address from your authorized network.",
-"nmap hat zu lange gebraucht. Prüfe weniger Geräte auf einmal.": "nmap took too long. Check fewer devices at once.",
-"nmap ist fehlgeschlagen. Es liegt kein Ergebnis vor.": "nmap failed. There is no result.",
-"Überwachung": "Monitoring",
 "Immer überwachen": "Always monitor",
 "Wie oft": "How often",
 "Pakete prüfen": "Check packets",
 "Aufgaben": "Tasks",
 "Melde dich, wenn ein neues Gerät ins Netz kommt": "Tell me when a new device joins the network",
 "Wichtig": "Important",
-"Ein neues Gerät kommt ins Netz.": "A new device joins the network.",
-"Ein Gerät ist nicht mehr erreichbar.": "A device is no longer reachable.",
-"Ein Gerät ist wieder erreichbar.": "A device is reachable again.",
-"Ein Gerät öffnet einen neuen Dienst.": "A device opens a new service.",
-"Ein Malware-Verdacht taucht auf.": "A malware suspicion comes up.",
-"Ein Angriff wird erkannt (Portscan, ARP-Spoofing, Passwort-Angriffe).": "An attack is detected (port scan, ARP spoofing, password attacks).",
-"Es gibt einen neuen Prüfhinweis.": "There is a new review hint.",
-"Beschreib die Aufgabe in einem Satz mit höchstens 300 Zeichen.": "Describe the task in one sentence with at most 300 characters.",
-"Das verstehe ich nicht. Beispiele: „Melde dich, wenn ein neues Gerät ins Netz kommt.“ „Sag Bescheid, wenn 192.168.1.20 offline geht.“ „Melde jeden Malware-Verdacht.“": "I don't understand that. Examples: “Tell me when a new device joins the network.” “Let me know when 192.168.1.20 goes offline.” “Report every malware suspicion.”",
-"Aufgaben gelten nur für Geräte in deinem Heimnetz.": "Tasks only apply to devices in your home network.",
-"Nenne die IP-Adresse des Geräts, zum Beispiel 192.168.1.20.": "Name the device's IP address, for example 192.168.1.20.",
-"Höchstens 20 Aufgaben.": "At most 20 tasks.",
-"Die Paketprüfung braucht Root-Rechte oder CAP_NET_RAW.": "Packet checking needs root rights or CAP_NET_RAW.",
-"Die Paketprüfung gibt es nur unter Linux.": "Packet checking is only available on Linux.",
-"Die Paketprüfung konnte nicht starten.": "Packet checking could not start.",
-"Secure Pro darf die VM nicht nutzen. Schalte das in den Secure-Pro-Einstellungen ein.": "Secure Pro may not use the VM. Turn that on in the Secure Pro settings.",
-"Wähle einen der angebotenen Abstände.": "Choose one of the offered intervals.",
-"Diese Aufgabe gibt es nicht mehr.": "This task no longer exists.",
 "Secure-Pro-Einstellungen": "Secure Pro settings",
-"Secure Pro einrichten": "Set up Secure Pro",
-"Geräte im freigegebenen Netz": "Devices in the authorized network",
-"Bestätige die Netzfreigabe in den Secure-Pro-Einstellungen.": "Confirm network authorization in Secure Pro settings.",
-"Der Prüfbereich bleibt privat und umfasst 1 Adresse.": "The check stays within a private range of one address.",
-"Bei einem erreichbaren Gerät antwortet keiner der geprüften Risikodienste.": "None of the checked risk services responded on the reachable device.",
-"Bei einem Gerät antwortet Port 443 oder 8443. Dort sind oft verschlüsselte Weboberflächen erreichbar. TLS und Zertifikate wurden nicht geprüft.": "One device responded on port 443 or 8443, often used for encrypted web interfaces. TLS and certificates were not checked.",
 
-"Prüft OpenSSH; alte Abbilder werden aktualisiert.": "Checking OpenSSH; old images are updated.",
 
-"ClamAV fehlt. Die freigegebene Dateiprüfung ist nicht erfolgt. Installiere ClamAV erneut.": "ClamAV is missing. The authorized file check did not run. Install ClamAV again.",
-"Der freigegebene Dateiordner wurde verschoben oder ersetzt. Die Dateiprüfung ist nicht erfolgt. Gib den Ordner erneut frei.": "The authorized folder was moved or replaced. The file check did not run. Authorize the folder again.",
 "Einstellungen dürfen keine symbolische Verknüpfung sein.": "Settings must not be symbolic links.",
 
-"Öffne zuerst einen Secure-Pro-Chat.": "Open a Secure Pro chat first.",
-"Gib eine private IPv4-Adresse für den Router ein.": "Enter a private IPv4 address for the router.",
-"Der Router muss im freigegebenen Netz mit höchstens 256 Adressen liegen.": "The router must be within the authorized network of at most 256 addresses.",
-"Der Router muss im freigegebenen Netz liegen.": "The router must be within the authorized network.",
-"Keine Antwort auf TCP 443, 80 oder 53. Prüfe Router-IP und Erreichbarkeit. Ein gesperrter Port bedeutet nicht, dass der Router unsicher ist.": "No response on TCP 443, 80 or 53. Check the router IP and reachability. A blocked port does not mean the router is unsafe.",
 
-"Die erreichbaren Geräte sind seit der letzten Prüfung unverändert.": "Reachable devices are unchanged since the last check.",
-"Bei den erreichbaren Geräten antworten weder FTP noch Telnet.": "Neither FTP nor Telnet responded on the reachable devices.",
-"Keine Geräte über die geprüften TCP-Ports erreichbar. Prüfe Netz, Router und Container-Anbindung. Das ist kein sauberes Ergebnis.": "No devices responded on the checked TCP ports. Check the network, router and container access. This is not a clean result.",
-"ClamAV meldet in den geprüften lokalen Dateien keinen Fund. Dateien außerhalb der Scan-Grenzen wurden nicht geprüft.": "ClamAV reported no findings in the checked local files. Files beyond the scan limits were not checked.",
 
-"Router-IP": "Router IP",
-"Positiv beobachtet": "Positive observations",
-"Prüfhinweise": "Findings to review",
-"Vorschlag aus der Standardroute des Aquaticy-Servers. Prüfe, ob es dein Heimnetz ist.": "Suggested by the Aquaticy server default route. Check that this is your home network.",
-"Keinen Router erkannt. Trage die private Router-IP und dein Netz ein.": "No router detected. Enter the private router IP and your network.",
-"Aquaticy läuft in einem Container. Die Route kann zum Container-Netz gehören.": "Aquaticy runs in a container. The route may belong to the container network.",
-"Die Prüfung läuft.": "The check is running.",
-"Die Prüfung ist fehlgeschlagen. Es liegt kein sauberes Ergebnis vor.": "The check failed. There is no clean result.",
 
 "Prüfen": "Check",
 "Secure-Pro-Chat öffnen": "Open Secure Pro chat",
-"Diese Funktionen verwaltet nur der Besitzer im Einzelkonto-Modus.": "Only the owner in single-account mode can manage these features.",
-"Secure Pro ist an.": "Secure Pro is on.",
-"Secure Pro ist aus.": "Secure Pro is off.",
-"Noch keine Prüfhinweise vorhanden. Das ist kein Sicherheitsnachweis.": "No findings available yet. This does not establish safety.",
 "Sprachnachrichten zuerst im Terminal mit aquaticy voice einrichten.": "First set up voice messages in the terminal with aquaticy voice.",
-"Die QR-Erkennung fehlt. Aktualisiere Aquaticy und starte den Server neu.": "QR detection is missing. Update Aquaticy and restart the server.",
 "Erneut versuchen": "Try again",
-"Ein Chat läuft gerade. Warte, bis er fertig ist.": "A chat is running. Wait until it finishes.",
-"Die Anmeldung ist abgelaufen. Öffne sie erneut.": "Sign-in has expired. Open it again.",
-"Das Add-on ist nicht eingeschaltet.": "The add-on is not enabled.",
-"Der QR-Code lässt sich gerade nicht lesen. Versuch es erneut.": "The QR code cannot be read right now. Try again.",
 
-  "immer weiter an der Aufgabe arbeiten": "keep working on the task",
-  "Notizen und was er lesen darf": "Notes and what it may read",
-  "Freiwillig. Der Coworker darf passende Stellen aus Quellen lesen, die du freigibst. Wichtiges schreibt er in seine Notizen. Schaltest du das aus, bleiben diese Notizen. Du kannst sie löschen. Andere Konten liest er nie.": "Optional. The coworker may read matching parts of sources you allow. It writes important facts into its notes. If you turn this off, the notes stay. You can delete them. It never reads other accounts.",
-  "Wissen aus deinen Chats nutzen": "Use what's in your chats",
-  "Notizen deiner anderen Coworker nutzen": "Use notes from your other coworkers",
-  "Platz für Notizen": "Space for notes",
-  "6.000 Zeichen": "6,000 characters",
-  "12.000 Zeichen": "12,000 characters",
-  "24.000 Zeichen": "24,000 characters",
-  "Ein Coworker arbeitet immer weiter an einer Aufgabe. Er sucht im Web, liest Gmail, Kalender und GitHub und meldet Neues. Er arbeitet nach Zeitplan oder wenn er es für nötig hält. Er hält sich an deine Regeln. Wichtige Schritte macht er nur mit deinem Ja.": "A coworker keeps working on a task. It searches the web, reads Gmail, Calendar and GitHub and tells you what's new. It works on a schedule or when it thinks it should. It follows your rules. It only takes important steps after your yes.",
-  "Zeitpläne und Beobachtungen hat jedes Konto. Coworker, die immer weiterarbeiten, gibt es mit Pro und Ultra. Mit Ultra bekommen sie auch eine eigene virtual machine.": "Every account has schedules and watches. Coworkers that keep working come with Pro and Ultra. With Ultra they also get their own virtual machine.",
-  "In diesen Notizen steht Text von fremden Seiten. Darum fragt er vor jeder Änderung. „Erlauben“ im Haus gilt trotzdem weiter.": "These notes contain text from other websites. So it asks before every change. “Allow” at home still applies.",
 
 "Dieses Modell braucht mehr Speicher, als erlaubt ist.": "This model needs more memory than allowed.",
-"Die Frage ist zu lang. Teil sie bitte in kleinere Fragen.": "The question is too long. Please split it into smaller questions.",
-"Dieser Coworker ist pausiert oder gelöscht.": "This coworker is paused or deleted.",
-"Die gespeicherte Frage ist kaputt. Stell sie bitte neu.": "The saved question is broken. Please ask it again.",
-"Die Datei kam in einem unerwarteten Format an.": "The file arrived in an unexpected format.",
 "Solange dein Konto gesperrt ist, kannst du Gemeinsames Lernen nur ausschalten.": "While your account is blocked, you can only turn shared learning off.",
 "Ohne diese Angaben kannst du Aquaticy hier nicht nutzen. Das freiwillige Lernen ist eine eigene Frage.": "Without this information you can't use Aquaticy here. Optional learning is a separate question.",
 "Gemeinsames Lernen": "Shared learning",
@@ -5348,7 +4905,7 @@ const EN = {
 "Passwort ändern": "Change password",
 "Überall sonst abmelden": "Sign out everywhere else",
 "Daten und Konto löschen": "Delete data and account",
-"„Alle Daten löschen“ löscht Chats, Bilder, Dateien, Erinnerungen, Coworker, Einstellungen, Schlüssel, die Google-Verbindung und Geräte. Das Konto bleibt. „Konto löschen“ löscht auch das Konto. Beides kannst du nicht zurückholen.": "“Delete all data” deletes chats, images, files, memories, coworkers, settings, keys, the Google connection and devices. The account stays. “Delete account” also deletes the account. You can't get either back.",
+"„Alle Daten löschen“ löscht Chats, Bilder, Dateien, Erinnerungen, Einstellungen, Schlüssel, die Google-Verbindung und Geräte. Das Konto bleibt. „Konto löschen“ löscht auch das Konto. Beides kannst du nicht zurückholen.": "“Delete all data” deletes chats, images, files, memories, settings, keys, the Google connection and devices. The account stays. “Delete account” also deletes the account. You can't get either back.",
 "Alle Daten löschen": "Delete all data",
 "Konto löschen": "Delete account",
 "Ansehen": "View",
@@ -5394,6 +4951,7 @@ const EN = {
 "Anmelden": "Sign in",
 "Nutzername": "Username",
 "E-Mail-Adresse": "Email address",
+"E-Mail oder Nutzername": "Email or username",
 "Passwort": "Password",
 "mindestens 12 Zeichen": "at least 12 characters",
 "Pro-Code": "Pro code",
@@ -5429,7 +4987,6 @@ const EN = {
 "Agenten": "Agents",
 "Anzahl der Agenten": "Number of agents",
 "So viele Helfer suchen gleichzeitig, wenn „Strukturieren“ an ist. Normal: 1 bis 12.": "This many helpers search at the same time when “Structure” is on. Normal: 1 to 12.",
-"Internet für die virtual machine": "Internet for the virtual machine",
 "Im Web suchen": "Search the web",
 "Aus: Aquaticy sucht nicht im Internet. Es antwortet mit seinem Wissen, dem Chat und deinen Dateien. Es sagt dir, wo das alt sein kann.": "Off: Aquaticy doesn't search the internet. It answers with what it knows, the chat and your files. It tells you where that may be out of date.",
 "Öffentliche Webcams & Satellitenbilder": "Public webcams & satellite images",
@@ -5480,13 +5037,9 @@ const EN = {
 "Was du tun kannst": "What you can do",
 "Verstanden": "Understood",
 "virtual machine": "Virtual machine",
-"Internet für die virtual machine": "Internet for the virtual machine",
 "Fertig": "Done",
-"Selbst anmelden": "Sign in yourself",
 "Öffnen": "Open",
 "Tippen": "Type",
-"Tasten": "Keys",
-"Ich bin angemeldet": "I'm signed in",
 "Schließen": "Close",
 "Was Aquaticy über dich weiß": "What Aquaticy knows about you",
 "Das hat sich Aquaticy über dich gemerkt. Nur Text, verschlüsselt. Du kannst jede Zeile löschen.": "This is what Aquaticy remembers about you. Text only, encrypted. You can delete any line.",
@@ -5514,9 +5067,6 @@ const EN = {
 "Aktualisieren": "Refresh",
 "NVIDIA NIM und Mistral lösen die Aufgabe. Eines prüft die Lösung auf Fehler. Aquaticy nimmt sie an oder schickt sie zurück. Das dauert länger und verbraucht bei beiden Anbietern mehr.": "NVIDIA NIM and Mistral solve the task. One of them checks the solution for mistakes. Aquaticy accepts it or sends it back. This takes longer and uses more at both providers.",
 "Server-Verbund": "Server cluster",
-"Serverlast aufteilen": "Split server load",
-"Sucht die neueste Version von llama.cpp …": "Looking for the newest llama.cpp …",
-"Neu verteilen": "Redistribute",
 "Alle Befehle": "All commands",
 "Pro-Modus mit voller Mannschaft": "Pro mode with the full team",
 "Ein Bild ansehen lassen": "Have an image looked at",
@@ -5530,40 +5080,15 @@ const EN = {
 "Merkzettel": "Notes",
 "Befehle": "Commands",
 "Was geprüft wird": "What is checked",
-"＋ Neuer Coworker": "＋ New coworker",
 "Aufgabe": "Task",
-"z. B. Ava": "e.g. Ava",
-"z. B. Sag mir jeden Morgen, welche Mails wichtig sind und welche Termine anstehen.": "e.g. Tell me every morning which emails matter and which appointments are coming up.",
-"Fasse mir jeden Morgen meine wichtigen Mails und die Termine des Tages zusammen.": "Every morning, summarise my important emails and the day's appointments.",
-"Behalte meine GitHub-Repos im Blick: neue Issues und Pull Requests, die auf mich warten.": "Keep an eye on my GitHub repos: new issues and pull requests waiting for me.",
-"Recherchiere laufend Neuigkeiten zu meinem Thema und melde dich, wenn sich etwas Wichtiges ändert.": "Keep researching news on my topic and get in touch when something important changes.",
-"Coworker anlegen": "Create coworker",
-"Wartet auf deine Freigabe": "Waiting for your approval",
-"Alle Angaben": "All details",
 "Erlauben": "Allow",
 "Fragen": "Ask",
 "Sperren": "Block",
 "Verlauf": "History",
 "Senden": "Send",
-"Jetzt arbeiten": "Work now",
-"Pausieren": "Pause",
 "Chat öffnen": "Open chat",
-"Aufgabe ändern": "Change task",
-"Noch nichts. Er fängt gleich an.": "Nothing yet. It starts soon.",
-"Noch keine. Er schreibt sie, sobald er angefangen hat.": "None yet. It writes them once it has started.",
 "Notizen löschen": "Delete notes",
-"Notizen löschen?": "Delete notes?",
 
-"Termine eintragen und ändern": "Add and change appointments",
-"Mail-Entwürfe anlegen": "Create email drafts",
-"Persönliche Notizen speichern oder löschen": "Save or delete personal notes",
-"Die Lagerverwaltung ändern": "Change the inventory",
-"Im Haus etwas schalten": "Switch something at home",
-"Das Heimnetz abfragen": "Query the home network",
-"In seiner virtual machine arbeiten": "Work in its virtual machine",
-"Coworker: arbeiten die ganze Zeit für dich": "Coworkers: working for you all the time",
-"Diesen Port gibt es nicht. Nimm eine Zahl von 1 bis 65535.": "This port doesn't exist. Use a number from 1 to 65535.",
-"Der Server-Verbund gehört zu Ultra.": "The server cluster is part of Ultra.",
 "Gespeichert": "Saved",
 "Abschnitte": "Sections",
 "Konto": "Account",
@@ -5609,25 +5134,11 @@ const EN = {
 "Woche": "week",
 ", die zur Uhrzeit deiner Kontoerstellung neu beginnt. Pro hat deutlich mehr als Normal. Ultra hat kein Limit.": ", which starts again at the time your account was created. Pro has considerably more than Normal. Ultra has no limit.",
 "Art": "Type",
-"regelmäßig recherchieren": "research regularly",
-"Kamera, Satellit oder Straße beobachten": "watch a camera, satellite or street",
-"Preis beobachten": "watch a price",
-"Bild hochladen und danach suchen": "upload an image and search for it",
-"z. B. Ein oranges Flugzeug ist sichtbar": "e.g. An orange plane is visible",
-"Rhythmus": "Rhythm",
 "täglich": "daily",
 "stündlich": "hourly",
 "wöchentlich": "weekly",
-"alle 30 Minuten": "every 30 minutes",
-"alle 15 Minuten": "every 15 minutes",
-"alle 5 Minuten": "every 5 minutes",
 "jede Minute": "every minute",
 "die ganze Zeit": "all the time",
-"Je öfter geprüft wird, desto schneller ist deine Grenze erreicht.": "The more often it checks, the faster you reach your limit.",
-"Öffentliche Quelladresse": "Public source address",
-"Die genaue Seite der Webcam, Karte, des Satelliten oder Produkts. Private Kameras und Seiten mit Anmeldung gehen nicht.": "The exact page of the webcam, map, satellite or product. Private cameras and pages that need a sign-in don't work.",
-"Bild des gesuchten Gegenstands": "Image of the item you're looking for",
-"Ein Foto oder Produktbild. Aquaticy sucht damit, bis es ein Angebot findet. Dann schickt es dir die Adresse in einem Chat.": "A photo or product image. Aquaticy searches with it until it finds an offer. Then it sends you the address in a chat.",
 "Wochentag": "Weekday",
 "Montag": "Monday",
 "Dienstag": "Tuesday",
@@ -5637,12 +5148,9 @@ const EN = {
 "Samstag": "Saturday",
 "Sonntag": "Sunday",
 "Uhrzeit": "Time",
-"Bei „stündlich\" zählt nur die Minute": "With “hourly” only the minute counts",
-"Richtig recherchieren": "Research properly",
-"Mit Teilfragen, Helfern und Quellen, wie bei „Strukturieren“. Aus: Aquaticy antwortet kurz mit dem, was es weiß.": "With sub-questions, helpers and sources, like “Structure”. Off: Aquaticy answers briefly with what it knows.",
 "Gmail & Kalender": "Gmail & Calendar",
 "Auf Befehl ohne Rückfrage ändern": "Change on command without asking",
-"Du sagst „Trag morgen um 10 Uhr Zahnarzt ein“, und es steht gleich im Kalender. Das gilt auch für Aufgaben von Coworkern. Nur Termine und Mail-Entwürfe. Hat Aquaticy Mails oder Webseiten gelesen, fragt es auch hier. Braucht „Ändern erlaubt“.": "You say “Add dentist tomorrow at 10”, and it’s in the calendar right away. This also applies to coworker tasks. Only events and mail drafts. If Aquaticy has read mails or web pages, it asks here too. Needs “Changes allowed”.",
+"Du sagst „Trag morgen um 10 Uhr Zahnarzt ein“, und es steht gleich im Kalender. Nur Termine und Mail-Entwürfe. Hat Aquaticy Mails oder Webseiten gelesen, fragt es auch hier. Braucht „Ändern erlaubt“.": "You say “Add dentist tomorrow at 10”, and it’s in the calendar right away. Only events and mail drafts. If Aquaticy has read mails or web pages, it asks here too. Needs “Changes allowed”.",
 "Termine und Mails lesen dürfen": "May read appointments and mails",
 "Dann beantwortet Aquaticy Fragen zu Terminen und Mails. Nur lesen. Ändern geht erst mit dem Schalter darunter.": "Then Aquaticy answers questions about appointments and emails. Read only. Changing needs the switch below.",
 "Ändern erlaubt": "Changes allowed",
@@ -5677,11 +5185,8 @@ const EN = {
 "speichern": "save",
 ", dann auf": ", then click",
 "Deine Zugangsdaten sind verschlüsselt. Sie bleiben auf diesem Rechner. „Trennen“ löscht sie.": "Your sign-in details are encrypted. They stay on this computer. “Disconnect” deletes them.",
-"Zuhause & Netz": "Home & network",
 "Suchen": "Search",
 "Testen": "Test",
-"Aquaticy darf auch schalten": "Aquaticy may also switch things",
-"Ins eigene Netz sehen dürfen": "May look into my own network",
 "Lagerverwaltung": "Storage manager",
 "Adresse": "Address",
 "Suche": "Search",
@@ -5739,8 +5244,6 @@ const EN = {
 "Regler ganz nach rechts schieben": "Slide the control all the way to the right",
 "Zu viele verdächtige Anmeldeversuche von hier. Versuch es später noch einmal.": "Too many suspicious sign-in attempts from here. Try again later.",
 "Zu viele Anfragen laufen in diesem Chat. Warte auf eine Antwort.": "Too many requests are running in this chat. Wait for an answer.",
-"Gib eine vollständige, öffentliche Web-Adresse an (http oder https).": "Enter a complete, public web address (http or https).",
-"Wähl das Bild aus, nach dem du suchen willst.": "Choose the image you want to search for.",
 "Das ging gerade nicht. Versuch es gleich noch einmal.": "That didn't work just now. Try again in a moment.",
 "Der Speicher ist ausgeschaltet.": "Memory is switched off.",
 "Der Speicher ließ sich nicht laden.": "Memory couldn't be loaded.",
@@ -5777,7 +5280,6 @@ const EN = {
 "Löschen": "Delete",
 "Exportieren": "Export",
 "Anhalten": "Pause",
-"Fortsetzen": "Resume",
 "Entfernen": "Remove",
 "Installieren": "Install",
 "Deinstallieren": "Uninstall",
@@ -5847,14 +5349,12 @@ const EN = {
 "Eine private Angabe würde nach außen gehen. Aquaticy fragt dich vorher.": "A private detail would go out. Aquaticy asks you first.",
 "Eine Quelle wollte der KI Befehle geben. Aquaticy hat sie ignoriert.": "A source tried to give the AI commands. Aquaticy ignored them.",
 "Internet an, Heimnetz gesperrt": "Internet on, home network blocked",
-"Desktop bereit (User mode)": "Desktop ready (User mode)",
 
 "nichts gefunden — ich mache selbst weiter": "nothing found — I'll carry on myself",
 "beschrieben": "described",
 "Das Modell antwortet gerade nicht — ein anderes übernimmt.": "The model isn't answering right now — another one takes over.",
 "Konto gesperrt — Details unter „Info“ oben links": "Account blocked — details under “Info” at the top left",
 "Dieser Chat ist gesperrt (unangemessene Sprache). Ein neuer Chat geht.": "This chat is blocked (inappropriate language). A new chat works.",
-"In den Normal-Modus gewechselt (virtual machine aus).": "Switched to Normal mode (virtual machine off).",
 "Oben steht, was bis dahin da war.": "Above is what had arrived by then.",
 "Die Verbindung ist mittendrin abgerissen. Oben steht, was bis dahin ankam.": "The connection dropped midway. Above is what had arrived by then.",
 "Keine Verbindung zu Aquaticy. Läuft das Programm noch? Bei einem Modell aus der Cloud kann die erste Antwort etwas dauern.": "No connection to Aquaticy. Is the program still running? With a cloud model the first answer can take a moment.",
@@ -5875,9 +5375,7 @@ const EN = {
 "Da ist etwas schiefgelaufen.": "Something went wrong.",
 "Versuch es gleich noch einmal. Bleibt es so, lade die Seite neu.": "Try again in a moment. If it keeps happening, reload the page.",
 "Seite neu laden": "Reload page",
-"Bild des Coworkers": "Coworker picture",
 "Ist Auto-Upgrading an, können mehrfach bestätigte Auszüge auch in lokale Ollama-Modelltexte kommen (dort unverschlüsselt). Ist Wissen abgelaufen oder nicht mehr bestätigt, werden die betroffenen Fassungen zurückgezogen. Aquaticy versucht das Löschen so lange, bis der Ollama-Dienst erreichbar ist. Einzelheiten:": "If Auto-Upgrading is on, excerpts confirmed several times can also go into local Ollama model texts (unencrypted there). If knowledge expires or is no longer confirmed, the affected versions are withdrawn. Aquaticy keeps trying to delete them until the Ollama service is reachable. Details:",
-"Auch ins lokale Netz": "Also into the local network",
 "IP-Adresse": "IP address",
 "kein Ortsfilter": "no location filter",
 "ohne Web": "without web",
@@ -5885,7 +5383,6 @@ const EN = {
 "strukturiert": "structured",
 "4 Prüfer": "4 checkers",
 "gegenprüfen": "double-check",
-"Zuhause verbunden": "home connected",
 "Speicher an": "memory on",
 "Wie viele Helfer gleichzeitig suchen, wenn „Strukturieren“ an ist. Pro: 1 bis 50.": "How many helpers search at the same time when “Structure” is on. Pro: 1 to 50.",
 "Das gibt es nur mit einem Ultra-Konto.": "That's only available with an Ultra account.",
@@ -5930,12 +5427,6 @@ const EN = {
 "Feed-Adressen, eine je Zeile": "Feed addresses, one per line",
 "Rechte": "Permissions",
 "— was Aquaticy hier darf": "— what Aquaticy may do here",
-"arbeitet gerade …": "working …",
-"pausiert": "paused",
-"legt gleich los": "starts shortly",
-"Die Coworker ließen sich nicht laden.": "The coworkers couldn't be loaded.",
-"Aufgabe, Notizen, Regeln und Verlauf werden gelöscht. Der Chat mit seinen Meldungen bleibt.": "Task, notes, rules and history are deleted. The chat with its messages stays.",
-"Beschreib die Aufgabe in ein, zwei Sätzen.": "Describe the task in one or two sentences.",
 "Einen Moment — frage beim Anbieter nach …": "One moment — asking the provider …",
 "In der Zwischenablage ist kein Schlüssel. Füg ihn selbst ein.": "There's no key in the clipboard. Paste it yourself.",
 "Schlüssel kopiert? Dann auf „Einfügen“ klicken.": "Key copied? Then click “Paste”.",
@@ -5945,27 +5436,17 @@ const EN = {
 "unbekanntes Gerät": "unknown device",
 "Überall sonst abmelden?": "Sign out everywhere else?",
 "Alle anderen Geräte und Browser werden abgemeldet. Dieses Gerät bleibt angemeldet.": "All other devices and browsers are signed out. This device stays signed in.",
-"Chats, Bilder, Uploads, Erinnerungen, Coworker, Einstellungen und eigene Schlüssel sind danach weg. Dein Konto bleibt.": "Chats, images, uploads, memories, tasks, settings and your own keys are gone afterwards. Your account stays.",
+"Chats, Bilder, Uploads, Erinnerungen, Einstellungen und eigene Schlüssel sind danach weg. Dein Konto bleibt.": "Chats, images, uploads, memories, settings and your own keys are gone afterwards. Your account stays.",
 "nicht erreichbar": "not reachable",
-"Konten übernehmen": "Take over accounts",
-"Gib eine private IP-Adresse oder den vollen MagicDNS-Namen deines Tailscale-Servers an (…ts.net).": "Enter a private IP address or your Tailscale server's full MagicDNS name (…ts.net).",
-"MagicDNS ist nicht erreichbar. Prüf Tailscale und MagicDNS oder nimm die Tailscale-IP-Adresse.": "MagicDNS can't be reached. Check Tailscale and MagicDNS, or use the Tailscale IP address.",
-"Der MagicDNS-Name darf nur auf Tailscale-Adressen zeigen.": "The MagicDNS name may only point to Tailscale addresses.",
-"Die Art der Adresse (IPv4 oder IPv6) passt nicht zu diesem Server. Nimm auf allen Servern IPv4 mit --lan oder passende IPv6-Adressen.": "The address type (IPv4 or IPv6) doesn't match this server. Use IPv4 with --lan on all servers, or matching IPv6 addresses.",
-"schon in einem Verbund": "already in a cluster",
-"Warte auf die anderen Server …": "Waiting for the other servers …",
 "Einschalten": "Turn on",
 "Schlüssel einfügen": "Paste key",
 "Hauptmodell (noch nicht gespeichert)": "Main model (not saved yet)",
 "Der Speicher ist aus. Solange er aus ist, speichert Aquaticy AI nichts — und es steht auch nichts drin.": "Memory is off. While it's off, Aquaticy AI stores nothing — and there's nothing in it.",
 "Noch nichts gemerkt. Was du im Chat über dich erzählst, landet von selbst hier.": "Nothing remembered yet. What you say about yourself in a chat ends up here by itself.",
 "Wirklich alles vergessen, was Aquaticy AI über dich weiß?": "Really forget everything Aquaticy AI knows about you?",
-"Freiwillig: eine Seite, auf der Aquaticy zuerst sucht. Leer = überall suchen.": "Optional: a page Aquaticy searches first. Empty = search everywhere.",
-"z. B. neu oder gebraucht, Versand nach Deutschland": "e.g. new or used, shipping to Germany",
 "Noch kein Konto verbunden.": "No account connected yet.",
 "Trag Client-ID und Client-Secret ein. Dann klick auf „Verbinden“.": "Enter the client ID and client secret. Then click “Connect”.",
 "Nicht gespeichert": "Not saved",
-"Auto-Upgrading läuft nur mit der Weboberfläche.": "Auto-Upgrading only runs with the web interface.",
 "Stärkstes Code-Modell wählen": "Choose the strongest code model",
 "Stärkstes Modell wählen": "Choose the strongest model",
 "Kein Modell gefunden. Trag unter Chat → Modelle und Verbindungen einen eigenen Schlüssel ein oder installiere ein Modell mit aquaticy install-model.": "No model found. Add your own key under Chat → Models and connections, or install a model with aquaticy install-model.",
@@ -5976,15 +5457,7 @@ const EN = {
 "Noch nichts gezählt.": "Nothing counted yet.",
 "Rechtsprüfung nicht erreichbar": "Legal check not reachable",
 "Konten": "Accounts",
-"WhatsApp im Browser der virtual machine: Aquaticy kann Chats lesen und Antworten vorbereiten. Senden nur nach deinem Ja.": "WhatsApp in the browser of the virtual machine: Aquaticy can read chats and prepare replies. Sending only after your yes.",
-"„Anmelden“ zeigt den QR-Code direkt in Aquaticy. Auf dem Handy: WhatsApp → Einstellungen → Verknüpfte Geräte → Gerät hinzufügen, dann den QR-Code im Anmeldefenster scannen.": "“Sign in” shows the QR code directly in Aquaticy. On your phone: WhatsApp → Settings → Linked devices → Link a device, then scan the QR code in the sign-in window.",
-"WhatsApp mag keine Automatisierung. Nutze es nur für dich, nie für Massennachrichten, sonst droht eine Sperre. Was Aquaticy liest, geht an dein Modell. Braucht Firefox (kommt beim Installieren mit).": "WhatsApp doesn't like automation. Use it only for yourself, never for mass messages, or you risk a ban. What Aquaticy reads goes to your model. Needs Firefox (comes with the installation).",
-"Signal Desktop in der virtual machine (ein „Signal Web“ gibt es nicht): Aquaticy liest mit und bereitet Antworten vor. Senden nur nach deinem Ja.": "Signal Desktop in the virtual machine (there is no “Signal Web”): Aquaticy reads along and prepares replies. Sending only after your yes.",
-"„Anmelden“ zeigt den QR-Code direkt in Aquaticy. Auf dem Handy: Signal → Einstellungen → Gekoppelte Geräte → +, dann den QR-Code im Anmeldefenster scannen.": "“Sign in” shows the QR code directly in Aquaticy. On your phone: Signal → Settings → Linked devices → +, then scan the QR code in the sign-in window.",
-"Signal Desktop gibt es nur für x86_64. Nachrichten, die Aquaticy liest, gehen an dein Modell. Signal ist Ende-zu-Ende-verschlüsselt — überleg dir das also gut.": "Signal Desktop is only available for x86_64. Messages Aquaticy reads go to your model. Signal is end-to-end encrypted — so think this through.",
 "Programme": "Programs",
-"Das 3D-Programm von blender.org: mit Oberfläche im Desktop der virtual machine und für Skripte (blender_run). Damit baust du Modelle, richtest Szenen ein und renderst.": "The 3D program from blender.org: with its interface on the virtual machine's desktop and for scripts (blender_run). Build models, set up scenes and render.",
-"Rund 350 MB Download, ausgepackt über 1 GB. Mit der virtual machine in Größe „Plus“ läuft es viel ruhiger.": "About 350 MB to download, over 1 GB unpacked. It runs much more smoothly with the “Plus” virtual machine size.",
 "Wetter": "Weather",
 "Dienste": "Services",
 "Wetter jetzt und Vorhersage bis 7 Tage für jeden Ort. Von Open-Meteo (freie Wetterdaten, u. a. vom Deutschen Wetterdienst), ohne Schlüssel.": "Weather now and a forecast up to 7 days for any place. From Open-Meteo (free weather data, including from the German Weather Service), no key needed.",
@@ -6025,15 +5498,8 @@ const EN = {
 "Dateien": "Files",
 "Nur Übersicht": "Overview only",
 "Auch Inhalte lesen": "Read contents too",
-"Was Aquaticy darf": "What Aquaticy may do",
 "Nur lesen": "Read only",
 "Lesen und schreiben": "Read and write",
-"Schreiben in": "Write in",
-"Nur Einzelchats": "Direct chats only",
-"Einzelchats und Gruppen": "Direct chats and groups",
-"Blender nutzen": "Use Blender",
-"Nur Skripte": "Scripts only",
-"Skripte und Oberfläche": "Scripts and interface",
 "Orte": "Places",
 "Jeder Ort": "Any place",
 "Nur mein Ort": "My place only",
@@ -6057,8 +5523,6 @@ const EN = {
 "Kontextfenster": "Context window",
 "Wie viel vom Gespräch das lokale Modell auf einmal im Blick hat. Höchstens 5 GB Arbeitsspeicher.": "How much of the chat the local model keeps in mind at once. At most 5 GB of memory.",
 "Die Adresse ist ungültig.": "The address is invalid.",
-"Die Adresse von Home Assistant ist ungültig.": "The Home Assistant address is invalid.",
-"Die Adresse der Lagerverwaltung ist ungültig.": "The storage manager address is invalid.",
 "Vision + Werkzeuge, guter Allrounder": "Vision + tools, good all-rounder",
 "Vision + Werkzeuge, sehr langer Kontext": "Vision + tools, very long context",
 "Kompakt, läuft auch auf kleinen Karten": "Compact, runs on small graphics cards too",
@@ -6091,20 +5555,13 @@ const EN = {
 "Europäischer Anbieter, antwortet schnell, Server in der EU": "European provider, answers fast, servers in the EU",
 "von dir eingetragen": "entered by you",
 "Neueste Version": "Latest version",
-"Ältere Version · nur Ultra": "Older version · Ultra only",
 "eigenes": "own",
 "Nur Website": "Website only",
 "Modelle und etwas Website": "Models and some website",
 "Prozessor": "Processor",
 "Arbeitsspeicher": "Memory (RAM)",
-"Festplatte": "Disk",
 "Grafikkarte": "Graphics card",
 "Zeigen": "Show",
-"Wähl einen der angebotenen Rhythmen.": "Choose one of the offered frequencies.",
-"Erlauben geht nur mit Ultra und wenn Home Assistant verbunden ist und schalten darf.": "Allow only works with Ultra and when Home Assistant is connected and allowed to switch devices.",
-"Nimm dafür die Regel „Im Haus etwas schalten“.": "Use the “Switch things at home” rule for this.",
-"Rhythmus geändert": "Frequency changed",
-"gewählter Rhythmus": "selected frequency",
 "Modelle und Verbindungen": "Models and connections",
 "Wähle dein Chat-Modell unten im Chat. Hier kannst du eigene Modelle und Verbindungen einrichten.": "Choose your chat model below the chat. Set up your own models and connections here.",
 "Eigene Modelle und Anbieter richtest du hier ein:": "Set up your own models and providers here:",
@@ -6113,27 +5570,7 @@ const EN = {
 "Infos": "Details",
 "Diesen Modus gibt es nicht mehr.": "This mode no longer exists.",
 "Ausschalten": "Turn off",
-"Nur mein eigener Chat": "Only my own chat",
-"Mein Chat und diese Nummern": "My chat and these numbers",
-"Alle Einzelchats": "All single chats",
-"Web und Rechnen": "Web and calculator",
 "Google Kalender": "Google Calendar",
-"Lesen und schalten": "Read and switch",
-"Lesen und ändern": "Read and change",
-"Die Messenger-Brücke gehört zu Ultra.": "The messenger bridge is part of Ultra.",
-"Der User mode ist aus. Schalte ihn unter „virtual machine“ ein.": "User mode is off. Turn it on under “virtual machine”.",
-"Aquaticy braucht ein Vision-Modell, um den Messenger zu sehen (Modelle und Verbindungen → Vision-Modell).": "Aquaticy needs a vision model to see the messenger (Models and connections → Vision model).",
-"Verbunden.": "Connected.",
-"WhatsApp hat die Kopplung beendet (am Handy abgemeldet).": "WhatsApp ended the link (signed out on the phone).",
-"Das Koppeln hat nicht geklappt. Versuch es erneut.": "Linking didn't work. Try again.",
-"Der QR-Code ist abgelaufen. Verbinde noch einmal.": "The QR code expired. Connect again.",
-"WhatsApp braucht noch die Bibliothek libmagic. Führe auf dem Rechner „aquaticy install-messenger“ aus. Starte Aquaticy danach neu.": "WhatsApp still needs the libmagic library. Run \"aquaticy install-messenger\" on the computer. Then restart Aquaticy.",
-"WhatsApp braucht noch das Paket neonize. Installiere Aquaticy neu oder führe „pip install neonize“ aus. Starte Aquaticy danach neu.": "WhatsApp still needs the neonize package. Reinstall Aquaticy or run \"pip install neonize\". Then restart Aquaticy.",
-"Signal braucht noch das Programm signal-cli. Führe auf dem Rechner „aquaticy install-messenger“ aus.": "Signal still needs the signal-cli program. Run \"aquaticy install-messenger\" on the computer.",
-"signal-cli wurde beendet.": "signal-cli stopped.",
-"Die gespeicherte Nummer ist ungültig. Verbinde noch einmal.": "The saved number is invalid. Connect again.",
-"Getrennt. Entferne Aquaticy am Handy auch unter „Verknüpfte Geräte“.": "Disconnected. Also remove Aquaticy on your phone under “Linked devices”.",
-"Gespeichert. Die Brücke ist an. Schreib jetzt: Aquaticy antwortet sofort.": "Saved. The bridge is on. Write now: Aquaticy replies right away.",
 "Bild ansehen": "Viewing image"
 };
 const SPRACHEN = ["de", "en"];
@@ -6145,7 +5582,7 @@ const NICHT_UEBERSETZEN = ".bubble, .recent, .recents-leer, .merk, code, pre, te
 
 
 const NUR_FEST = ".steps .txt, .steps .sub, .interim, #ask-q, #ask-opts, .q, .given, "
-  + ".frage, .result-card, .cw-name, .cw-aufgabe, .cw-freigabe, .cw-eintrag .inhalt, "
+  + ".frage, .result-card, "
   + "#greeting";
 let sprache = SPRACHEN.includes(START.lang) ? START.lang : "de";
 
@@ -6412,9 +5849,7 @@ if (sprache === "en") setSprache("en", { merken: false }); else paintSprache();
 
 
 
-
 let chats = [];
-
 
 
 
@@ -6446,8 +5881,6 @@ function drawRecents(){
     drawnChats = "leer:" + chatQuery;
     return;
   }
-
-
 
 
 
@@ -6529,11 +5962,6 @@ async function loadRecents(){
 
 
 
-
-
-
-
-
 setInterval(() => { if (!busy && !chatQuery && !document.hidden) loadRecents(); }, 60_000);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && !busy && !chatQuery) loadRecents();
@@ -6567,7 +5995,6 @@ function sucheEnde(){
   loadRecents();
 }
 $("#suche-weg").addEventListener("click", sucheEnde);
-
 
 
 
@@ -6687,7 +6114,6 @@ function renameChat(row, chat){
 
 
 
-
 async function exportChat(chat){
   try {
     const res = await api(
@@ -6779,7 +6205,6 @@ let backdrop = null;
 
 
 
-
 let pickerClosing = null;
 const pickerOpen = () => !modelBox.hidden && !modelBox.classList.contains("closing");
 
@@ -6797,9 +6222,6 @@ function closePicker(zurueck){
     modelBox.classList.remove("closing");
   }, CLOSE_MS);
 }
-
-
-
 
 
 
@@ -6846,7 +6268,6 @@ async function openPicker(){
   backdrop.className = "backdrop";
   backdrop.addEventListener("click", closePicker);
   document.body.appendChild(backdrop);
-
 
 
 
@@ -6941,7 +6362,6 @@ document.addEventListener("keydown", (e) => {
   if (pickerOpen() && (modelBox.contains(document.activeElement)
                        || document.activeElement === $("#btn-model"))) fokusFalle(modelBox, e);
 });
-
 
 
 
@@ -7078,7 +6498,6 @@ document.addEventListener("keydown", (e) => {
   if (hoeren) { hoerenStoppen(false); return; }
   if (guardBox.classList.contains("open")) { guardSchliessen(false); return; }
   if (addonBox.classList.contains("open")) { addonsSchliessen(); return; }
-  if (coworkerBox.classList.contains("open")) { coworkerSchliessen(); return; }
   if (minwinOffen) { minwinSchliessen(); return; }
   if (pickerOpen()) { closePicker(true); return; }
   if (memBox.classList.contains("open")) { closeOverlay(memBox); return; }
@@ -7132,7 +6551,6 @@ $("#model-close").addEventListener("click", closeModelSettings);
 modelOverlay.addEventListener("click", e => {
   if (e.target === modelOverlay) closeModelSettings();
 });
-
 
 
 
@@ -7362,9 +6780,6 @@ let guardFertig = null;
 
 
 
-
-
-
 let guardEingabe = false;
 function guardDialog({ title, text, ok, cancel, head = "Hinweis", input = null }){
   $("#guard-head").textContent = head;
@@ -7437,8 +6852,6 @@ guardBox.addEventListener("click", (e) => { if (e.target === guardBox) guardSchl
 
 
 
-
-
 const banBox = $("#banbox");
 let sperre = { banned: false };
 function zeigeSperre(ban){
@@ -7484,7 +6897,6 @@ $("#security-open").addEventListener("click", () => {
 $("#ban-info").addEventListener("click", oeffneSperre);
 $("#ban-ok").addEventListener("click", () => closeOverlay(banBox));
 banBox.addEventListener("click", (e) => { if (e.target === banBox) closeOverlay(banBox); });
-
 
 
 
@@ -7828,507 +7240,6 @@ $("#btn-addons-modell").addEventListener("click", addonsOeffnen);
 
 
 
-
-const coworkerBox = $("#coworkerbox");
-let coworkerDaten = null, coworkerTakt = 0, coworkerAvatar = "🤝", coworkerStand = "";
-const coworkerEntwuerfe = new Map();
-const coworkerOffen = new Set();
-const CW_ART = { nachricht: "💬", meldung: "📣", frage: "❓", schritt: "🛠", aktion: "✅",
-                 fehler: "⚠️" };
-
-function cwZeit(stempel){
-  if (!stempel) return "";
-  const d = new Date(stempel * 1000);
-  const uhr = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-  return d.toDateString() === new Date().toDateString() ? uhr
-    : d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" }) + ", " + uhr;
-}
-function cwStatus(cw){
-  if (cw.working) return "arbeitet gerade …";
-  if (!cw.enabled) return cw.last_state ? "angehalten · " + cw.last_state : "pausiert";
-  const spaeter = cw.next_wake && cw.next_wake * 1000 > Date.now();
-  return (spaeter ? `wacht ${cwZeit(cw.next_wake)} Uhr auf` : "legt gleich los")
-    + (cw.wake_reason ? " · " + cw.wake_reason : "");
-}
-function coworkerAbzeichen(zahl){
-  const b = $("#coworker-badge");
-  b.hidden = !zahl;
-  b.textContent = zahl > 9 ? "9+" : String(zahl || "");
-}
-async function coworkerTun(body, knopf){
-  if (knopf) knopf.disabled = true;
-  const note = $("#coworker-note");
-  note.className = "note"; note.textContent = "Einen Moment …";
-  try {
-    const res = await api("/api/coworkers", {
-      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok){
-      note.className = "note bad"; note.textContent = data.error || "Das hat nicht geklappt.";
-      return null;
-    }
-    note.className = "note ok"; note.textContent = data.message || "";
-    coworkerDaten = data; coworkerStand = "";
-    coworkerZeigen(true);
-    coworkerAbzeichen(data.badge);
-    return data;
-  } catch {
-    note.className = "note bad";
-    note.textContent = "Keine Verbindung zu Aquaticy. Versuch es gleich noch einmal.";
-    return null;
-  } finally { if (knopf) knopf.disabled = false; }
-}
-async function coworkerLaden(){
-  clearTimeout(coworkerTakt);
-  if (document.hidden || !coworkerBox.classList.contains("open")) return;
-  let retry = true, pause = 5000;
-  try {
-    const res = await api("/api/coworkers");
-    if ([401,403].includes(res.status)) retry = false;
-    if (!res.ok){ await res.text().catch(() => ""); return; }
-    coworkerDaten = await res.json();
-    coworkerZeigen();
-    coworkerAbzeichen(coworkerDaten.badge);
-    const arbeitet = (coworkerDaten.coworkers || []).some(cw => cw.working);
-    pause = arbeitet ? 4000 : 15000;
-  } catch {
-    $("#coworker-note").textContent = "Die Coworker ließen sich nicht laden.";
-  } finally {
-    if (retry && !document.hidden && coworkerBox.classList.contains("open"))
-      coworkerTakt = setTimeout(coworkerLaden, pause);
-  }
-}
-
-async function coworkerAbzeichenLaden(){
-  if (document.hidden || coworkerBox.classList.contains("open")) return;
-  try {
-    const res = await api("/api/coworkers?badge=1");
-    if (!res.ok){ await res.text().catch(() => ""); return; }
-    const d = await res.json();
-    coworkerAbzeichen(d.allowed ? d.badge : 0);
-  } catch {}
-}
-setInterval(coworkerAbzeichenLaden, 60_000);
-
-function cwElement(tag, klasse, text){
-  const e = document.createElement(tag);
-  if (klasse) e.className = klasse;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-function cwKnopf(text, klasse, tun){
-  const b = cwElement("button", "btn" + (klasse ? " " + klasse : ""), text);
-  b.type = "button";
-  b.addEventListener("click", () => tun(b));
-  return b;
-}
-function cwAufklapp(cw, schluessel, titel, inhalt){
-  const mehr = cwElement("details", "cw-mehr");
-  const merk = `${cw.id}:${schluessel}`;
-  mehr.open = coworkerOffen.has(merk);
-  mehr.addEventListener("toggle", () => {
-    if (mehr.open) coworkerOffen.add(merk); else coworkerOffen.delete(merk);
-  });
-  mehr.append(cwElement("summary", "", titel), inhalt);
-  return mehr;
-}
-
-function coworkerKarte(cw, d){
-  const karte = cwElement("div", "cw-karte" + (cw.working ? " arbeitet" : ""));
-  karte.dataset.id = cw.id;
-  const kopf = cwElement("div", "cw-kopf");
-  const text = cwElement("div", "cw-kopf-text");
-  text.append(cwElement("div", "cw-name", cw.name), cwElement("span", "cw-status", cwStatus(cw)));
-  kopf.append(cwElement("span", "cw-avatar", cw.avatar), text);
-  if (cw.unseen){
-    const zahl = cwElement("span", "side-badge", String(cw.unseen));
-    zahl.setAttribute("aria-label", `${cw.unseen} neu`);
-    kopf.appendChild(zahl);
-  }
-  karte.append(kopf, cwElement("div", "cw-aufgabe", cw.goal));
-  if (cw.interval_seconds){
-    const seconds = cw.interval_seconds;
-    const label = seconds < 60 ? sp("Alle 30 Sekunden", "Every 30 seconds") : seconds < 3600
-      ? sp(`Alle ${seconds / 60} Minuten`, `Every ${seconds / 60} minutes`)
-      : seconds < 86400 ? sp(`Alle ${seconds / 3600} Stunden`, `Every ${seconds / 3600} hours`)
-      : sp("Einmal täglich", "Once daily");
-    karte.appendChild(cwElement("p", "note", label));
-  } else if (cw.schedule?.when_text)
-    karte.appendChild(cwElement("p", "note", cw.schedule.when_text));
-
-
-  if ((cw.actions || []).length){
-    const box = cwElement("div", "cw-abschnitt");
-    box.appendChild(cwElement("div", "how", "Wartet auf deine Freigabe"));
-    for (const a of cw.actions){
-      const f = cwElement("div", "cw-freigabe");
-      f.appendChild(cwElement("div", "was", a.summary));
-      const genau = cwElement("details", "");
-      genau.append(cwElement("summary", "", "Alle Angaben"),
-                   cwElement("pre", "", `${a.tool}\n${JSON.stringify(a.arguments, null, 2)}`));
-      const reihe = cwElement("div", "reihe");
-      reihe.append(
-        cwKnopf("Erlauben", "primary", (b) => coworkerTun({ action: "approve", id: cw.id, action_id: a.id }, b)),
-        cwKnopf("Ablehnen", "", (b) => coworkerTun({ action: "reject", id: cw.id, action_id: a.id }, b)));
-      f.append(genau, reihe);
-      box.appendChild(f);
-    }
-    karte.appendChild(box);
-  }
-
-
-  const verlauf = cwElement("div", "cw-abschnitt");
-  verlauf.appendChild(cwElement("div", "how", "Verlauf"));
-  const liste = cwElement("div", "cw-verlauf");
-  for (const e of (cw.log || []).slice(0, 15)){
-    const zeile = cwElement("div", "cw-eintrag" + (e.kind === "nachricht" ? " du" : "")
-      + (!e.seen && (e.kind === "meldung" || e.kind === "frage") ? " neu" : ""));
-    zeile.appendChild(cwElement("span", "art", CW_ART[e.kind] || "·"));
-    const inhalt = cwElement("div", "inhalt");
-    const zeit = cwElement("div", "zeit", cwZeit(e.at) + (e.kind === "nachricht" ? " · du"
-      : e.title ? " · " + e.title : ""));
-    const koerper = cwElement("div", "");
-
-    if (e.kind === "meldung" || e.kind === "frage" || e.kind === "schritt") koerper.innerHTML = md(e.text);
-    else koerper.textContent = e.text;
-    inhalt.append(zeit, koerper);
-    zeile.appendChild(inhalt);
-    liste.appendChild(zeile);
-  }
-  if (!liste.childElementCount)
-    liste.appendChild(cwElement("div", "note", "Noch nichts. Er fängt gleich an."));
-  verlauf.appendChild(liste);
-  karte.appendChild(verlauf);
-
-
-  const schreiben = cwElement("div", "cw-schreiben");
-  const feld = cwElement("textarea", "");
-  feld.rows = 1; feld.maxLength = 2000;
-  feld.placeholder = `Nachricht an ${cw.name} …`;
-  feld.setAttribute("aria-label", `Nachricht an ${cw.name}`);
-  feld.value = coworkerEntwuerfe.get(cw.id) || "";
-  feld.addEventListener("input", () => coworkerEntwuerfe.set(cw.id, feld.value));
-  const senden = cwKnopf("Senden", "primary", async (b) => {
-    const textInhalt = feld.value.trim();
-    if (!textInhalt){ feld.focus(); return; }
-    coworkerEntwuerfe.delete(cw.id);
-    feld.value = "";
-    if (!await coworkerTun({ action: "message", id: cw.id, text: textInhalt }, b)){
-      coworkerEntwuerfe.set(cw.id, textInhalt);
-      feld.value = textInhalt;
-    }
-  });
-  feld.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); senden.click(); }
-  });
-  schreiben.append(feld, senden);
-  karte.appendChild(schreiben);
-
-  const knoepfe = cwElement("div", "cw-knoepfe");
-  const jetzt = cwKnopf("Jetzt arbeiten", "", (b) => coworkerTun({ action: "wake", id: cw.id }, b));
-  jetzt.disabled = cw.working || !cw.enabled;
-  knoepfe.appendChild(jetzt);
-  knoepfe.appendChild(cwKnopf(cw.enabled ? "Pausieren" : "Fortsetzen", "",
-    (b) => coworkerTun({ action: cw.enabled ? "pause" : "resume", id: cw.id }, b)));
-  if (cw.chat) knoepfe.appendChild(cwKnopf("Chat öffnen", "", () => {
-    coworkerSchliessen();
-    openChat(cw.chat);
-  }));
-  knoepfe.appendChild(cwKnopf("Löschen", "", async (b) => {
-    if (await frage(`${cw.name} löschen?`, "Aufgabe, Notizen, Regeln und Verlauf werden gelöscht. Der Chat mit seinen Meldungen bleibt."))
-      coworkerTun({ action: "delete", id: cw.id }, b);
-  }));
-  karte.appendChild(knoepfe);
-
-
-  const regeln = cwElement("div", "");
-  for (const kat of d.categories || []){
-    const zeile = cwElement("div", "recht");
-    zeile.appendChild(cwElement("span", "recht-name", kat.label));
-    const gruppe = cwElement("div", "seg");
-    gruppe.setAttribute("role", "radiogroup");
-    gruppe.setAttribute("aria-label", `${cw.name}: ${kat.label}`);
-    for (const option of kat.options){
-      const an = (cw.rules[kat.key] || kat.default) === option.value;
-      const b = cwElement("button", an ? "on" : "", option.label);
-      b.type = "button";
-      b.setAttribute("role", "radio");
-      b.setAttribute("aria-checked", String(an));
-      b.addEventListener("click", () => {
-        if (!an || (kat.key === "zuhause" && option.value === "erlauben" && !cw.home_approval_valid))
-          coworkerTun({ action: "rules", id: cw.id, rules: { [kat.key]: option.value } }, b);
-      });
-      gruppe.appendChild(b);
-    }
-    zeile.appendChild(gruppe);
-    regeln.appendChild(zeile);
-  }
-  regeln.appendChild(cwElement("div", "addon-hint", sp(
-    "„Fragen“ legt Aktionen hier zur Freigabe ab. „Erlauben“ im Haus gilt für einzelne Lichter, Schalter, Lüfter und Mediengeräte: ein- oder ausschalten ohne Zusatzdaten. Geschützte Aktionen fragen weiterhin nach. Bei anderen Änderungen fragt er nach fremden Inhalten auch bei „Erlauben“.",
-    "Ask queues actions here for approval. Allow at home covers individual lights, switches, fans and media players: on or off without extra data. Protected actions still ask. Other changes also ask after external content, even when allowed.")));
-  if (cw.rules.zuhause === "erlauben" && !cw.home_approval_valid)
-    regeln.appendChild(cwElement("p", "note", sp(
-      "Die Home-Assistant-Verbindung hat sich geändert. Zum erneuten Freigeben „Erlauben“ anklicken.",
-      "The Home Assistant connection has changed. Click Allow to approve it again.")));
-  // Auftraege per WhatsApp/Signal (14.4.4): ein Schalter direkt auf der Karte.
-  const bote = cwElement("label", "check cw-messenger");
-  const boteAn = cwElement("input", "");
-  boteAn.type = "checkbox"; boteAn.setAttribute("role", "switch"); boteAn.className = "schalter";
-  boteAn.checked = !!cw.messenger_orders;
-  boteAn.addEventListener("change", () => coworkerTun({
-    action: "messenger", id: cw.id, enabled: boteAn.checked}, boteAn));
-  bote.append(boteAn, document.createTextNode(sp("Aufträge per WhatsApp/Signal",
-    "Tasks via WhatsApp/Signal")));
-  karte.appendChild(bote);
-  if (cw.messenger_orders)
-    karte.appendChild(cwElement("p", "note", sp(
-      `Schreib in deinem eigenen Chat: „Coworker ${cw.name}: …“`,
-      `Write in your own chat: “Coworker ${cw.name}: …”`)));
-  karte.appendChild(cwAufklapp(cw, "regeln", `Regeln — was ${cw.name} ohne dich darf`, regeln));
-
-  const prefs = cwElement("div", "");
-  prefs.appendChild(cwElement("p", "note", sp(
-    "Freiwillig: passende Informationen nur aus deinem Konto. Übernommene Notizen bleiben beim Ausschalten erhalten; du kannst sie löschen.",
-    "Optional: relevant information from your account only. Copied notes remain when disabled; you can delete them.")));
-  function toggle(label, checked){
-    const row = cwElement("label", "check"), input = cwElement("input", "");
-    input.type = "checkbox"; input.checked = checked;
-    row.append(input, document.createTextNode(label)); prefs.appendChild(row); return input;
-  }
-  const chats = toggle(sp("Wissen aus deinen Chats nutzen", "Use information from regular chats"), cw.sharing_chats);
-  const peers = toggle(sp("Notizen deiner anderen Coworker nutzen", "Use other coworkers' notes"), cw.sharing_coworkers);
-  const capacity = cwElement("select", "");
-  capacity.setAttribute("aria-label", sp("Platz für Notizen", "Note capacity"));
-  for (const n of [6000,12000,24000]){
-    const opt = cwElement("option", "", `${n.toLocaleString()} ` + sp("Zeichen", "characters"));
-    opt.value = n; capacity.appendChild(opt);
-  }
-  capacity.value = cw.notes_limit || 6000;
-  prefs.append(capacity, cwKnopf("Speichern", "primary", b => coworkerTun({
-    action: "preferences", id: cw.id, sharing_chats: chats.checked,
-    sharing_coworkers: peers.checked, notes_limit: Number(capacity.value),
-  }, b)));
-  karte.appendChild(cwAufklapp(cw, "kontext", sp("Notizen und was er lesen darf",
-    "Note capacity and information sharing"), prefs));
-
-  if (cw.schedule?.kind){
-    const schedule = cwElement("div", ""), rhythm = cwElement("select", "");
-    rhythm.setAttribute("aria-label", sp("Rhythmus", "Schedule"));
-    for (const [value, de, en] of [
-      ["daily","täglich","daily"],["hourly","stündlich","hourly"],
-      ["weekly","wöchentlich","weekly"],["minutes30","alle 30 Minuten","every 30 minutes"],
-      ["minutes15","alle 15 Minuten","every 15 minutes"],["minutes5","alle 5 Minuten","every 5 minutes"],
-      ["minutes1","jede Minute","every minute"],["always","die ganze Zeit","continuously"]]){
-      if (cw.schedule.kind === "research" && value.startsWith("minutes")) continue;
-      if (cw.schedule.kind === "research" && value === "always") continue;
-      const opt = cwElement("option", "", sp(de,en)); opt.value = value; rhythm.appendChild(opt);
-    }
-    rhythm.value = cw.schedule.rhythm;
-    const when = cwElement("input", ""); when.type = "time";
-    when.setAttribute("aria-label", sp("Uhrzeit", "Time"));
-    when.value = `${String(cw.schedule.hour).padStart(2,"0")}:${String(cw.schedule.minute).padStart(2,"0")}`;
-    const day = cwElement("select", "");
-    day.setAttribute("aria-label", sp("Wochentag", "Weekday"));
-    [["Montag","Monday"],["Dienstag","Tuesday"],["Mittwoch","Wednesday"],
-      ["Donnerstag","Thursday"],["Freitag","Friday"],["Samstag","Saturday"],
-      ["Sonntag","Sunday"]].forEach(([de,en], i) => {
-      const option = cwElement("option", "", sp(de,en)); option.value = i; day.appendChild(option);
-    });
-    day.value = cw.schedule.weekday;
-    const timeLabel = cwElement("label", "block", sp("Uhrzeit", "Time"));
-    timeLabel.appendChild(when);
-    const dayLabel = cwElement("label", "block", sp("Wochentag", "Weekday"));
-    dayLabel.appendChild(day);
-    function visibleFields(){
-      dayLabel.hidden = rhythm.value !== "weekly";
-      timeLabel.hidden = rhythm.value.startsWith("minutes") || rhythm.value === "always";
-    }
-    rhythm.addEventListener("change", visibleFields); visibleFields();
-    schedule.append(rhythm, timeLabel, dayLabel, cwElement("p", "note", sp(
-      "Je öfter geprüft wird, desto schneller ist deine Grenze erreicht.",
-      "More frequent checks use up your allowance faster.")), cwKnopf("Speichern", "primary", b => {
-      const [hour,minute] = when.value.split(":").map(Number);
-      coworkerTun({action:"preferences", id:cw.id, schedule:{rhythm:rhythm.value,
-        hour,minute,weekday:Number(day.value)}}, b);
-    }));
-    karte.appendChild(cwAufklapp(cw, "zeitplan", sp("Zeitplan ändern", "Edit schedule"), schedule));
-  }
-
-  const notizen = cwElement("div", "inhalt");
-  const notizText = cwElement("div", "");
-  if (cw.notes) notizText.innerHTML = md(cw.notes);
-  else notizText.textContent = "Noch keine. Er schreibt sie, sobald er angefangen hat.";
-  notizen.appendChild(notizText);
-  if (cw.notes){
-
-    if (cw.tainted) notizen.appendChild(cwElement("div", "addon-hint",
-      "In diesen Notizen steht Text von fremden Seiten. Darum fragt er vor jeder Änderung. „Erlauben“ im Haus gilt trotzdem weiter."));
-    const reihe = cwElement("div", "cw-knoepfe");
-    reihe.appendChild(cwKnopf("Notizen löschen", "", async (b) => {
-      if (await frage("Notizen löschen?", `${cw.name} fängt beim nächsten Schritt ohne sein bisheriges Gedächtnis an.`))
-        coworkerTun({ action: "reset_notes", id: cw.id }, b);
-    }));
-    notizen.appendChild(reihe);
-  }
-  karte.appendChild(cwAufklapp(cw, "notizen", `Notizen von ${cw.name} (sein Gedächtnis)`, notizen));
-
-  const aendern = cwElement("div", "");
-  const ziel = cwElement("textarea", "");
-  ziel.maxLength = 2000; ziel.value = cw.goal;
-  ziel.setAttribute("aria-label", `Aufgabe von ${cw.name}`);
-  const takt = cwElement("select", "cw-rhythmus");
-  takt.setAttribute("aria-label", sp("Rhythmus", "Frequency"));
-  for (const [value, de, en] of [
-    [0, cw.schedule?.kind ? "Bisheriger Zeitplan" : "Automatisch",
-      cw.schedule?.kind ? "Existing schedule" : "Automatic"],
-    [30, "Alle 30 Sekunden", "Every 30 seconds"], [60, "Jede Minute", "Every minute"],
-    [300, "Alle 5 Minuten", "Every 5 minutes"], [600, "Alle 10 Minuten", "Every 10 minutes"],
-    [1200, "Alle 20 Minuten", "Every 20 minutes"], [3600, "Jede Stunde", "Every hour"],
-    [14400, "Alle 4 Stunden", "Every 4 hours"], [86400, "Einmal täglich", "Once daily"]]){
-    const opt = cwElement("option", "", sp(de, en)); opt.value = value; takt.appendChild(opt);
-  }
-  takt.value = cw.interval_seconds || 0;
-  const taktLabel = cwElement("label", "block", sp("Rhythmus", "Frequency"));
-  taktLabel.appendChild(takt);
-  aendern.append(ziel, taktLabel, cwElement("p", "note", sp(
-    "Der nächste Lauf beginnt nach diesem Abstand zum Ende des letzten Laufs. Laufzeit und Warteschlange können ihn verzögern. Tages- und Kontingentgrenzen gelten weiterhin; häufige Recherchen bleiben im selben Chat.",
-    "The interval starts when the previous run finishes. Run time and queued work may delay it. Daily and usage limits still apply; frequent research stays in the same chat.")),
-    cwKnopf("Speichern", "primary", (b) => coworkerTun({
-      action: "edit", id: cw.id, goal: ziel.value, interval_seconds: Number(takt.value),
-    }, b)));
-  karte.appendChild(cwAufklapp(cw, "aufgabe", "Aufgabe ändern", aendern));
-  return karte;
-}
-
-function coworkerZeigen(sofort = false){
-  const d = coworkerDaten || {};
-  $("#coworker-lock").hidden = !!d.autonomous_allowed;
-  $("#coworker-new").hidden = !d.allowed;
-  const liste = $("#coworker-list");
-  if (!d.allowed){ liste.replaceChildren(); return; }
-
-  const fokus = document.activeElement;
-  if (!sofort && fokus && liste.contains(fokus) && /^(TEXTAREA|INPUT|SELECT)$/.test(fokus.tagName)) return;
-  const stand = JSON.stringify(d.coworkers || []);
-  if (!sofort && stand === coworkerStand) return;
-  coworkerStand = stand;
-  const avatare = $("#cw-avatars");
-  if (!avatare.childElementCount){
-    for (const a of d.avatars || []){
-      const b = cwElement("button", "", a);
-      b.type = "button";
-      b.setAttribute("role", "radio");
-      b.setAttribute("aria-checked", String(a === coworkerAvatar));
-      b.setAttribute("aria-label", `Bild ${a}`);
-      b.addEventListener("click", () => {
-        coworkerAvatar = a;
-        avatare.querySelectorAll("button").forEach(x =>
-          x.setAttribute("aria-checked", String(x.textContent === a)));
-      });
-      avatare.appendChild(b);
-    }
-  }
-  const adaptive = $("#cw-task-kind option[value=adaptive]");
-  adaptive.disabled = !d.autonomous_allowed;
-  if (!d.autonomous_allowed && $("#cw-task-kind").value === "adaptive")
-    $("#cw-task-kind").value = "research";
-  cwTaskFelder();
-  const plan = d.plan === "ultra" ? "Ultra" : "Pro";
-  const info = [sp(`Mit ${plan}: bis zu ${d.max} Coworker, `
-                   + `je Coworker bis zu ${d.daily} Arbeitsschritte am Tag.`,
-                   `With ${plan}: up to ${d.max} coworkers, `
-                   + `each with up to ${d.daily} work steps a day.`)];
-  if (!d.autonomous_allowed) info.length = 0;
-  info.push(sp(`Bis zu ${d.max_scheduled || 20} Coworker mit festem Zeitplan.`,
-               `Up to ${d.max_scheduled || 20} coworkers with fixed schedules.`));
-  info.push((d.connections || []).length
-    ? sp("Er kann lesen: ", "It can read: ") + d.connections.join(", ") + "."
-    : sp("Verbindungen wie Gmail, Google Kalender oder GitHub schaltest du in den "
-         + "Einstellungen und unter Add-ons ein.",
-         "You turn on connections like Gmail, Google Calendar or GitHub in the settings "
-         + "and under Add-ons."));
-  if (d.vm) info.push(sp("Er bekommt eine eigene virtual machine.",
-                         "It gets its own virtual machine."));
-  $("#cw-info").textContent = info.join(" ");
-  cwTaskFelder();
-  liste.replaceChildren(...(d.coworkers || []).map(cw => coworkerKarte(cw, d)));
-
-  requestAnimationFrame(() => liste.classList.add("ruhig"));
-}
-
-function coworkerSchliessen(){
-  clearTimeout(coworkerTakt);
-  closeOverlay(coworkerBox);
-}
-$("#btn-coworker").addEventListener("click", async () => {
-  if (narrow()) document.body.classList.add("collapsed");
-  $("#coworker-note").textContent = "";
-  coworkerStand = "";
-  $("#coworker-list").classList.remove("ruhig");
-  openOverlay(coworkerBox);
-  await coworkerLaden();
-
-  for (const cw of coworkerDaten?.coworkers || []){
-    if (cw.unseen && !(cw.actions || []).length)
-      api("/api/coworkers", { method: "POST", headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ action: "seen", id: cw.id }) }).catch(() => {});
-  }
-});
-$("#coworker-close").addEventListener("click", coworkerSchliessen);
-coworkerBox.addEventListener("click", (e) => { if (e.target === coworkerBox) coworkerSchliessen(); });
-$("#cw-beispiele").querySelectorAll(".cw-beispiel").forEach(c => c.addEventListener("click", () => {
-  $("#cw-goal").value = c.textContent; $("#cw-goal").focus();
-}));
-$("#cw-create").addEventListener("click", async (e) => {
-  const name = $("#cw-name").value.trim(), ziel = $("#cw-goal").value.trim();
-  const kind = $("#cw-task-kind").value;
-  const note = $("#coworker-note");
-  if (ziel.length < (kind === "adaptive" ? 8 : 1)){
-    $("#cw-goal").focus(); note.className = "note bad";
-    note.textContent = "Beschreib die Aufgabe in ein, zwei Sätzen."; return;
-  }
-  const source = $("#cw-task-source").value.trim();
-  if ((kind === "visual" || kind === "price" || (kind === "image" && source))
-      && !safeHttpUrl(source)){
-    note.textContent = "Gib eine vollständige, öffentliche Web-Adresse an (http oder https)."; return;
-  }
-  if (kind === "image" && !cwTaskBild){
-    note.textContent = "Wähl das Bild aus, nach dem du suchen willst."; return;
-  }
-  const [hour, minute] = ($("#cw-task-zeit").value || "08:00").split(":").map(Number);
-  const schedule = kind === "adaptive" ? {} : {
-    kind, rhythm: $("#cw-task-rhythm").value, hour, minute,
-    weekday: Number($("#cw-task-weekday").value),
-    structured: $("#cw-task-struktur").checked, source_url: source,
-  };
-  const data = await coworkerTun({ action: "create", name, goal: ziel, avatar: coworkerAvatar,
-    schedule, sharing_chats: $("#cw-sharing-chats").checked,
-    sharing_coworkers: $("#cw-sharing-coworkers").checked,
-    notes_limit: Number($("#cw-notes-limit").value),
-    image_data: kind === "image" ? cwTaskBild.data : "",
-    image_name: kind === "image" ? cwTaskBild.name : "",
-  }, e.currentTarget);
-  if (data){
-    $("#cw-name").value = ""; $("#cw-goal").value = "";
-    $("#cw-task-bild").value = ""; $("#cw-task-bild-vorschau").hidden = true;
-    cwTaskBild = null; $("#cw-task-source").value = "";
-    $("#coworker-new").open = false;
-    coworkerLaden();
-  }
-});
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) clearTimeout(coworkerTakt);
-  else if (coworkerBox.classList.contains("open")) coworkerLaden();
-});
-
-
-
-
-
-
-
-
 let kontoWartet = "";
 
 function zwischenablageGeht(){ return !!(window.isSecureContext && navigator.clipboard?.readText); }
@@ -8468,8 +7379,6 @@ addonBox.addEventListener("click", (e) => { if (e.target === addonBox) addonsSch
 
 
 
-
-
 $("#account-logout").addEventListener("click", async () => {
   await api("/api/auth/logout", {method:"POST"});
   location.reload();
@@ -8548,7 +7457,7 @@ $("#account-password").addEventListener("click", async () => {
 });
 $("#account-wipe").addEventListener("click", async () => {
   if (!await frage("Wirklich alle deine Daten löschen?",
-      "Chats, Bilder, Uploads, Erinnerungen, Coworker, Einstellungen und eigene Schlüssel "
+      "Chats, Bilder, Uploads, Erinnerungen, Einstellungen und eigene Schlüssel "
       + "sind danach weg. Dein Konto bleibt.", "Weiter")) return;
   const passwort = await passwortAbfragen("Zur Sicherheit: dein Passwort");
   if (passwort === null) return;
@@ -8571,7 +7480,6 @@ $("#account-delete").addEventListener("click", async () => {
   await hinweis("Dein Konto ist gelöscht. Danke, dass du Aquaticy benutzt hast.", "Erledigt");
   location.reload();
 });
-
 
 
 
@@ -8655,7 +7563,6 @@ overlay.addEventListener("click", (e) => { if (e.target === overlay) closeSettin
 
 
 
-
 let eigeneModelle = [];
 let modellStart = "";
 function eigeneModelleZeigen(){
@@ -8681,10 +7588,6 @@ function eigeneModelleZeigen(){
   const marke = document.querySelector('#secnav button[data-section="sec-schluessel"]');
   if (marke) marke.hidden = sec.hidden;
 }
-
-
-
-
 
 
 
@@ -8796,7 +7699,6 @@ $("#limit-banner-open").addEventListener("click", async () => {
 
 
 
-
 const memBox = $("#membox");
 
 
@@ -8883,87 +7785,6 @@ $("#merk-clear").addEventListener("click", async () => {
 });
 
 
-function cwTaskFelder(){
-  const art = $("#cw-task-kind").value;
-
-
-
-  const kurz = ["minutes30", "minutes15", "minutes5", "minutes1", "always"];
-  const auswahl = $("#cw-task-rhythm");
-  for (const option of auswahl.options){
-    option.disabled = art === "research" && kurz.includes(option.value);
-  }
-  if (art === "research" && kurz.includes(auswahl.value)) auswahl.value = "hourly";
-  const takt = auswahl.value;
-  const adaptive = art === "adaptive";
-  $("#cw-task-rhythm-feld").hidden = adaptive;
-  $("#cw-task-tag-feld").hidden = adaptive || takt !== "weekly";
-  $("#cw-task-zeit-feld").hidden = adaptive || takt.startsWith("minutes") || takt === "always";
-
-
-  $("#cw-task-source-feld").hidden = art === "research" || adaptive;
-  $("#cw-task-bild-feld").hidden = art !== "image";
-  $("#cw-task-struktur-feld").hidden = art !== "research";
-  $("#cw-task-takt-hinweis").hidden = adaptive || !(takt === "always" || takt === "minutes1");
-  $("#cw-task-source-warum").textContent = art === "image"
-    ? "Freiwillig: eine Seite, auf der Aquaticy zuerst sucht. Leer = überall suchen."
-    : "Die genaue Seite der Webcam, Karte, des Satelliten oder Produkts. Private Kameras und "
-      + "Seiten mit Anmeldung gehen nicht.";
-  const limit = adaptive ? (coworkerDaten?.max || 0) : (coworkerDaten?.max_scheduled || 20);
-  const used = (coworkerDaten?.coworkers || []).filter(cw =>
-    !!cw.schedule?.kind === !adaptive).length;
-  $("#cw-create").disabled = coworkerDaten !== null && used >= limit;
-  $("#cw-goal").placeholder = art === "image"
-    ? "z. B. neu oder gebraucht, Versand nach Deutschland"
-    : adaptive ? "z. B. Fasse morgens wichtige Mails und Termine zusammen."
-    : "z. B. Ein oranges Flugzeug ist sichtbar";
-}
-
-
-
-let cwTaskBild = null, cwTaskBildSerial = 0;
-$("#cw-task-bild").addEventListener("change", () => {
-  const datei = $("#cw-task-bild").files?.[0] || null;
-  const vorschau = $("#cw-task-bild-vorschau");
-  const serial = ++cwTaskBildSerial;
-  cwTaskBild = null;
-  vorschau.hidden = true;
-  if (!datei) return;
-  if (datei.size > 25_000_000){
-    $("#coworker-note").textContent = sp("Das Bild ist zu groß.", "The image is too large.");
-    return;
-  }
-  const leser = new FileReader();
-  leser.onload = () => {
-    if (serial !== cwTaskBildSerial) return;
-    const roh = String(leser.result || "");
-    const komma = roh.indexOf(",");
-    if (komma < 0) return;
-    cwTaskBild = { data: roh.slice(komma + 1), type: datei.type || "image/jpeg", name: datei.name };
-    vorschau.src = roh;
-    vorschau.hidden = false;
-  };
-  leser.readAsDataURL(datei);
-});
-$("#cw-task-rhythm").addEventListener("change", cwTaskFelder);
-$("#cw-task-kind").addEventListener("change", cwTaskFelder);
-cwTaskFelder();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 let anbieter = [];
 
@@ -9037,8 +7858,6 @@ $("#save-model").addEventListener("click", async () => {
       : nutzerFehler(error.message);
   } finally { button.disabled = false; }
 });
-
-
 
 
 
@@ -9198,8 +8017,6 @@ form.addEventListener("submit", async (e) => {
 
 
 
-
-
 const GRUSS_EN = {
   normal: ["{gruss}, {name}. What can I help you with?",
            "{gruss}, {name}. What would you like to find out?",
@@ -9308,8 +8125,6 @@ function rotateSuggestions(){
 
 
 
-
-
 function refreshHeader(){
   if (!angemeldet) return;
   clearTimeout(kopfTimer);
@@ -9332,7 +8147,6 @@ async function kopfNeuZeichnen(){
     $("#status").title = kopf.status_title || "";
   } catch {   }
 }
-
 
 
 
@@ -9364,7 +8178,6 @@ async function starteOberflaeche(){
   loadRecents();
   pruefeLimits();
   pluginsLaden();
-  coworkerAbzeichenLaden();
   pruefeSperre();
   await wiederAufnehmen();
   input.focus();

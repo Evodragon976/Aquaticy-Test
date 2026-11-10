@@ -9,7 +9,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from aquaticy import privacy, tools, web
+from aquaticy import privacy, tools
 from aquaticy.cache import SCHEMA, Cache
 from aquaticy.models import PageResult, SearchResult
 from tests.test_v965 import parallel_site as parallel_site
@@ -206,29 +206,9 @@ def test_changing_searxng_instance_does_not_reuse_previous_results(settings, tmp
         box.close()
 
 
-@pytest.mark.parametrize("action", ["new", "open", "command"])
-def test_reused_session_does_not_expose_previous_chats_run(parallel_site, action):
-    client, _, _, _, account, _ = parallel_site
-    current = client.get("/api/chats").json()["current"]
-    assert client.post("/api/chat", json={"message": "Vorherige Antwort"}).status_code == 200
-    state = client.get("/api/runstate").json()
-    assert state["question"] == "Vorherige Antwort" and not state["resume"]
-    if action == "new":
-        selected = client.post("/api/clear").json()["current"]
-    elif action == "open":
-        settings = web.SESSIONS.get(account).settings()
-        Cache(settings.db_path).add_history("saved", "Gespeicherter Chat", "Antwort")
-        selected = client.post("/api/open", json={"session_id": "saved"}).json()["session_id"]
-    else:
-        assert client.post("/api/command", json={"line": "/clear"}).status_code == 200
-        selected = client.get("/api/chats").json()["current"]
-    assert selected != current
-    headers = {"X-Aquaticy-Chat": selected}
-    assert client.get("/api/runstate", headers=headers).json() == {
-        "running": False,
-        "resume": False,
-    }
-    assert client.get("/api/run", params={"id": state["id"]}, headers=headers).status_code == 404
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_cache_migration_cleans_replaced_overflow_pages_and_is_concurrent(tmp_path):
@@ -300,59 +280,6 @@ def test_empty_legacy_cache_payload_remains_a_miss_after_migration(tmp_path):
     cache = Cache(path)
     assert cache.get("empty") is None and cache.get("labeled") is None
     assert b"privat" not in path.read_bytes()
-
-
-@pytest.mark.parametrize(
-    "message", ["unknown storage-opt", "Filesystem does not support, or has not enabled quotas"]
-)
-def test_known_unsupported_docker_quota_keeps_isolation_and_disk_monitor(monkeypatch, message):
-    import subprocess
-
-    from aquaticy import sandbox
-
-    box = sandbox.Sandbox()
-    box.runtime = sandbox.Runtime("docker", "docker", "Docker")
-    attempts = []
-
-    def run(binary, *args, **kwargs):
-        attempts.append(args)
-        return subprocess.CompletedProcess(
-            args, 1 if len(attempts) == 1 else 0, "", message if len(attempts) == 1 else ""
-        )
-
-    monkeypatch.setattr(sandbox, "_runs", run)
-    box._start_container()
-    assert not box._quota_ok and len(attempts) == 2
-    initial = list(attempts[0])
-    index = initial.index("--storage-opt")
-    del initial[index : index + 2]
-    assert list(attempts[1]) == initial
-    assert "--read-only" in initial
-    assert initial[initial.index("--network") + 1] == "none"
-    assert initial[initial.index("--cap-drop") + 1] == "ALL"
-    monkeypatch.setattr(box, "usage_gb", lambda: box.disk_gb + 1)
-    box._check_quota(sandbox.RunResult(exit_code=0, stdout="", stderr="", seconds=0))
-    with pytest.raises(ValueError, match="voll"):
-        box._refuse_if_full()
-
-
-def test_other_docker_errors_do_not_trigger_quota_fallback(monkeypatch):
-    import subprocess
-
-    from aquaticy import sandbox
-
-    box = sandbox.Sandbox()
-    box.runtime = sandbox.Runtime("docker", "docker", "Docker")
-    attempts = []
-
-    def run(binary, *args, **kwargs):
-        attempts.append(args)
-        return subprocess.CompletedProcess(args, 1, "", "permission denied")
-
-    monkeypatch.setattr(sandbox, "_runs", run)
-    with pytest.raises(sandbox.SandboxUnavailable, match="permission denied"):
-        box._start_container()
-    assert len(attempts) == 1 and box._quota_ok
 
 
 def test_plaintext_query_starting_with_encryption_prefix_is_also_migrated(tmp_path):

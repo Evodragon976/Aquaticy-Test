@@ -89,7 +89,6 @@ class FakeAgent:
         recheck: bool | None = None,
         effort: str = "",
         online: bool | None = None,
-        sandbox: bool | None = None,
     ) -> Any:
         self.gesehen.append(
             {
@@ -99,7 +98,6 @@ class FakeAgent:
                 "gegenprobe": recheck,
                 "tiefe": effort,
                 "web": online,
-                "werkstatt": sandbox,
             }
         )
         text = message.lower()
@@ -127,22 +125,6 @@ class FakeAgent:
 
 
 
-        if "usermode-probe" in text:
-            self.on_event("vm_start", {"runtime": "Docker (gehaertet)", "user_mode": True})
-            self.on_event("vm_net", {"locked": True, "ranges": 6})
-            self.on_event("vm_desktop", {"ready": True})
-            self.on_event("desktop", {"action": "sieht", "detail": "den Bildschirm",
-                                      "media_id": self.bildschirm})
-            self.on_event("desktop", {"action": "oeffnet", "detail": "Webbrowser (Falkon)"})
-            self.on_event("desktop", {"action": "klickt", "detail": "Link Impressum"})
-            self.on_event("desktop", {"action": "abgelehnt", "detail": "Alle akzeptieren",
-                                      "kind": "alle_akzeptieren"})
-            antwort = "Die Seite ist offen; das Cookie-Banner habe ich abgelehnt."
-            self.on_event("answer_chunk", {"text": antwort})
-            self.on_event("done", {"tool_calls": 4, "hit_limit": False, "visuals": [
-                {"kind": "desktop", "media_id": self.bildschirm,
-                 "title": "Bildschirm der virtual machine"}]})
-            return type("R", (), {"answer": antwort, "stopped": False})()
         if "altbild-probe" in text:
 
             self.on_event("model_auto", {"model": "mistral/mistral-large-latest",
@@ -171,11 +153,6 @@ class FakeAgent:
             return type("R", (), {"answer": antwort, "stopped": False})()
         if mode in ("code", "pro"):
             self.on_event("code_model", {"model": "mistral/mistral-large-latest"})
-        if sandbox and mode == "code":
-            self.on_event("vm_start", {"runtime": "Docker (gehaertet)"})
-            self.on_event("vm_write", {"path": "/work/loesung.py"})
-            self.on_event("vm_run", {"command": "python loesung.py"})
-            self.on_event("vm_done", {"exit_code": 0, "seconds": 0.4})
 
 
         for stueck in ("Erst ", "die Frage ", "sortieren."):
@@ -495,9 +472,9 @@ def normales_konto(browser: Any, port: int, log: Protokoll, fehler: list[str]) -
     pg.evaluate("document.querySelector('#ban-ok').click()")
     pg.wait_for_selector("#banbox", state="hidden")
     pg.evaluate("zeigeSperre({banned: false})")
+    # 16.0.1 (Aquaticy-Test): Die Auslastung gibt es nicht mehr -- auch nicht im Server.
     status = pg.evaluate("async () => (await fetch('/api/system')).status")
-    log.pruefe(status == 403, f"und am Fenster vorbei gibt der Server sie nicht her ({status})")
-    # 16.0.0 (Aquaticy-Test): die Route bleibt fuer Normal gesperrt, auch wenn die Anzeige fehlt.
+    log.pruefe(status == 404, f"und den Weg dorthin gibt es nicht mehr ({status})")
 
     log.pruefe(pg.is_hidden("#sec-schluessel"),
                "Eigene Modelle ist nicht da, solange nichts Eigenes eingetragen ist")
@@ -632,11 +609,13 @@ def normales_konto(browser: Any, port: int, log: Protokoll, fehler: list[str]) -
           const r = await fetch("/api/config", {method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({AQUATICY_VM_USER_MODE: "true"})});
-          return await r.json();
+          await r.json();
+          return await (await fetch("/api/config")).json();
         }"""
     )
-    log.pruefe(not antwort.get("ok") and "Ultra" in str(antwort.get("error", "")),
-               "am Formular vorbei lehnt der Server den User mode ab")
+    # 16.0.1 (Aquaticy-Test): Den User mode gibt es nicht mehr -- der Server speichert ihn nie.
+    log.pruefe("AQUATICY_VM_USER_MODE" not in str(antwort.get("values", antwort)),
+               "am Formular vorbei speichert der Server keinen User mode")
     pg.click("#btn-addons")
     pg.wait_for_selector("#addon-list .addon", timeout=10_000)
     pg.wait_for_timeout(400)
@@ -650,8 +629,8 @@ def normales_konto(browser: Any, port: int, log: Protokoll, fehler: list[str]) -
           return await r.json();
         }"""
     )
-    log.pruefe(not antwort.get("ok") and "nicht mehr" in str(antwort.get("error", "")),
-               "am Fenster vorbei lehnt der Server virtual-machine-Add-ons ab")
+    log.pruefe(not antwort.get("ok") and "gibt es nicht" in str(antwort.get("error", "")),
+               "am Fenster vorbei kennt der Server keine virtual-machine-Add-ons")
     pg.locator('.addon[data-id="feeds"] button', has_text="Installieren").click()
     pg.wait_for_selector('.addon[data-id="feeds"] textarea', timeout=10_000)
     log.pruefe(True, "Add-ons ohne virtual machine (RSS-Feeds) gehen auch mit dem normalen Konto")
@@ -2196,88 +2175,8 @@ def rundgang(pg: Any, log: Protokoll, agent: FakeAgent, bilder: Path | None,
         log.pruefe(pg.locator("#zaehler .kachel").count() == 3, "drei Kacheln beim Zähler")
         log.pruefe("Token" in pg.inner_text("#zaehler"), "sie sprechen von Token")
 
-        log.abschnitt("15. Coworker mit Zeitplan")
-        pg.click("#cancel")
-        pg.click("#btn-coworker")
-        pg.wait_for_selector("#coworkerbox.open", state="visible")
-        pg.wait_for_selector("#cw-avatars button", state="attached")
-        pg.locator("#coworker-new").evaluate("e => e.open = true")
-        pg.select_option("#cw-task-kind", "research")
-        log.pruefe(pg.locator("#cw-avatars button").count() >= 40,
-                   "mehr Emojis fuer Coworker")
-        log.pruefe(not pg.is_checked("#cw-sharing-chats") and
-                   not pg.is_checked("#cw-sharing-coworkers"),
-                   "Informationsaustausch beginnt ausgeschaltet")
-        pg.fill("#cw-goal", "Was gibt es Neues bei Lastenrädern?")
-        pg.select_option("#cw-task-rhythm", "weekly")
-        pg.wait_for_timeout(200)
-        log.pruefe(pg.is_visible("#cw-task-tag-feld"), "wöchentlich fragt nach dem Wochentag")
-        pg.click("#cw-create")
-        pg.wait_for_selector(".cw-karte", state="visible")
-        pg.wait_for_timeout(700)
-        log.pruefe(pg.locator(".cw-karte").count() == 1,
-                   f"der Coworker steht in der Liste ({pg.locator('.cw-karte').count()})")
-        log.pruefe("wöchentlich" in pg.inner_text(".cw-karte"), "mit seinem Rhythmus")
-        karte = pg.locator(".cw-karte").first
-        aendern = karte.locator("details").filter(
-            has=pg.locator("summary", has_text="Aufgabe ändern"))
-        aendern.evaluate("e => e.open = true")
-        auswahl = aendern.locator(".cw-rhythmus")
-        log.pruefe(auswahl.locator("option").evaluate_all("els => els.map(e => e.value)") ==
-                   ["0", "30", "60", "300", "600", "1200", "3600", "14400", "86400"],
-                   "Aufgabe ändern bietet alle acht Rhythmen und den bisherigen Zeitplan")
-        auswahl.select_option("30")
-        aendern.get_by_role("button", name="Speichern", exact=True).click()
-        pg.wait_for_function("() => document.querySelector('.cw-rhythmus')?.value === '30'")
-        pg.wait_for_function("() => document.querySelector('.cw-karte')?.innerText"
-                             ".includes('Alle 30 Sekunden')")
-        gespeichert = pg.evaluate("async () => (await (await fetch('/api/coworkers'))"
-                                 ".json()).coworkers[0].interval_seconds")
-        log.pruefe(gespeichert == 30, "der gewählte Rhythmus wird serverseitig gespeichert")
-        karte.locator("details").filter(
-            has=pg.locator("summary", has_text="Regeln — was")).evaluate("e => e.open = true")
-        haus = karte.locator(".recht").filter(has_text="Im Haus etwas schalten")
-        log.pruefe(haus.get_by_role("radio").all_text_contents() ==
-                   ["Erlauben", "Fragen", "Sperren"],
-                   "Erlauben steht direkt in der Haus-Regel")
-        log.pruefe("Home-Assistant-Dauerfreigaben" not in karte.inner_text(),
-                   "der separate Bereich für Dauerfreigaben entfällt")
-        log.pruefe(pg.locator("#btn-notes").count() == 0 and
-                   pg.inner_text("#btn-coworker").strip() == "Coworker",
-                   "kein Merkzettel-Button und kein Handschlag in der Seitenleiste")
-        pg.locator("#coworker-new").evaluate("e => e.open = true")
-        pg.select_option("#cw-task-rhythm", "hourly")
-        pg.wait_for_timeout(200)
-        log.pruefe(not pg.is_visible("#cw-task-tag-feld"), "stündlich braucht keinen Wochentag")
-
-
-        log.pruefe(
-            pg.eval_on_selector('#cw-task-rhythm option[value="always"]', "o => o.disabled"),
-            "eine Recherche läuft nicht „die ganze Zeit“",
-        )
-
-        pg.select_option("#cw-task-kind", "visual")
-        pg.wait_for_timeout(200)
-        pg.select_option("#cw-task-rhythm", "always")
-        pg.wait_for_timeout(200)
-        log.pruefe(not pg.is_visible("#cw-task-zeit-feld"), "durchgehend hat keine Uhrzeit")
-        log.pruefe(pg.is_visible("#cw-task-takt-hinweis"), "und sagt, dass es Token kostet")
-
-        pg.select_option("#cw-task-kind", "image")
-        pg.wait_for_timeout(200)
-        log.pruefe(pg.is_visible("#cw-task-bild-feld"), "die Bildsuche fragt nach einem Bild")
-        log.pruefe(
-            "Leer = überall suchen" in pg.inner_text("#cw-task-source-warum"),
-            "und die Adresse ist dort freiwillig",
-        )
-        pg.select_option("#cw-task-kind", "research")
-        pg.select_option("#cw-task-rhythm", "hourly")
-        pg.wait_for_timeout(200)
-        foto("15-auftraege")
-
-        pg.click("#coworker-close")
-        pg.click("#btn-settings")
-        pg.wait_for_selector("#overlay.open", state="visible")
+        # 16.0.1 (Aquaticy-Test): Abschnitt 15 (Coworker) entfaellt -- es gibt keine Coworker mehr.
+        log.pruefe(pg.locator("#btn-coworker").count() == 0, "es gibt keinen Coworker-Knopf")
 
         log.abschnitt("16. Google")
         log.pruefe(pg.locator("#google-write").count() == 1, "der Schalter zum Ändern ist da")

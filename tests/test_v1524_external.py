@@ -5,7 +5,7 @@ import httpx
 import pytest
 import yaml
 
-from aquaticy import config, fetch, netguard, secure_nmap
+from aquaticy import config, fetch, netguard
 
 
 @pytest.mark.parametrize('answer', [[], OSError('DNS fehlgeschlagen')])
@@ -35,13 +35,9 @@ def test_external_02_backend_connects_to_the_checked_ip(monkeypatch):
     assert connections == [('93.184.216.34', 443)]
 
 
-@pytest.mark.parametrize('target', [
-    '192.168.1.5; echo unsafe', '-oN/tmp/output', '$(id)',
-    '../reports', '8.8.8.8', '192.168.1.0/16',
-])
-def test_external_03_nmap_rejects_unapproved_or_shell_targets(target):
-    with pytest.raises(ValueError):
-        secure_nmap.targets_in('192.168.1.0/24', [target])
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_external_05_yaml_python_objects_are_rejected(tmp_path):

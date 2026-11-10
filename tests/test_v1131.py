@@ -8,13 +8,12 @@ import shutil
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import httpx
 import pytest
 
 from aquaticy import local_model as lm
-from aquaticy import system, vm_install, web
+from aquaticy import system, web
 from aquaticy.config import Settings
 
 
@@ -156,24 +155,9 @@ console.log(JSON.stringify({model: ctxStand?.model, value: $('#ctx-regler').valu
         assert state["value"] == "8192" and state["model"] == last_model
 
 
-@pytest.mark.parametrize("platform", ["Darwin", "Windows"])
-@pytest.mark.parametrize("exists", [False, True])
-def test_automatic_podman_start_never_creates_a_machine(monkeypatch, platform, exists):
-    monkeypatch.setattr(vm_install.platform, "system", lambda: platform)
-    monkeypatch.setattr(vm_install.shutil, "which", lambda name: "/usr/bin/" + name)
-    monkeypatch.setattr("aquaticy.sandbox.find_runtime", lambda: None)
-    commands = []
-
-    def run(command, **kwargs):
-        commands.append(command)
-        code = 0 if exists or command[-1] != "inspect" else 1
-        return SimpleNamespace(returncode=code)
-
-    assert vm_install.start_machine(run=run) is exists
-    expected = [["podman", "machine", "inspect"]]
-    if exists:
-        expected.append(["podman", "machine", "start"])
-    assert commands == expected
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_automatic_context_keeps_default_and_reports_unknown_effective_size(monkeypatch):

@@ -92,7 +92,6 @@ FIELDS: dict[str, tuple[Any, Any]] = {
     "structured": (False, bool),
     "recheck": (False, bool),
     "online": (True, bool),
-    "sandbox": (False, bool),
     "denken": (False, bool),
     "tracing": (False, bool),
     "load": (False, bool),

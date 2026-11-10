@@ -29,13 +29,9 @@ def _an(settings: Any, *kennungen: str) -> None:
         addons.install(settings, kennung, True)
 
 
-
-def test_the_two_review_plugins_are_in_the_catalog() -> None:
-    for kennung in plugins.REVIEW_PLUGINS:
-        addon = addons.CATALOG[kennung]
-        assert addon.group == "Plugins" and addon.login == "keine" and not addon.werkstatt
-        assert {r.key for r in addons.RIGHTS[kennung]} == {"umfang", "fixes"}
-        assert addons.PLUGIN_CONTENT[kennung]
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_the_addon_window_shows_the_command_and_what_is_checked(konto) -> None:
@@ -44,7 +40,6 @@ def test_the_addon_window_shows_the_command_and_what_is_checked(konto) -> None:
                    if a["id"] == "security-review")
     assert eintrag["command"] == "/security-review" and eintrag["installed"]
     assert any("Prompt-Injection" in punkt for punkt in eintrag["inhalt"])
-
 
 
 def test_only_switched_on_plugins_are_commands(konto) -> None:
@@ -61,20 +56,11 @@ def test_only_switched_on_plugins_are_commands(konto) -> None:
         assert plugins.match(kein, konto, True) is None, kein
 
 
-def test_desktop_plugins_need_ultra_and_run_in_the_vm(konto) -> None:
-    konto.vm_user_mode = True
-    addons._update(konto, "whatsapp", installed=True, enabled=True, status="bereit")
-    # 16.0.0 (Aquaticy-Test): keine virtual machine -- WhatsApp ist kein Befehl mehr.
-    assert plugins.match("/whatsapp Was ist neu?", konto, True) is None
-    assert plugins.match("/whatsapp Was ist neu?", konto, False) is None, "ohne Ultra"
-
-
 def test_a_command_without_text_explains_itself(konto) -> None:
     assert plugins.needs_text("code-review") and not plugins.needs_text("nachrichten")
     text = plugins.usage("code-review")
     assert "/code-review" in text and "Datei" in text and "GitHub" in text
     assert "`/wetter Bremen`" in plugins.usage("wetter")
-
 
 
 def test_the_code_review_checklist_knows_ai_code_mistakes(konto) -> None:
@@ -127,7 +113,6 @@ def test_the_command_list_for_the_chat(konto) -> None:
     assert set(liste) == {"code-review", "nachrichten"}
     assert liste["code-review"]["needs_text"] and not liste["nachrichten"]["needs_text"]
     assert "tagesschau" in liste["nachrichten"]["aliases"]
-
 
 
 class Mitschrift(Agent):

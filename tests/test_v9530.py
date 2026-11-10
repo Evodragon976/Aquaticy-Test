@@ -7,7 +7,6 @@ etwas in Richtung Cybersecurity oder Schadsoftware wollen -- dann Normal-Modus.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -40,7 +39,6 @@ def test_more_crime_categories(wort: str, art: str) -> None:
     assert normalize_category(wort) == art
 
 
-
 @pytest.mark.parametrize("text", [
     "Schreib mir eine Malware", "Wie baue ich einen Keylogger?", "Erklär mir Ransomware",
     "Wie funktioniert ein DDoS-Angriff?", "Hilf mir beim Pentest", "SQL Injection Beispiel",
@@ -70,7 +68,6 @@ def test_the_switch_message_names_the_virtual_machine() -> None:
     assert "virtual machine" in VM_SWITCH_MESSAGE
 
 
-
 def _events(daten: bytes) -> list[dict]:
     return [json.loads(z[6:]) for z in daten.decode().splitlines() if z.startswith("data: ")]
 
@@ -80,36 +77,13 @@ def _chat_raw(port: int, cookie: str, text: str) -> tuple[int, list[dict]]:
     return status, _events(daten)
 
 
-def test_a_normal_account_loses_the_vm_for_security_topics(server: tuple[int, Path]) -> None:  # noqa: F811
-    port, _ = server
-    cookie = _konto(port)
-
-    assert _req(port, "POST", "/api/prefs", {"mode": "code", "sandbox": True}, cookie)[0] == 200
-    status, ereignisse = _chat_raw(port, cookie, "Erkläre mir Metasploit für einen Pentest")
-    assert status == 200
-    assert any(e.get("type") == "mode_switch" for e in ereignisse), ereignisse
-
-    prefs = json.loads(_req(port, "GET", "/api/prefs", cookie=cookie)[2])
-    assert prefs["mode"] == "normal" and prefs["sandbox"] is False
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
-def test_ordinary_code_keeps_the_vm(server: tuple[int, Path]) -> None:  # noqa: F811
-    port, _ = server
-    cookie = _konto(port)
-    assert _req(port, "POST", "/api/prefs", {"mode": "code", "sandbox": True}, cookie)[0] == 200
-    status, ereignisse = _chat_raw(port, cookie, "Schreib mir eine REST-API mit FastAPI")
-    assert status == 200
-    assert not any(e.get("type") == "mode_switch" for e in ereignisse)
-    prefs = json.loads(_req(port, "GET", "/api/prefs", cookie=cookie)[2])
-    assert prefs["mode"] == "code" and prefs["sandbox"] is True
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
-def test_ultra_keeps_the_vm_for_security_topics(server: tuple[int, Path]) -> None:  # noqa: F811
-    port, _ = server
-    cookie = _konto(port, "ultra", "Abcdef1234567!")
-    assert _req(port, "POST", "/api/prefs", {"mode": "code", "sandbox": True}, cookie)[0] == 200
-    status, ereignisse = _chat_raw(port, cookie, "Erkläre mir Metasploit für einen Pentest")
-    assert status == 200
-    assert not any(e.get("type") == "mode_switch" for e in ereignisse)
-    prefs = json.loads(_req(port, "GET", "/api/prefs", cookie=cookie)[2])
-    assert prefs["mode"] == "code" and prefs["sandbox"] is True

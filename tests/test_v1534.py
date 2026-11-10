@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from aquaticy import memory_auto, plugins, review_scan
+from aquaticy import memory_auto, review_scan
 
 
 def _antwort(text: str = "Gern.") -> Any:
@@ -160,15 +160,9 @@ def test_code_mode_has_no_memory(settings: Any, monkeypatch: pytest.MonkeyPatch)
         "Der Nutzer heißt Louis."]  # "Max" aus dem Code-Chat wurde nicht gemerkt
 
 
-def test_messenger_memory_only_for_your_own_chat() -> None:
-    from aquaticy.bridge import Decision, effective_settings
-    from aquaticy.config import Settings
-
-    base = Settings(memory_enabled=True)
-    config = {"dienste": {}}
-    selbst = effective_settings(base, config, Decision(True, trusted=True, selbst=True))
-    fremd = effective_settings(base, config, Decision(True, trusted=True, selbst=False))
-    assert selbst.memory_enabled and not fremd.memory_enabled
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_secure_pro_may_use_memory() -> None:
@@ -234,21 +228,9 @@ def test_review_files_get_paths_in_the_vm() -> None:
                      "/work/review/block3.txt"]
 
 
-def test_the_review_prompt_guides_the_vm_and_names_syntax_errors(settings: Any) -> None:
-    turn = plugins.PluginTurn("code-review", "code-review", "", mode="code")
-    text = plugins.prompt(turn, "```python\ndef f(:\n```", settings, True)
-    assert plugins.is_review_prompt(text)
-    assert "/work/review/" in text and "in der VM belegt" in text
-    assert "Syntaxprüfung von Aquaticy" in text
-
-
-def test_reviews_are_not_sent_back_to_run_fix_snippets(settings: Any) -> None:
-    from aquaticy.agent import Agent
-
-    agent = Agent(settings, cache=None)
-    agent._plugin_turn = "## Plugin Code-Review\n..."
-    agent._vm_ready = lambda: True  # type: ignore[method-assign]
-    assert agent._review_turn() and not agent._should_force_vm("```py\nfix()\n```")
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_attachments_are_not_taken_as_facts_about_you(settings: Any,

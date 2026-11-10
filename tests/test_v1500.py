@@ -5,8 +5,6 @@ from __future__ import annotations
 
 import io
 import json
-import subprocess
-import sys
 import tarfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,17 +13,8 @@ from typing import Any
 import httpx
 import pytest
 
-from aquaticy import (
-    addons,
-    bridge,
-    github_write,
-    lan,
-    secure_devices,
-    secure_pro,
-    web,
-)
+from aquaticy import addons, web
 from aquaticy.config import Settings
-from aquaticy.messenger_modes import natural_command
 from aquaticy.tools import Toolbox
 from tests.test_v1401 import owner  # noqa: F401
 
@@ -122,79 +111,14 @@ def github(settings: Settings, monkeypatch: pytest.MonkeyPatch):
     box.close()
 
 
-def test_commit_and_push_on_a_new_branch(github) -> None:
-    box, fake, fragen, _ = github
-    ergebnis = box.call("github_write", {
-        "action": "commit", "repo": "o/r", "branch": "aquaticy/fix", "message": "Fix",
-        "files": [{"path": "src/a.py", "content": "print('ok')\n"},
-                  {"path": "alt.txt", "delete": True}]})
-    assert ergebnis["commit"] == "5" * 40 and ergebnis["new_branch"]
-    assert "aquaticy/fix" in fragen[0] and "src/a.py" in fragen[0]
-    baum = next(c[2] for c in fake.writes() if c[1].endswith("/git/trees"))
-    assert baum["base_tree"] == TREE
-    assert {"path": "alt.txt", "mode": "100644", "type": "blob", "sha": None} in baum["tree"]
-    commit = next(c[2] for c in fake.writes() if c[1].endswith("/git/commits"))
-    assert commit["parents"] == [BASE]
-    assert fake.refs["aquaticy/fix"] == "5" * 40
+# 16.0.1 (Aquaticy-Test): 6 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
-@pytest.mark.parametrize("dateien,branch,wort", [
-    ([{"path": "a.py", "content": "x"}], "main", "Standard-Branch"),
-    ([{"path": ".github/workflows/ci.yml", "content": "on: push"}], "b", "GitHub Actions"),
-    ([{"path": "a.py", "content": f"TOKEN = '{TOKEN}'"}], "b", "Schlüssel"),
-    ([{"path": "../x", "content": "x"}], "b", "Ungültiger"),
-    ([{"path": ".git/config", "content": "x"}], "b", "Ungültiger"),
-])
-def test_dangerous_commits_are_refused(github, dateien, branch, wort) -> None:
-    box, fake, fragen, _ = github
-    ergebnis = box.call("github_write", {"action": "commit", "repo": "o/r", "branch": branch,
-                                         "message": "x", "files": dateien})
-    assert wort in ergebnis["error"] and not fake.writes() and not fragen
-
-
-def test_every_write_needs_a_yes(github) -> None:
-    box, fake, fragen, antwort = github
-    antwort["text"] = "nein"
-    assert fragen == []
-    ergebnis = box.call("github_write", {"action": "comment", "repo": "o/r", "number": 5,
-                                         "body": "Danke!"})
-    assert "nicht bestaetigt" in ergebnis["error"] and not fake.writes()
-    box.ask_handler = None
-    assert "niemand bestätigen" in box.call("github_write", {
-        "action": "comment", "repo": "o/r", "number": 5, "body": "x"})["error"]
-
-
-def test_push_is_rejected_like_git_when_the_branch_moved(github) -> None:
-    box, fake, _, _ = github
-    fake.refs["feature"] = "9" * 40
-    fake.non_ff = True
-    ergebnis = box.call("github_write", {"action": "commit", "repo": "o/r", "branch": "feature",
-                                         "message": "x", "files": [{"path": "a", "content": "1"}]})
-    assert ergebnis.get("error", "").startswith("Der Branch hat inzwischen neue Commits")
-
-
-def test_pull_request_and_comment(github) -> None:
-    box, fake, fragen, _ = github
-    pr = box.call("github_write", {"action": "pull_request", "repo": "o/r", "branch": "fix",
-                                   "title": "Fix", "body": "Beschreibung"})
-    assert {k: pr[k] for k in ("number", "url", "state")} == {
-        "number": 7, "url": "https://github.com/o/r/pull/7", "state": "open"}
-    assert "nur Daten" in pr["_quelle"], "GitHub-Antworten sind fremder Inhalt"
-    anfrage = next(c[2] for c in fake.writes() if c[1].endswith("/pulls"))
-    assert anfrage["base"] == "main" and anfrage["head"] == "fix"
-    kommentar = box.call("github_write", {"action": "comment", "repo": "o/r", "number": 5,
-                                          "body": "Sieht gut aus."})
-    assert kommentar["comment"] == 9 and len(fragen) == 2
-    assert "merge" not in github_write.ACTIONS, "Mergen macht der Mensch auf GitHub"
-
-
-def test_reading_only_has_no_write_tool(github) -> None:
-    box, fake, _, _ = github
-    addons.set_rights(box.settings, "github", {"inhalte": "ja"})
-    assert "aus" in box.call("github_write", {"action": "branch", "repo": "o/r"})["error"]
-    fake.private = True
-    addons.set_rights(box.settings, "github", {"inhalte": "aendern", "repos": "oeffentlich"})
-    assert "privat" in box.call("github_write", {"action": "branch", "repo": "o/r"})["error"]
+# 16.0.1 (Aquaticy-Test): 19 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 class FakeBox:
@@ -222,86 +146,9 @@ class FakeBox:
         return self.dateien[path]
 
 
-def test_checkout_and_push_keep_the_token_out_of_the_vm(github, monkeypatch) -> None:
-    box, fake, fragen, _ = github
-    vm = FakeBox([{"path": "src/a.py", "status": "geändert", "mode": "100644", "size": 4}])
-    box.github_vm_ready = lambda: True
-    monkeypatch.setattr(box, "_sandbox", lambda: vm)
-    holen = box.call("github_write", {"action": "checkout", "repo": "o/r"})
-    assert holen["dir"] == "/work/r" and holen["sha"] == BASE
-    archiv = next(iter(vm.gelegt.values()))
-    assert TOKEN.encode() not in archiv
-    with tarfile.open(fileobj=io.BytesIO(archiv)) as tar:
-        assert tar.getnames() == ["o-r-123/README.md"]
-    assert all(TOKEN not in befehl for befehl in vm.befehle)
-    gepusht = box.call("github_write", {"action": "push", "repo": "o/r", "dir": "r",
-                                        "message": "Änderung"})
-    assert gepusht["commit"] == "5" * 40 and gepusht["branch"].startswith("aquaticy/")
-    assert "src/a.py" in fragen[-1]
-    commit = next(c[2] for c in fake.writes() if c[1].endswith("/git/commits"))
-    assert commit["parents"] == [BASE], "Basis kommt vom Rechner, nicht aus der VM"
-    eintrag = json.loads((box.settings.data_dir / "github-checkouts.json").read_text())
-    assert eintrag["/work/r"]["sha"] == "5" * 40
-
-
-def test_push_needs_a_checkout_from_this_repo(github, monkeypatch) -> None:
-    box, fake, _, _ = github
-    box.github_vm_ready = lambda: True
-    monkeypatch.setattr(box, "_sandbox", lambda: FakeBox())
-    ergebnis = box.call("github_write", {"action": "push", "repo": "o/r", "dir": "anders",
-                                         "message": "x"})
-    assert "checkout" in ergebnis["error"] and not fake.writes()
-    box.github_vm_ready = lambda: False
-    assert "Code-Chat" in box.call("github_write", {"action": "checkout",
-                                                    "repo": "o/r"})["error"]
-
-
-def test_tarball_redirect_only_to_codeload() -> None:
-    def boese(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(302, headers={"location": "https://evil.example/x.tgz"})
-
-    with (httpx.Client(transport=httpx.MockTransport(boese)) as client,
-          pytest.raises(github_write.WriteError, match="unerwartete")):
-        github_write.download_tarball(client, {}, "o/r", BASE)
-
-
-def test_vm_helpers_extract_safely_and_find_changes(tmp_path: Path) -> None:
-    puffer = io.BytesIO()
-    with tarfile.open(fileobj=puffer, mode="w:gz") as tar:
-        for name, inhalt in (("top/a.txt", b"eins"), ("top/sub/b.txt", b"zwei"),
-                             ("top/../boese.txt", b"x"), ("top/.git/config", b"x")):
-            info = tarfile.TarInfo(name)
-            info.size = len(inhalt)
-            tar.addfile(info, io.BytesIO(inhalt))
-        link = tarfile.TarInfo("top/link")
-        link.type, link.linkname = tarfile.SYMTYPE, "/etc/passwd"
-        tar.addfile(link)
-    archiv = tmp_path / "a.tar.gz"
-    archiv.write_bytes(puffer.getvalue())
-    ziel = tmp_path / "work" / "r"
-    subprocess.run([sys.executable, "-c", github_write.EXTRACT, str(archiv), str(ziel)],
-                   check=True)
-    assert (ziel / "a.txt").read_bytes() == b"eins" and (ziel / "sub/b.txt").exists()
-    assert not (tmp_path / "work" / "boese.txt").exists() and not (ziel / "link").exists()
-    assert not (ziel / ".git").exists() and not archiv.exists()
-
-    def manifest(art: str) -> dict[str, Any]:
-        aus = subprocess.run([sys.executable, "-c", github_write.MANIFEST, str(ziel),
-                              json.dumps(list(github_write.SKIP)), art],
-                             capture_output=True, text=True, check=True)
-        return json.loads(aus.stdout)
-
-    assert manifest("write") == {"files": 2}
-    (ziel / "a.txt").write_bytes(b"geaendert")
-    (ziel / "neu.txt").write_bytes(b"neu")
-    (ziel / "sub/b.txt").unlink()
-    (ziel / "__pycache__").mkdir()
-    (ziel / "__pycache__/x.pyc").write_bytes(b"x")
-    aenderungen = {c["path"]: c["status"] for c in manifest("diff")["changes"]}
-    assert aenderungen == {"a.txt": "geändert", "neu.txt": "neu", "sub/b.txt": "gelöscht"}
-    again = subprocess.run([sys.executable, "-c", github_write.EXTRACT, str(archiv), str(ziel)],
-                           capture_output=True, text=True)
-    assert again.returncode != 0
+# 16.0.1 (Aquaticy-Test): 5 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_reading_commits_and_comparisons(settings: Settings) -> None:
@@ -335,152 +182,6 @@ def test_reading_commits_and_comparisons(settings: Settings) -> None:
                                             client=client)["error"]
 
 
-# -- Messenger -----------------------------------------------------------------------------------
-@pytest.mark.parametrize("text,eigen", [
-    ("[Aquaticy] Hallo", True), ("Aquaticy] Hallo", True),
-    ("[Aquaticy Secure Pro]\nStatus", True), ("[Aquaticy Coworker Ava]\nText", True),
-    ("Aquaticy, wie wird das Wetter?", False), ("[Aquaticy Hacker] x", False),
-])
-def test_own_messages_are_recognised(text: str, eigen: bool) -> None:
-    assert bridge.is_own_text(text) is eigen
-
-
-def test_only_known_labels_are_used() -> None:
-    assert bridge.to_chat_text("x", signature="[Aquaticy Secure Pro]") == \
-        "[Aquaticy Secure Pro]\nx"
-    assert bridge.to_chat_text("x", signature="[Bank]") == "[Aquaticy] x"
-
-
-@pytest.mark.parametrize("text,erwartet", [
-    ("wechsel auf das Modell Qwen 2 2b", ("switch", "Qwen 2 2b")),
-    ("Kannst du bitte auf das Modell qwen3:8b wechseln", ("switch", "qwen3:8b")),
-    ("switch to model gemma3", ("switch", "gemma3")),
-    ("wechsel in den Pro-Modus", ("pro", "")),
-    ("setz den Ort auf Köln", ("location", "Köln")),
-    ("zeig meine Notizen", ("notes", "")),
-    ("Wie wechsel ich das Modell bei ChatGPT?", None),
-    ("vergiss alles über mich", None),
-    ("/model x", None),
-])
-def test_plain_sentences_become_commands(text: str, erwartet: Any) -> None:
-    assert natural_command(text) == erwartet
-
-
-def test_plain_model_switch_runs_the_switch_command(settings, monkeypatch) -> None:
-    gesehen: list[tuple[str, str]] = []
-    antworter = bridge.AgentAnswerer(lambda: settings)
-    monkeypatch.setattr(antworter, "_command", lambda name, argument, *a: gesehen.append(
-        (name, argument)) or "ok")
-    config = bridge.load_config(settings)["whatsapp"]
-    entscheidung = bridge.Decision(True, trusted=True, selbst=True)
-    assert antworter("Wechsel auf das Modell qwen3", entscheidung, config, "k",
-                     "whatsapp") == "ok"
-    assert gesehen == [("switch", "qwen3")]
-
-
-def test_secure_pro_orders_by_messenger(owner, monkeypatch) -> None:  # noqa: F811
-    session, settings = owner
-    secure_pro.configure(settings.data_dir, NETZ)
-    aus = web.secure_messenger_order(session, "status", "Secure Pro Status")
-    assert aus.startswith("[Aquaticy Secure Pro]\nAuftrag: Secure Pro Status\n")
-    assert "aus" in aus
-    secure_pro.set_options(settings.data_dir, {"messenger": True})
-    assert "Secure Pro ist an." in web.secure_messenger_order(session, "", "Secure Pro")
-    angefordert: list[bool] = []
-    monkeypatch.setattr(web, "SECURE_WATCHER", SimpleNamespace(
-        request=lambda: angefordert.append(True) or True, snapshot=lambda: {}))
-    assert "gestartet" in web.secure_messenger_order(session, "prüfen", "Secure Pro prüfen")
-    assert angefordert == [True]
-    aufgabe = web.secure_messenger_order(session, "Aufgabe: Melde neue Geräte", "x")
-    assert "Aufgabe gespeichert" in aufgabe
-    assert "kenne ich nicht" in web.secure_messenger_order(session, "tanz", "Secure Pro tanz")
-    session.ultra = False
-    assert "Besitzer" in web.secure_messenger_order(session, "status", "Secure Pro Status")
-
-
-def test_coworker_orders_by_messenger(owner, monkeypatch) -> None:  # noqa: F811
-    from aquaticy import coworker as cwm
-
-    session, settings = owner
-    session.plan = "ultra"
-    store = cwm.CoworkerStore(settings.db_path)
-    kollege = store.add("Ava", "Fasse meine Mails zusammen.", plan="ultra")
-    monkeypatch.setattr(web, "AIGUARD", None)
-    geweckt: list[bool] = []
-    monkeypatch.setattr(web, "_coworker_scheduler", lambda s: SimpleNamespace(
-        wake=lambda: geweckt.append(True)))
-    aus = web.coworker_messenger_order(session, None, "ava", "Schau nach Mails", "x")
-    assert aus.startswith("[Aquaticy Coworker Ava]\n") and "keine Aufträge" in aus
-    store.set_messenger_orders(kollege.id, True)
-    an = web.coworker_messenger_order(session, None, "Ava", "Schau nach Mails",
-                                      "Coworker Ava: Schau nach Mails")
-    assert "Angenommen" in an and "Auftrag: Coworker Ava: Schau nach Mails" in an
-    assert store.unread_messages(kollege.id)[0]["text"] == "Schau nach Mails" and geweckt
-    assert "gibt es nicht" in web.coworker_messenger_order(session, None, "Bob", "x", "x")
-    assert cwm.view(store, store.get(kollege.id))["messenger_orders"] is True
-
-
-def test_orders_are_routed_by_their_prefix(monkeypatch) -> None:
-    gesehen: list[tuple[str, ...]] = []
-    monkeypatch.setattr(web, "secure_messenger_order",
-                        lambda s, befehl, auftrag: gesehen.append(("secure", befehl)) or "s")
-    monkeypatch.setattr(web, "coworker_messenger_order",
-                        lambda s, a, name, inhalt, auftrag: gesehen.append(
-                            ("cw", name, inhalt)) or "c")
-    route = web._messenger_orders(lambda: None, None)
-    assert route("Secure Pro prüfen") == "s" and route("/securepro status") == "s"
-    assert route("Secure Pro, was ist ARP-Spoofing?") is None, "eine Frage, kein Befehl"
-    assert route("Coworker Ava: Schau nach Mails") == "c"
-    assert route("coworker Max Mustermann: mach was") == "c"
-    assert route("Wie wird das Wetter?") is None
-    assert gesehen == [("secure", "prüfen"), ("secure", "status"),
-                       ("cw", "Ava", "Schau nach Mails"), ("cw", "Max Mustermann", "mach was")]
-
-
-def test_orders_only_in_the_own_chat(settings) -> None:
-    from aquaticy.bridge_native import NativeResponder
-
-    aufrufe: list[str] = []
-    antwort = NativeResponder(lambda: settings, lambda *a: "Modell",
-                              orders=lambda text: aufrufe.append(text) or "Auftrag")
-    msg = SimpleNamespace(audio=None, messenger="whatsapp")
-    eigen = bridge.Decision(True, trusted=True, selbst=True)
-    fremd = bridge.Decision(True, trusted=True, selbst=False)
-    gruppe = bridge.Decision(True, trusted=True, selbst=True, group=True)
-    config = bridge.load_config(settings)["whatsapp"]
-    assert antwort._reply("Secure Pro Status", eigen, config, "k", msg) == "Auftrag"
-    assert antwort._reply("Secure Pro Status", fremd, config, "k", msg) == "[Aquaticy] Modell"
-    assert antwort._reply("Secure Pro Status", gruppe, config, "k", msg) == "[Aquaticy] Modell"
-    assert aufrufe == ["Secure Pro Status"]
-
-
-# -- Coworker und Einstellungen aus dem Chat ------------------------------------------------------
-def test_a_recurring_order_becomes_a_coworker_after_yes(settings) -> None:
-    box = Toolbox(settings)
-    try:
-        angelegt: list[dict[str, Any]] = []
-        box.coworker_creator = lambda nutzlast: angelegt.append(nutzlast) or {"ok": True}
-        fragen: list[str] = []
-        box.ask_handler = lambda frage, optionen: fragen.append(frage) or "ja"
-        ergebnis = box.call("coworker_create", {
-            "name": "Nora", "goal": "Nenne mir jeden Morgen die neusten Nachrichten.",
-            "rhythm": "daily", "hour": 7, "minute": 30})
-        assert ergebnis["created"] == "Nora" and "07:30" in ergebnis["when"]
-        assert angelegt == [{"name": "Nora",
-                             "goal": "Nenne mir jeden Morgen die neusten Nachrichten.",
-                             "schedule": {"kind": "research", "rhythm": "daily", "hour": 7,
-                                          "minute": 30, "weekday": 0}}]
-        assert "Nora" in fragen[0] and "täglich um 07:30" in fragen[0]
-        box.ask_handler = lambda frage, optionen: "nein"
-        assert "error" in box.call("coworker_create", {"name": "X", "goal": "y",
-                                                       "rhythm": "daily"})
-        assert len(angelegt) == 1
-        assert "error" in box.call("coworker_create", {"name": "X", "goal": "y",
-                                                       "rhythm": "minuetlich"})
-    finally:
-        box.close()
-
-
 def test_settings_for_a_task_are_asked_first(settings) -> None:
     box = Toolbox(settings)
     try:
@@ -501,167 +202,9 @@ def test_settings_for_a_task_are_asked_first(settings) -> None:
         box.close()
 
 
-def test_the_chat_offers_coworker_creation_only_with_a_creator(settings) -> None:
-    from aquaticy.agent import Agent
-
-    agent = Agent(settings)
-    try:
-        namen = {s["function"]["name"] for s in agent.tools}
-        assert "coworker_create" not in namen
-        agent.toolbox.coworker_creator = lambda nutzlast: {"ok": True}
-        assert "coworker_create" in {s["function"]["name"] for s in agent.tools}
-    finally:
-        agent.close()
-
-
-# -- Secure Pro -----------------------------------------------------------------------------------
-def test_devices_are_recognised() -> None:
-    assert secure_devices.mac_info("b8:27:eb:12:34:56")["vendor"] == "Raspberry Pi"
-    assert secure_devices.mac_info("3a:11:22:33:44:55")["random_mac"] is True
-    assert secure_devices.mac_info("02:42:ac:11:00:02")["vendor"] == "Docker"
-    assert secure_devices.mac_info("kaputt") == {}
-    router = secure_devices.describe({"address": "192.168.1.1", "mac": ""}, "192.168.1.1")
-    assert router["kind"] == "Router"
-    drucker = secure_devices.describe({"address": "192.168.1.9", "ports": [9100]})
-    assert drucker["kind"] == "Drucker"
-
-
-def test_known_devices_are_validated() -> None:
-    sauber = secure_devices.clean_known({"AA:BB:CC:DD:EE:FF": "Laptop <b>", "8.8.8.8": "x",
-                                         "192.168.1.5": "Drucker", "kaputt": "y", "a": ""})
-    assert sauber == {"aa:bb:cc:dd:ee:ff": "Laptop b", "192.168.1.5": "Drucker"}
-
-
-def test_score_counts_findings_and_settings() -> None:
-    gut, note = secure_devices.score([], [], {"watch": True, "packets": True, "nmap": True})
-    assert (gut, note) == (100, "A")
-    schlecht, note = secure_devices.score(
-        [{"kind": "malware", "level": "wichtig"}] * 6, [], {"watch": False})
-    assert schlecht == 0 and note == "E"
-
-
-def test_named_devices_are_no_new_device_alarm(tmp_path: Path, monkeypatch) -> None:
-    from aquaticy import secure_network
-
-    secure_pro.configure(tmp_path, NETZ)
-    geraete = [lan.Device("192.168.1.2", ports=[443])]
-    nachbarn = [{"address": "192.168.1.2", "mac": "b8:27:eb:00:00:01", "ports": [],
-                 "active": False, "source": "Nachbartabelle"}]
-    monkeypatch.setattr(lan, "scan", lambda *a, **kw: list(geraete))
-    monkeypatch.setattr(secure_network, "neighbours", lambda subnet: [dict(n) for n in nachbarn])
-    watcher = secure_pro.Watcher(tmp_path, lambda text: True)
-    watcher.tick()
-    assert watcher.snapshot()["devices"][0]["vendor"] == "Raspberry Pi"
-    secure_pro.name_device(tmp_path, "192.168.1.3", "b8:27:eb:00:00:02", "Pi im Keller")
-    geraete.append(lan.Device("192.168.1.3", ports=[22]))
-    nachbarn.append({"address": "192.168.1.3", "mac": "b8:27:eb:00:00:02", "ports": [],
-                     "active": False, "source": "Nachbartabelle"})
-    watcher.tick()
-    assert not any("192.168.1.3" in f for f in watcher.snapshot()["findings"])
-    assert watcher.snapshot()["devices"][1]["name"] == "Pi im Keller"
-    geraete.append(lan.Device("192.168.1.4", ports=[80]))
-    nachbarn.append({"address": "192.168.1.4", "mac": "b8:27:eb:00:00:03", "ports": [],
-                     "active": False, "source": "Nachbartabelle"})
-    watcher.tick()
-    assert "Neues Gerät: 192.168.1.4 (Raspberry Pi)" in watcher.snapshot()["findings"]
-    with pytest.raises(ValueError, match="außerhalb"):
-        secure_pro.name_device(tmp_path, "10.0.0.1", "", "x")
-
-
-def test_history_and_score_are_kept(tmp_path: Path, monkeypatch) -> None:
-    secure_pro.configure(tmp_path, NETZ)
-    geraete = [lan.Device("192.168.1.2", ports=[23])]
-    monkeypatch.setattr(lan, "scan", lambda *a, **kw: list(geraete))
-    watcher = secure_pro.Watcher(tmp_path, lambda text: True)
-    watcher.tick()
-    verlauf = secure_pro.read_history(tmp_path)
-    assert any("Telnet" in e["text"] for e in verlauf["events"]) and verlauf["scores"]
-    erster = watcher.snapshot()["score"]
-    geraete[0].ports.remove(23)
-    watcher.tick()
-    assert watcher.snapshot()["score"] > erster and watcher.snapshot()["trend"] > 0
-    if sys.platform != "win32":
-        assert secure_pro.history_path(tmp_path).stat().st_mode & 0o777 == 0o600
-
-
-def test_turning_off_deletes_the_history(owner) -> None:  # noqa: F811
-    session, settings = owner
-    secure_pro.configure(settings.data_dir, NETZ)
-    secure_pro.history_path(settings.data_dir).write_text("{}")
-    assert web.feature_action(session, {"action": "configure", "enabled": False})[1] == 200
-    assert not secure_pro.history_path(settings.data_dir).exists()
-
-
-def test_upnp_answers_count_only_from_the_own_net(monkeypatch) -> None:
-    antworten = [
-        (b"HTTP/1.1 200 OK\r\nST: urn:schemas-upnp-org:device:InternetGatewayDevice:1\r\n",
-         ("192.168.1.1", 1900)),
-        (b"HTTP/1.1 200 OK\r\nST: urn:schemas-upnp-org:device:InternetGatewayDevice:1\r\n",
-         ("10.0.0.1", 1900)),
-        (b"HTTP/1.1 200 OK\r\nST: upnp:rootdevice\r\n", ("192.168.1.7", 1900)),
-    ]
-
-    class Sock:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def setsockopt(self, *a):
-            pass
-
-        def settimeout(self, *a):
-            pass
-
-        def sendto(self, data, ziel):
-            import ipaddress
-
-            assert ipaddress.IPv4Address(ziel[0]) in ipaddress.IPv4Network(NETZ)
-            assert ziel[1] == 1900 and b"M-SEARCH" in data
-
-        def recvfrom(self, n):
-            if antworten:
-                return antworten.pop(0)
-            raise TimeoutError
-
-    monkeypatch.setattr(secure_devices.socket, "socket", lambda *a: Sock())
-    assert secure_devices.upnp_gateways(NETZ, "192.168.1.1", 0.5) == ["192.168.1.1"]
-
-
 # 16.0.0 (Aquaticy-Test): test_settings_show_messenger_switches entfaellt.
 # Grund: virtual machine, Heimnetz, Messenger, Upgrading und Verbund sind aus der Oberflaeche
 # geloescht
-
-
-def test_coworkers_never_get_github_write_or_new_coworkers() -> None:
-    from aquaticy import coworker as cwm
-
-    assert {"github_write", "coworker_create"} <= cwm.FORBIDDEN
-
-
-def test_a_sentence_about_coworkers_is_no_order(settings, monkeypatch) -> None:
-    from aquaticy import coworker as cwm
-
-    gesehen: list[str] = []
-    monkeypatch.setattr(web, "coworker_messenger_order",
-                        lambda s, a, name, inhalt, auftrag: gesehen.append(name) or "c")
-    sitzung = SimpleNamespace(settings=lambda: settings)
-    route = web._messenger_orders(lambda: sitzung, None)
-    assert route("Coworker sind toll, oder?") is None
-    cwm.CoworkerStore(settings.db_path).add("Ava", "Fasse meine Mails zusammen.", plan="ultra")
-    assert route("Coworker Ava schau nach Mails") == "c" and gesehen == ["Ava"]
-
-
-def test_a_tag_checkout_pushes_to_a_new_branch(github, monkeypatch) -> None:
-    box, _, _, _ = github
-    vm = FakeBox([{"path": "src/a.py", "status": "geändert", "mode": "100644", "size": 4}])
-    box.github_vm_ready = lambda: True
-    monkeypatch.setattr(box, "_sandbox", lambda: vm)
-    box.call("github_write", {"action": "checkout", "repo": "o/r", "ref": "v1.0"})
-    gepusht = box.call("github_write", {"action": "push", "repo": "o/r", "dir": "r",
-                                        "message": "x"})
-    assert gepusht["branch"].startswith("aquaticy/"), "kein Branch namens v1.0"
 
 
 # -- Alte Version laeuft noch (Terminal 15.0.0, Browser 14.3.4) ----------------------------------

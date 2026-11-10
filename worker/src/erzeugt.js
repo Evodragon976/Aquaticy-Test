@@ -42,7 +42,6 @@ export const DATEN = {
    "custom"
   ],
   "recheck": "bool",
-  "sandbox": "bool",
   "structured": "bool",
   "theme": [
    "light",
@@ -1047,8 +1046,8 @@ export const DATEN = {
    "UNKLAR": "nothing solid found"
   }
  },
- "version": "16.0.0",
- "version_label": "16.0.0",
+ "version": "16.0.1",
+ "version_label": "16.0.1",
  "wetterlage": {
   "0": "klar",
   "1": "überwiegend klar",
@@ -1096,7 +1095,6 @@ export const DATEN = {
   "online": true,
   "palette": "",
   "recheck": false,
-  "sandbox": false,
   "structured": false,
   "theme": "system",
   "tracing": false,

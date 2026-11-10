@@ -13,17 +13,7 @@ import httpx
 import pytest
 
 import aquaticy
-from aquaticy import (
-    bridge,
-    coworker,
-    google,
-    linked,
-    messenger_native,
-    ownservices,
-    preferences,
-    startup,
-    webview,
-)
+from aquaticy import google, linked, ownservices, preferences, startup, webview
 
 
 def test_f39_startup_does_not_reinstall_the_same_release_stage(monkeypatch):
@@ -70,12 +60,9 @@ def test_f40_yesterday_uses_local_calendar_days_across_dst(
         time.tzset()
 
 
-def test_f41_duplicate_coworker_names_cannot_select_an_arbitrary_recipient(settings):
-    store = coworker.CoworkerStore(settings.db_path)
-    store.add("Ava", "Observe the news")
-    store.add("ava", "Observe the prices")
-    with pytest.raises(ValueError):
-        store.by_name("AVA")
+# 16.0.1 (Aquaticy-Test): 4 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_f42_integer_preferences_do_not_silently_truncate_fractional_values():
@@ -83,30 +70,6 @@ def test_f42_integer_preferences_do_not_silently_truncate_fractional_values():
     assert preference is not None
     with pytest.raises(preferences.BadValue):
         preferences.coerce(preference, "2.9")
-
-
-def test_f43_aliases_of_the_same_database_share_the_same_coworker_claim(tmp_path):
-    first = tmp_path / "cache.db"
-    alias = tmp_path / "folder" / ".." / "cache.db"
-    try:
-        assert coworker.claim(first, 9)
-        assert not coworker.claim(alias, 9)
-    finally:
-        coworker.release(first, 9)
-        coworker.release(alias, 9)
-
-
-def test_f44_plaintext_messenger_output_preserves_code_and_urls():
-    result = bridge.to_chat_text('**Titel**\n```python\ndef __init__():\n    return 2**3\n```'
-                                 '\nhttps://github.com/o/repo__name', wide=True)
-    assert "def __init__():" in result and "return 2**3" in result
-    assert "https://github.com/o/repo__name" in result
-    assert "**Titel**" not in result and "```" not in result
-
-
-def test_f45_phone_numbers_with_letters_are_not_guessed():
-    assert messenger_native.clean_number("+49wrong1701234567") == ""
-    assert messenger_native.clean_number("+49 (170) 123-45-67") == "+491701234567"
 
 
 def test_f46_a_failed_nvidia_model_probe_is_not_a_successful_connection():

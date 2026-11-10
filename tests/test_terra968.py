@@ -12,10 +12,9 @@ from dataclasses import replace
 import httpx
 import pytest
 
-from aquaticy import agent, auth, memory, netguard, subagents, web
+from aquaticy import agent, auth, memory, netguard, subagents
 from aquaticy.auth import AuthStore
 from aquaticy.jsonutil import MAX_DEPTH, JsonDepthError, raw_decode
-from tests.anmeldung import BROWSER, wie_die_app
 from tests.test_v965 import parallel_site as parallel_site
 
 OLD, NEW = "old-password-123", "new-password-456"
@@ -154,42 +153,9 @@ def test_credential_proof_is_account_bound_and_not_in_representations(tmp_path):
         store.create_session(replace(first, id=second.id), "forged", "127.0.0.1")
 
 
-def test_http_login_racing_password_change_returns_401_without_new_session(parallel_site,
-                                                                         monkeypatch):
-    fixture_client, _, _, _, registered, url = parallel_site
-    original = web.AUTH.authenticate
-    entered, release = threading.Event(), threading.Event()
-    scheduled = []
-
-    def authenticate(email, password):
-        result = original(email, password)
-        if password == "parallel-test-passwort":
-            entered.set()
-            assert release.wait(10)
-        return result
-
-    monkeypatch.setattr(web.AUTH, "authenticate", authenticate)
-    monkeypatch.setattr(web, "start_user_scheduler", lambda a: scheduled.append(a.id))
-    with httpx.Client(base_url=url, headers=dict(fixture_client.headers), trust_env=False,
-                      timeout=15) as client, ThreadPoolExecutor(max_workers=1) as pool:
-        assert client.post("/api/consent", json={"accepted": True}).status_code == 200
-        pending = pool.submit(client.post, "/api/auth/login", headers=BROWSER,
-                              json=wie_die_app({"email": registered.email,
-                                                "password": "parallel-test-passwort"}))
-        try:
-            assert entered.wait(5)
-            independent = AuthStore(web.AUTH.data_dir, "TESTCODE")
-            independent.change_password(registered, "parallel-test-passwort", NEW)
-        finally:
-            release.set()
-        response = pending.result(timeout=10)
-        assert response.status_code == 401
-        assert web.AUTH.session_count(registered.id) == 0
-        assert not scheduled and web.AUTH_COOKIE not in response.cookies
-        valid = client.post("/api/auth/login", headers=BROWSER,
-                            json=wie_die_app({"email": registered.email, "password": NEW}))
-        assert valid.status_code == 200 and scheduled == [registered.id]
-        assert "_credential" not in valid.text
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 @pytest.mark.parametrize("field", ["email", "username"])

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 from aquaticy import web
 
@@ -81,12 +82,6 @@ def test_model_name_stays_visible_on_common_phones() -> None:
     css = _css()
     assert "@media (max-width:339px){\n  .modelpick #model-name{display:none}" in css
     assert "@media (max-width:360px){\n  .modelpick #model-name" not in css
-
-
-
-
-
-
 
 
 import pytest  # noqa: E402
@@ -230,8 +225,6 @@ def test_no_research_agents_for_a_model_without_tools(ollama, tmp_path) -> None:
     einstellungen = Settings(model="ollama_chat/qwen2.5-coder:14b", api_base=ollama.url,
                              data_dir=tmp_path / "e", subagents_auto=True)
     assert Agent(einstellungen)._auto_subagents_wanted() is True
-
-
 
 
 from aquaticy.agent import tool_calls_from_text  # noqa: E402
@@ -391,40 +384,9 @@ def test_chat_with_a_local_coder_model_answers_end_to_end(client, session, ollam
             assert "thinking" in FAEHIGKEITEN[anfrage["model"]], anfrage
 
 
-
-
-
-
-from aquaticy import agent as agent_mod  # noqa: E402
-from aquaticy import sandbox as sandbox_mod  # noqa: E402
-
-_RUNTIME_KNOWN_ECHT = sandbox_mod.runtime_known
-_DOCKER = sandbox_mod.Runtime("docker", "docker", "Docker (gehaertet)")
-
-
-@pytest.fixture
-def vm_da(monkeypatch):
-    """Eine Abschottung ist da; vm_write/vm_run laufen in einer Attrappe."""
-    monkeypatch.setattr(sandbox_mod, "runtime_known", lambda: (True, _DOCKER))
-    monkeypatch.setattr(agent_mod.Agent, "_warm_workshop", lambda self: None)
-    monkeypatch.setattr(agent_mod.Agent, "_touch_workshop", lambda self: None)
-    befehle: list[str] = []
-
-    def einrichten(toolbox):
-        def vm_run(command: str, timeout: int = 0):
-            befehle.append(command)
-            toolbox.stats.vm_calls += 1
-            return {"exit_code": 0, "stdout": "Hallo\n", "stderr": ""}
-
-        def vm_write(path: str, text: str):
-            toolbox.stats.vm_calls += 1
-            return {"ok": True, "path": path}
-
-        toolbox.vm_run = vm_run
-        toolbox.vm_write = vm_write
-        return befehle
-
-    return einrichten
+# 16.0.1 (Aquaticy-Test): 19 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def _code_agent(settings, toolbox, ereignisse):
@@ -432,145 +394,9 @@ def _code_agent(settings, toolbox, ereignisse):
                  on_event=lambda n, p: ereignisse.append((n, p)))
 
 
-def test_code_that_never_ran_goes_back_once(monkeypatch, settings, toolbox, vm_da) -> None:
-    befehle = vm_da(toolbox)
-    llm = ScriptedLLM(
-        _message(content="```python\nprint('Hallo')\n```"),
-        _message(tool_calls=[_tool_call("vm_run", {"command": "python3 -c \"print('Hallo')\""})]),
-        _message(content="Läuft: gibt Hallo aus.\n```python\nprint('Hallo')\n```"),
-    )
-    monkeypatch.setattr("litellm.completion", llm)
-    ereignisse: list = []
-    ergebnis = _code_agent(settings, toolbox, ereignisse).ask(
-        "Schreib Hallo Welt", stream=False, mode="code", sandbox=True)
-    assert befehle == ["python3 -c \"print('Hallo')\""]
-    assert ergebnis.answer.startswith("Läuft")
-    assert agent_mod.VM_NUDGE_PROMPT in [m["content"] for m in llm.calls[1]["messages"]]
-    assert ("answer_reset", {"reason": "virtual machine"}) in ereignisse
-
-
-def test_the_nudge_comes_only_once_and_not_after_a_run(monkeypatch, settings, toolbox,
-                                                       vm_da) -> None:
-    vm_da(toolbox)
-    llm = ScriptedLLM(
-        _message(content="```python\nx = 1\n```"),
-        _message(content="```python\nx = 1\n```"),
-    )
-    monkeypatch.setattr("litellm.completion", llm)
-    ergebnis = _code_agent(settings, toolbox, []).ask(
-        "Code bitte", stream=False, mode="code", sandbox=True)
-    assert ergebnis.answer == "```python\nx = 1\n```" and len(llm.calls) == 2
-
-    llm = ScriptedLLM(_message(content="Ein Decorator umhüllt eine Funktion."))
-    monkeypatch.setattr("litellm.completion", llm)
-    _code_agent(settings, toolbox, []).ask("Was ist ein Decorator?", stream=False,
-                                           mode="code", sandbox=True)
-    assert len(llm.calls) == 1
-
-
-def test_every_question_reminds_of_the_vm(monkeypatch, settings, toolbox, vm_da) -> None:
-    vm_da(toolbox)
-    llm = ScriptedLLM(_message(content="Erklärung ohne Code."))
-    monkeypatch.setattr("litellm.completion", llm)
-    _code_agent(settings, toolbox, []).ask("Frage", stream=False, mode="code", sandbox=True)
-    frage = [m for m in llm.calls[0]["messages"] if m["role"] == "user"][-1]["content"]
-    assert agent_mod.VM_TURN_HINT in frage
-    namen = [t["function"]["name"] for t in llm.calls[0]["tools"]]
-    assert "vm_run" in namen and "vm_write" in namen
-
-
-def test_vm_on_without_docker_says_so(monkeypatch, settings, toolbox) -> None:
-    monkeypatch.setattr(sandbox_mod, "runtime_known", lambda: (True, None))
-    llm = ScriptedLLM(_message(content="```python\nprint(1)\n```"))
-    monkeypatch.setattr("litellm.completion", llm)
-    ereignisse: list = []
-    _code_agent(settings, toolbox, ereignisse).ask("Code", stream=False, mode="code",
-                                                   sandbox=True)
-    aufruf = llm.calls[0]
-    assert not any(t["function"]["name"].startswith("vm_") for t in aufruf.get("tools") or [])
-    system = aufruf["messages"][0]["content"]
-    assert "Podman oder Docker fehlt" in system and "aquaticy install-vm" in system
-    assert any(n == "note" and "Podman oder Docker" in p["text"]
-               and "aquaticy install-vm" in p["text"] for n, p in ereignisse)
-    assert len(llm.calls) == 1
-
-
-def test_runtime_lookup_is_cached(monkeypatch) -> None:
-    aufrufe: list[int] = []
-    monkeypatch.setattr(sandbox_mod, "find_runtime", lambda: aufrufe.append(1) or None)
-    for _ in range(5):
-        assert sandbox_mod.runtime_cached() is None
-    assert aufrufe == [1]
-
-
-def test_looking_for_docker_never_holds_up_a_question(monkeypatch) -> None:
-    """Fund aus dem Volllauf: die erste Fassung fragte `docker info` mitten in ask()."""
-    import threading
-    import time
-
-    gesucht = threading.Event()
-    aufrufe: list[int] = []
-
-    def langsam():
-        aufrufe.append(1)
-        time.sleep(0.5)
-        gesucht.set()
-        return _DOCKER
-
-    monkeypatch.setattr(sandbox_mod, "find_runtime", langsam)
-    vorher = time.monotonic()
-    assert _RUNTIME_KNOWN_ECHT() == (False, None)
-    assert _RUNTIME_KNOWN_ECHT() == (False, None)
-    assert time.monotonic() - vorher < 0.2
-    assert gesucht.wait(3)
-    for _ in range(50):
-        if _RUNTIME_KNOWN_ECHT() == (True, _DOCKER):
-            break
-        time.sleep(0.02)
-    assert _RUNTIME_KNOWN_ECHT() == (True, _DOCKER) and aufrufe == [1]
-
-    sandbox_mod._LAUFZEIT["bis"] = 0.0
-    gesucht.clear()
-    vorher = time.monotonic()
-    assert _RUNTIME_KNOWN_ECHT() == (True, _DOCKER)
-    assert time.monotonic() - vorher < 0.2
-    assert gesucht.wait(3)
-
-
-def test_the_agent_answers_without_waiting_for_docker(monkeypatch, settings, toolbox) -> None:
-    import threading
-    import time
-
-    frei = threading.Event()
-    monkeypatch.setattr(sandbox_mod, "runtime_known", _RUNTIME_KNOWN_ECHT)
-    monkeypatch.setattr(sandbox_mod, "find_runtime", lambda: frei.wait(5) and None)
-    monkeypatch.setattr(agent_mod.Agent, "_warm_workshop", lambda self: None)
-    llm = ScriptedLLM(_message(content="Erklärung ohne Code."))
-    monkeypatch.setattr("litellm.completion", llm)
-    vorher = time.monotonic()
-    _code_agent(settings, toolbox, []).ask("Frage", stream=False, mode="code", sandbox=True)
-    dauer = time.monotonic() - vorher
-    frei.set()
-    assert dauer < 2, "die Frage wartet nicht auf docker info"
-
-    assert "vm_run" in [t["function"]["name"] for t in llm.calls[0]["tools"]]
-
-
-def test_vm_status_endpoint(client, session, monkeypatch) -> None:
-    monkeypatch.setattr(sandbox_mod, "runtime_cached", lambda: None)
-    status, body = client("GET", "/api/vm")
-    daten = json.loads(body)
-    assert status == 200
-    assert daten == {"internet": False, "lan": False, "ultra": bool(session.ultra),
-                     "runtime": False}
-
-
-def test_vm_internet_needs_ultra_at_the_server(client, session, monkeypatch) -> None:
-
-    monkeypatch.setattr(type(session), "ultra", property(lambda self: False))
-    status, body = client("POST", "/api/config", {"AQUATICY_VM_INTERNET": "true"})
-    assert status == 400
-    assert "nur mit einem Ultra-Konto" in json.loads(body).get("error", "")
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def _gruss_en() -> dict[str, list[str]]:
@@ -649,8 +475,6 @@ console.log(JSON.stringify({kaputt, mit,
     assert "grussZiehen(saetze, when, currentUsername)" in html
 
 
-
-
 def _en() -> dict[str, str]:
     roh = re.search(r"const EN = (\{.*?\n\});", _ui(), re.S)
     assert roh
@@ -685,7 +509,6 @@ def test_every_english_key_is_used_somewhere() -> None:
     zaehlte das Woerterbuch selbst mit. Jetzt muss jeder Schluessel ausserhalb davon
     stehen -- in der Seite, in einem zusammengesetzten Satz oder beim Server."""
     import html as html_mod
-    from pathlib import Path
 
     seite = _ui()
     roh = re.search(r"const EN = (\{.*?\n\});", seite, re.S)
@@ -832,18 +655,6 @@ console.log(JSON.stringify(aus));""",
         assert ist == soll, de
 
 
-def test_every_vm_stop_reason_has_english() -> None:
-    from pathlib import Path
-
-    quelle = "".join(p.read_text(encoding="utf-8")
-                     for p in Path(web.__file__).parent.glob("*.py"))
-    gruende = set(re.findall(r'\.stop\("([^"]+)"\)', quelle))
-    gruende |= set(re.findall(r'def stop\(self, reason: str = "([^"]+)"', quelle))
-    assert len(gruende) >= 5
-    block = _js_block("const VM_GRUENDE_EN = {", "};")
-    assert sorted(g for g in gruende if f'"{g}":' not in block) == []
-
-
 def test_role_and_verdict_names_come_from_the_server_in_both_languages() -> None:
     from aquaticy import webview
 
@@ -852,16 +663,15 @@ def test_role_and_verdict_names_come_from_the_server_in_both_languages() -> None
     assert set(texte["verdicts_en"]) == set(texte["verdicts"])
 
 
-
-
 def test_patterns_never_touch_text_from_the_model_or_the_user() -> None:
     import subprocess
 
     html = _ui()
 
     teil = html[html.index("const NUR_FEST = "):html.index("let sprache = ")]
+    # 16.0.1 (Aquaticy-Test): ".cw-eintrag .inhalt" entfaellt mit den Coworkern.
     for auswahl in (".steps .txt", ".steps .sub", ".interim", "#ask-q", ".result-card",
-                    ".cw-eintrag .inhalt", ".frage"):
+                    ".frage"):
         assert auswahl in teil, auswahl
     tausch = html[html.index("function tauscheText("):html.index("function tauscheAttribute(")]
     assert "closest(NUR_FEST)" in tausch and "aufEnglisch(roh, 0, fest)" in tausch
@@ -882,62 +692,9 @@ def test_patterns_never_touch_text_from_the_model_or_the_user() -> None:
     assert json.loads(lauf.stdout) == ["", "", "reading the request …", "3 files"]
 
 
-def test_own_words_skip_aquaticys_own_nudges() -> None:
-    hinweis = "Hallo\n\n" + agent_mod.VM_TURN_HINT + "\n\n[Ortsfilter: Bremen · Sprache de]"
-    assert agent_mod.own_words(hinweis) == "Hallo"
-    for eigen in (agent_mod.VM_NUDGE_PROMPT, agent_mod.FORCE_ASK_PROMPT,
-                  agent_mod.BUDGET_PROMPT, agent_mod.RECHECK_PROMPT,
-                  agent_mod.FORCE_VISUAL_PROMPT % {"kandidaten": ""},
-                  agent_mod.PRE_RESEARCH_PREFIX + " ..."):
-        assert agent_mod.own_words(eigen) == ""
-    assert agent_mod.own_words([{"type": "text", "text": "x"}]) == ""
-
-
-def test_ai_guard_sees_the_real_previous_question() -> None:
-    from types import SimpleNamespace
-
-    verlauf = [
-        {"role": "system", "content": "s"},
-        {"role": "user", "content": "Zitat: „xyz“\n\n" + agent_mod.VM_TURN_HINT},
-        {"role": "assistant", "content": "```python\nx\n```"},
-        {"role": "user", "content": agent_mod.VM_NUDGE_PROMPT},
-        {"role": "assistant", "content": "Lief."},
-    ]
-    sitzung = SimpleNamespace(_agent=SimpleNamespace(messages=verlauf))
-    assert web.previous_user_message(sitzung) == "Zitat: „xyz“"
-
-
-def test_planner_context_has_no_internal_texts(settings) -> None:
-    a = Agent(settings, cache=None)
-    a.messages = [
-        {"role": "system", "content": "s"},
-        {"role": "user", "content": "Frage eins\n\n" + agent_mod.VM_TURN_HINT},
-        {"role": "assistant", "content": "Antwort eins"},
-        {"role": "user", "content": agent_mod.VM_NUDGE_PROMPT},
-        {"role": "assistant", "content": "Antwort zwei"},
-    ]
-    kontext = a._recent_context(include_last=True)
-    assert "Frage eins" in kontext and "Antwort zwei" in kontext
-    assert "vm_write" not in kontext and agent_mod.VM_NUDGE_PROMPT[:30] not in kontext
-
-
-def test_a_model_without_tools_is_told_why_there_is_no_vm(monkeypatch, settings,
-                                                           toolbox) -> None:
-    monkeypatch.setattr(sandbox_mod, "runtime_known", lambda: (True, _DOCKER))
-    monkeypatch.setattr(agent_mod.Agent, "_model_can_use_tools", lambda self, model="": False)
-    llm = ScriptedLLM(_message(content="```python\nprint(1)\n```"))
-    monkeypatch.setattr("litellm.completion", llm)
-    ereignisse: list = []
-    _code_agent(settings, toolbox, ereignisse).ask("Code", stream=False, mode="code",
-                                                   sandbox=True)
-    system = llm.calls[0]["messages"][0]["content"]
-    assert "keine Werkzeuge aufrufen" in system and "Podman oder Docker fehlt" not in system
-    frage = [m for m in llm.calls[0]["messages"] if m["role"] == "user"][-1]["content"]
-    assert agent_mod.VM_TURN_HINT not in frage
-    hinweise = [p["text"] for n, p in ereignisse if n == "note"]
-    assert any("kann keine Werkzeuge benutzen" in h for h in hinweise)
-    assert not any("Podman" in h for h in hinweise)
-    assert len(llm.calls) == 1
+# 16.0.1 (Aquaticy-Test): 3 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_asked_for_json_the_json_is_the_answer(monkeypatch, settings, toolbox) -> None:
@@ -956,139 +713,6 @@ def test_asked_for_json_the_json_is_the_answer(monkeypatch, settings, toolbox) -
     assert ergebnis.searches == [] and "web_search" in ergebnis.answer
 
 
-
-
-from pathlib import Path  # noqa: E402
-from types import SimpleNamespace  # noqa: E402
-
-from aquaticy import cli as cli_mod  # noqa: E402
-from aquaticy import vm_install  # noqa: E402
-
-
-def _system(monkeypatch, name: str, da: set[str], root: bool = False) -> None:
-    monkeypatch.setattr(vm_install.platform, "system", lambda: name)
-    monkeypatch.setattr(vm_install.shutil, "which",
-                        lambda b: f"/usr/bin/{b}" if b in da else None)
-    monkeypatch.setattr(vm_install, "_root", lambda: root)
-
-
-def test_install_steps_per_system(monkeypatch) -> None:
-    _system(monkeypatch, "Linux", {"apt-get", "sudo"})
-    assert vm_install.install_steps() == [
-        ["sudo", "apt-get", "update"], ["sudo", "apt-get", "install", "-y", "podman", "uidmap"]]
-    _system(monkeypatch, "Linux", {"dnf"}, root=True)
-    assert vm_install.install_steps() == [["dnf", "install", "-y", "podman"]]
-    _system(monkeypatch, "Linux", {"pacman"})
-    assert vm_install.install_steps() is None
-    _system(monkeypatch, "Darwin", {"brew"})
-    assert vm_install.install_steps()[0] == ["brew", "install", "podman"]
-    assert vm_install.install_steps()[-1] == ["podman", "machine", "start"]
-    _system(monkeypatch, "Windows", {"winget"})
-    assert vm_install.install_steps()[0][:4] == ["winget", "install", "--id", "RedHat.Podman"]
-    _system(monkeypatch, "Darwin", set())
-    assert vm_install.install_steps() is None and "podman.io" in vm_install.install_hint()
-
-
-def test_run_steps_stops_at_a_failure_and_forgets_the_old_state(monkeypatch) -> None:
-    gelaufen: list[list[str]] = []
-
-    def run(befehl, **kw):
-        gelaufen.append(befehl)
-
-        code = 1 if befehl[-1] in ("init", "kaputt") else 0
-        return SimpleNamespace(returncode=code)
-
-    sandbox_mod._LAUFZEIT.update(bekannt=True, wert=None, bis=10 ** 12)
-    ok = vm_install.run_steps([["brew", "install", "podman"], ["podman", "machine", "init"],
-                               ["podman", "machine", "start"]], run=run)
-    assert ok and len(gelaufen) == 3
-    assert sandbox_mod._LAUFZEIT["bekannt"] is False
-    gelaufen.clear()
-    assert not vm_install.run_steps([["sudo", "apt-get", "kaputt"], ["sudo", "x"]], run=run)
-    assert gelaufen == [["sudo", "apt-get", "kaputt"]]
-
-
-def _fake_vm(monkeypatch, nachher=_DOCKER):
-    stand = {"installiert": False, "schritte": []}
-    monkeypatch.setattr(sandbox_mod, "find_runtime",
-                        lambda: nachher if stand["installiert"] else None)
-    monkeypatch.setattr(vm_install, "podman_installed", lambda: False)
-    monkeypatch.setattr(vm_install, "install_steps",
-                        lambda: [["sudo", "apt-get", "install", "-y", "podman"]])
-
-    def run_steps(schritte, on_step=None, run=None):
-        stand["schritte"] += schritte
-        stand["installiert"] = True
-        return True
-
-    monkeypatch.setattr(vm_install, "run_steps", run_steps)
-    return stand
-
-
-def test_install_vm_command(monkeypatch, tmp_path) -> None:
-    from typer.testing import CliRunner
-
-    monkeypatch.setenv("AQUATICY_DATA_DIR", str(tmp_path))
-    stand = _fake_vm(monkeypatch)
-    ergebnis = CliRunner().invoke(cli_mod.app, ["install-vm"], input="n\n")
-    assert ergebnis.exit_code == 1 and stand["schritte"] == []
-    assert "sudo apt-get install -y podman" in ergebnis.output
-    ergebnis = CliRunner().invoke(cli_mod.app, ["install-vm", "--yes"])
-    assert ergebnis.exit_code == 0, ergebnis.output
-    assert stand["schritte"] == [["sudo", "apt-get", "install", "-y", "podman"]]
-    assert "virtual machine bereit" in ergebnis.output
-
-
-def test_web_start_offers_podman_once(monkeypatch, tmp_path, settings, capsys) -> None:
-    stand = _fake_vm(monkeypatch)
-
-    monkeypatch.setattr(cli_mod.sys.stdin, "isatty", lambda: False, raising=False)
-    cli_mod._vm_beim_start(settings)
-    assert stand["schritte"] == []
-
-    monkeypatch.setattr(cli_mod.sys.stdin, "isatty", lambda: True, raising=False)
-    monkeypatch.setattr(cli_mod.sys.stdout, "isatty", lambda: True, raising=False)
-    fragen: list[str] = []
-    monkeypatch.setattr(cli_mod.typer, "confirm", lambda *a, **k: fragen.append(a[0]) or False)
-    cli_mod._vm_beim_start(settings)
-    cli_mod._vm_beim_start(settings)
-    assert len(fragen) == 1 and stand["schritte"] == []
-    assert (Path(settings.data_dir) / cli_mod.VM_INSTALL_NEIN).exists()
-
-    (Path(settings.data_dir) / cli_mod.VM_INSTALL_NEIN).unlink()
-    monkeypatch.setattr(cli_mod.typer, "confirm", lambda *a, **k: True)
-    cli_mod._vm_beim_start(settings)
-    assert stand["schritte"] and stand["installiert"]
-    assert "aquaticy install-vm" in capsys.readouterr().out
-
-
-def test_a_failed_install_asks_again_next_time(monkeypatch, settings) -> None:
-    _fake_vm(monkeypatch, nachher=None)
-    monkeypatch.setattr(cli_mod.sys.stdin, "isatty", lambda: True, raising=False)
-    monkeypatch.setattr(cli_mod.sys.stdout, "isatty", lambda: True, raising=False)
-    monkeypatch.setattr(cli_mod.typer, "confirm", lambda *a, **k: True)
-    cli_mod._vm_beim_start(settings)
-    assert not (Path(settings.data_dir) / cli_mod.VM_INSTALL_NEIN).exists()
-
-
-def test_a_stopped_podman_machine_is_started(monkeypatch) -> None:
-    _system(monkeypatch, "Darwin", {"podman"})
-    laeuft = {"an": False}
-    monkeypatch.setattr(sandbox_mod, "find_runtime",
-                        lambda: _DOCKER if laeuft["an"] else None)
-    befehle: list[list[str]] = []
-
-    def run(befehl, **kw):
-        befehle.append(befehl)
-        laeuft["an"] = befehl[-1] == "start"
-        return SimpleNamespace(returncode=0)
-
-    assert vm_install.start_machine(run=run)
-    assert befehle[-1] == ["podman", "machine", "start"]
-    _system(monkeypatch, "Linux", {"podman"})
-    assert not vm_install.start_machine(run=run)
-
-
 def test_the_browser_can_never_install_anything() -> None:
 
     import inspect
@@ -1098,77 +722,3 @@ def test_the_browser_can_never_install_anything() -> None:
     assert "install_steps" not in _ui()
 
 
-
-
-from tests.test_sandbox import FakeRun  # noqa: E402
-
-
-def test_podman_is_asked_for_its_own_version_field(monkeypatch) -> None:
-
-    aufrufe: list[list[str]] = []
-    monkeypatch.setattr(sandbox_mod, "_runs", lambda *a, **k: aufrufe.append(list(a))
-                        or SimpleNamespace(returncode=0, stdout="false\n"))
-    assert sandbox_mod._works("podman") and sandbox_mod._works("docker")
-    assert aufrufe[0][-1] == "{{.Version.Version}}" and aufrufe[1][-1] == "{{.ServerVersion}}"
-    assert sandbox_mod._has_gvisor("podman") is False
-
-
-def test_podman_as_root_does_not_claim_to_be_rootless(monkeypatch) -> None:
-    monkeypatch.setattr(sandbox_mod.shutil, "which",
-                        lambda b: "/usr/bin/podman" if b == "podman" else None)
-    monkeypatch.setattr(sandbox_mod, "_works", lambda b: True)
-    for antwort, art, etikett in (("true", "podman", "Podman (ohne Wurzelrechte)"),
-                                  ("false", "podman-root", "Podman (gehaertet)")):
-        monkeypatch.setattr(sandbox_mod, "_runs", lambda *a, _x=antwort, **k:
-                            SimpleNamespace(returncode=0, stdout=_x + "\n"))
-        laufzeit = sandbox_mod.find_runtime()
-        assert (laufzeit.kind, laufzeit.label) == (art, etikett)
-        assert laufzeit.strength
-    assert "Wurzelrechten" in sandbox_mod.Runtime("podman", "podman-root", "x").strength
-
-
-def test_the_podman_quota_message_falls_back_to_no_quota() -> None:
-    assert sandbox_mod.quota_unsupported_message(
-        'level=error msg="[graphdriver] prior storage driver overlay failed: storage option '
-        'overlay.size and overlay.inodes only supported for backingFS XFS. Found extfs"')
-    assert sandbox_mod.quota_unsupported_message(
-        "--storage-opt is supported only for overlay over xfs with 'pquota' mount option")
-    assert not sandbox_mod.quota_unsupported_message("Error: image not known")
-
-
-def _startzeile(monkeypatch, binary: str) -> list[str]:
-    fake = FakeRun({"inspect": (0, "true\n", "")})
-    monkeypatch.setattr(sandbox_mod.subprocess, "run", fake)
-    monkeypatch.setattr(sandbox_mod, "_runs_capped",
-                        lambda b, *a, **k: fake([b, *a], **k))
-    kasten = sandbox_mod.Sandbox(image="python:3.12-slim")
-    kasten.runtime = sandbox_mod.Runtime(binary, binary, binary)
-    kasten.ensure()
-    return fake.zeile("--detach")
-
-
-def test_podman_mounts_work_without_nocopy_and_no_host_proxy_gets_in(monkeypatch) -> None:
-    podman = _startzeile(monkeypatch, "podman")
-    docker = _startzeile(monkeypatch, "docker")
-
-    assert not any(":nocopy" in teil for teil in podman)
-    assert any(teil.endswith(f":{sandbox_mod.WORKDIR}:nocopy") for teil in docker)
-
-    for zeile in (podman, docker):
-        for name in ("HTTPS_PROXY", "http_proxy", "ALL_PROXY", "no_proxy"):
-            assert f"{name}=" in zeile, name
-    assert "--http-proxy=false" in podman and "--http-proxy=false" not in docker
-
-    for zeile in (podman, docker):
-        assert zeile[zeile.index("--network") + 1] == "none" and "--read-only" in zeile
-
-
-def test_vm_write_takes_content_and_refuses_an_empty_call(toolbox) -> None:
-    geschrieben: list[tuple[str, str]] = []
-    toolbox.vm_write = lambda path, text: geschrieben.append((path, text)) or {"ok": True}
-    ausfuehren = toolbox._call
-    ausfuehren("vm_write", {"path": "a.py", "content": "print(1)"})
-    ausfuehren("vm_write", {"path": "b.py", "text": "print(2)"})
-    leer = ausfuehren("vm_write", {"path": "c.py"})
-    assert geschrieben == [("a.py", "print(1)"), ("b.py", "print(2)")]
-    assert "text" in json.dumps(leer, ensure_ascii=False)

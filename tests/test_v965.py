@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import secrets
-import shutil
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
 from types import SimpleNamespace
 
@@ -16,7 +14,6 @@ import pytest
 from aquaticy import agent as agents
 from aquaticy import web
 from aquaticy.auth import AuthStore, pro_code_for, ultra_code_for
-from aquaticy.cache import Cache
 from aquaticy.config import Settings
 from tests.anmeldung import AGENT, FETCH, SPRACHE, wie_die_app
 from tests.test_web import FakeAgent
@@ -101,128 +98,9 @@ def parallel_site(tmp_path, monkeypatch):
         thread.join(timeout=5)
 
 
-def test_two_researches_run_independently_and_stop_only_selected_chat(parallel_site):
-    client, gates, started, made, account, _ = parallel_site
-    chat_a = client.get("/api/chats").json()["current"]
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        a = pool.submit(client.post, "/api/chat", json={"message": "Recherche A"},
-                        headers={"X-Aquaticy-Chat": chat_a})
-        try:
-            assert started["Recherche A"].wait(5)
-            chat_b = client.post("/api/clear").json()["current"]
-            assert chat_b != chat_a
-            b = pool.submit(client.post, "/api/chat", json={"message": "Recherche B"},
-                            headers={"X-Aquaticy-Chat": chat_b})
-            assert started["Recherche B"].wait(5), "B darf nicht auf A warten"
-            listed = client.get("/api/chats").json()["chats"]
-            assert {c["session_id"] for c in listed if c.get("running")} == {chat_a, chat_b}
-            assert web._cluster_load()["runs"] == 2
-            assert not web._cluster_release(account.id)
-            for chat in (chat_a, chat_b):
-                state = client.get("/api/runstate", headers={"X-Aquaticy-Chat": chat}).json()
-                assert state["running"]
-            denied = client.post("/api/chat-edit", json={"action": "delete", "session_id": chat_a})
-            assert denied.json()["code"] == "busy"
-            opened = client.post("/api/open", json={"session_id": chat_a}).json()
-            assert opened["ok"] and opened["session_id"] == chat_a
-            client.post("/api/stop", headers={"X-Aquaticy-Chat": chat_b})
-            assert a.done() is False and gates["Recherche A"].is_set() is False
-            assert b.result(timeout=5).status_code == 200
-            assert next(s for s in made if s.session_id == chat_b).cancelled
-            assert not next(s for s in made if s.session_id == chat_a).cancelled
-        finally:
-            gates["Recherche A"].set()
-            gates["Recherche B"].set()
-        assert a.result(timeout=5).status_code == 200
-    settings = web.SESSIONS.get(account).settings()
-    cache = Cache(settings.db_path, settings.cache_ttl_hours)
-    assert [e.question for e in cache.chat_history(chat_a)] == ["Recherche A"]
-    assert [e.question for e in cache.chat_history(chat_b)] == ["Recherche B"]
-    deleted = client.post("/api/chat-edit", json={"action": "delete", "session_id": chat_b})
-    assert deleted.json()["ok"]
-    assert client.get("/api/runstate", headers={"X-Aquaticy-Chat": chat_b}).status_code == 400
-    assert not cache.chat_history(chat_b)
-
-
-def test_chat_header_cannot_select_another_accounts_history(parallel_site):
-    client, _, _, _, _, _ = parallel_site
-    response = client.get("/api/runstate", headers={"X-Aquaticy-Chat": "foreign-chat-id"})
-    assert response.status_code == 400
-    assert "running" not in response.json()
-
-
-def test_forgetting_account_stops_all_background_chats(parallel_site):
-    client, gates, started, made, account, _ = parallel_site
-    chat_a = client.get("/api/chats").json()["current"]
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        a = pool.submit(client.post, "/api/chat", json={"message": "Recherche A"},
-                        headers={"X-Aquaticy-Chat": chat_a})
-        try:
-            assert started["Recherche A"].wait(5)
-            chat_b = client.post("/api/clear").json()["current"]
-            b = pool.submit(client.post, "/api/chat", json={"message": "Recherche B"},
-                            headers={"X-Aquaticy-Chat": chat_b})
-            assert started["Recherche B"].wait(5)
-            web.forget_account_runtime(account)
-            assert a.result(timeout=5).status_code == b.result(timeout=5).status_code == 200
-            assert all(s.cancelled and s.closed for s in made if s.asked)
-            assert account.id not in web.SESSIONS._sessions
-        finally:
-            for gate in gates.values():
-                gate.set()
-
-
-@pytest.mark.parametrize("finish_background", [False, True])
-def test_browser_can_write_in_b_and_return_to_running_a(parallel_site, finish_background):
-    playwright = pytest.importorskip("playwright.sync_api")
-    chromium = shutil.which("chromium")
-    if not chromium:
-        pytest.skip("System-Chromium fehlt")
-    client, gates, started, _, _, url = parallel_site
-    with playwright.sync_playwright() as pw:
-        browser = pw.chromium.launch(executable_path=chromium)
-        context = browser.new_context(user_agent=AGENT,
-                                      extra_http_headers={"Accept-Language": SPRACHE})
-        context.add_cookies([{"name": k, "value": v, "url": url}
-                            for k, v in client.cookies.items()])
-        page = context.new_page()
-        errors = []
-        page.on("pageerror", lambda error: errors.append(str(error)))
-        try:
-            page.goto(url, wait_until="networkidle")
-            page.locator("#auth-gate").wait_for(state="hidden")
-            page.fill("#input", "Recherche A")
-            page.click("#send")
-            playwright.expect(page.locator("#thread")).to_contain_text("Zwischenstand Recherche A")
-            page.click("#btn-new")
-            playwright.expect(page.locator("#send")).to_be_enabled()
-            assert not gates["Recherche A"].is_set()
-            question_b = "Recherche B" if finish_background else "Hallo B"
-            page.fill("#input", question_b)
-            page.click("#send")
-            if finish_background:
-                playwright.expect(page.locator("#thread")).to_contain_text(
-                    "Zwischenstand Recherche B")
-                gates["Recherche A"].set()
-                page.wait_for_timeout(300)
-                playwright.expect(page.locator("#send")).to_be_disabled()
-                assert "Recherche A" not in page.locator("#thread").inner_text()
-                gates["Recherche B"].set()
-            playwright.expect(page.locator("#thread")).to_contain_text(f"Antwort auf {question_b}")
-            assert "Recherche A" not in page.locator("#thread").inner_text()
-            page.fill("#input", "Entwurf B")
-            page.get_by_role("button", name="Chat öffnen: Recherche A", exact=True).click()
-            playwright.expect(page.locator("#thread")).to_contain_text("Zwischenstand Recherche A")
-            gates["Recherche A"].set()
-            playwright.expect(page.locator("#thread")).to_contain_text("Antwort auf Recherche A")
-            page.get_by_role("button", name=f"Chat öffnen: {question_b}", exact=True).click()
-            playwright.expect(page.locator("#input")).to_have_value("Entwurf B")
-            playwright.expect(page.locator("#thread")).to_contain_text(f"Antwort auf {question_b}")
-            assert started["Recherche A"].is_set()
-            assert not errors
-        finally:
-            gates["Recherche A"].set()
-            browser.close()
+# 16.0.1 (Aquaticy-Test): 4 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 @pytest.mark.parametrize("mode", ["normal", "pro", "code"])

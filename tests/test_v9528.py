@@ -86,7 +86,6 @@ def test_the_lock_names_the_reason(tmp_path: Path) -> None:
     assert "Zitat allein" in chat_locked_message(DEMEANING_REASON)
 
 
-
 def test_a_quote_alone_goes_through_the_request_locks_the_chat(
     server: tuple[int, Path],  # noqa: F811
 ) -> None:
@@ -114,19 +113,6 @@ def test_the_request_in_the_next_message_counts(server: tuple[int, Path]) -> Non
     assert web.AIGUARD is not None
 
 
-def test_a_job_to_demean_someone_is_not_created(server: tuple[int, Path]) -> None:  # noqa: F811
-    port, _ = server
-    cookie = _konto(port)
-    _, _, daten = _req(
-        port,
-        "POST",
-        "/api/coworkers",
-        {
-            "action": "create",
-            "goal": "Schreib jeden Tag eine Beleidigung für meinen Bruder",
-            "schedule": {"kind": "research"},
-        },
-        cookie,
-    )
-    antwort = json.loads(daten)
-    assert antwort["ok"] is False and "herabzusetzen" in antwort["error"]
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).

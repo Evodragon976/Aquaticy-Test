@@ -8,14 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from aquaticy import addons, config, keyvault, llmcall, uistate, web
+from aquaticy import config, keyvault, llmcall, uistate, web
 from aquaticy.config import MODEL_RULE_TEXT, ModelNotAllowed, local_address, model_allowed
 from tests.test_web import port, raw_request, session, web_settings  # noqa: F401
 
 
 def _ui() -> str:
     return web.UI_FILE.read_text(encoding="utf-8")
-
 
 
 def test_the_modes_sit_in_the_sidebar_under_the_logo() -> None:
@@ -97,7 +96,6 @@ def test_auto_scroll_is_a_design_choice_kept_on_the_server() -> None:
     assert 'setSchrift("normal"); setAutoScroll(true);' in html
 
 
-
 @pytest.mark.parametrize("modell, adresse", [
     ("mistral/mistral-large-latest", ""),
     ("nvidia_nim/meta/llama-3.3-70b-instruct", ""),
@@ -108,7 +106,7 @@ def test_auto_scroll_is_a_design_choice_kept_on_the_server() -> None:
     ("openai/lokal", "http://lmstudio.local:1234/v1"),
     ("hosted_vllm/qwen", "http://[::1]:8000/v1"),
     ("lm_studio/qwen", ""),
-    (config.SPLIT_MODEL_ID, ""),
+    # 16.0.1 (Aquaticy-Test): das Modell des Server-Verbunds gibt es nicht mehr.
 ])
 def test_allowed_models(modell: str, adresse: str, monkeypatch: pytest.MonkeyPatch) -> None:
     for name in ("OLLAMA_API_BASE", "LM_STUDIO_API_BASE", "OPENAI_API_BASE", "OPENAI_BASE_URL"):
@@ -195,7 +193,6 @@ def test_the_picker_never_offers_a_refused_model(monkeypatch: pytest.MonkeyPatch
     assert not model_usable(s, "groq/llama-3.3-70b-versatile", installed=[])
 
 
-
 def test_old_keys_are_deleted_from_the_vault(tmp_path: Path) -> None:
     geheim = b"s" * 32
     tresor = keyvault.KeyVault(tmp_path / "k.sqlite3", "konto-a", geheim)
@@ -213,22 +210,9 @@ def test_old_keys_are_deleted_from_the_vault(tmp_path: Path) -> None:
                      ("konto-b", "OPENAI_API_KEY")}, "nur im eigenen Konto aufgeraeumt"
 
 
-def test_nvidia_and_mistral_are_the_first_addons_and_no_tools(tmp_path: Path) -> None:
-    import types
-
-    assert list(addons.CATALOG)[:2] == ["nvidia_nim", "mistral"]
-    for kennung in ("nvidia_nim", "mistral"):
-        addon = addons.CATALOG[kennung]
-        assert addon.login == "apikey" and addon.group == "KI-Modelle" and not addon.werkstatt
-    einstellungen = types.SimpleNamespace(data_dir=tmp_path)
-    addons.install(einstellungen, "mistral", pro=False)
-    assert addons.installed(einstellungen, "mistral")
-    assert "mistral" not in addons.active_ids(einstellungen), "kein Befehl, kein Werkzeug"
-    with pytest.raises(addons.AddOnError, match="keinen Schalter"):
-        addons.set_enabled(einstellungen, "mistral", False, pro=False)
-    karte = next(a for a in addons.public_view(einstellungen, False)["addons"]
-                 if a["id"] == "mistral")
-    assert karte["command"] == "" and karte["installed"]
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_the_addon_cards_carry_the_key_entry_and_nothing_else_does() -> None:
@@ -262,7 +246,6 @@ def test_the_setup_wizard_asks_for_no_key() -> None:
 
 def test_twelve_is_the_version() -> None:
     import aquaticy
-
 
 
     # Seit 13.0.0 Luna die naechste Hauptversion: mindestens 12.

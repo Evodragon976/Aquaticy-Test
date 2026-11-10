@@ -34,13 +34,9 @@ def _mock(antworten: dict[str, Any], gefragt: list[httpx.Request]) -> httpx.Clie
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
-
-def test_the_four_new_services_are_in_the_catalogue() -> None:
-    for neu in ("nachrichten", "wikipedia", "waehrung", "feiertage"):
-        addon = addons.CATALOG[neu]
-        assert addon.login == "keine" and not addon.werkstatt and not addon.programm
-        assert neu in addons.RIGHTS
-        assert neu in tools.ADDON_TOOLS.values()
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_services_install_instantly_and_expose_their_tools(tmp_path: Path) -> None:
@@ -53,7 +49,6 @@ def test_services_install_instantly_and_expose_their_tools(tmp_path: Path) -> No
     assert {"news_tagesschau", "wikipedia", "currency", "holidays"} <= namen
 
     assert {"news_tagesschau", "wikipedia", "currency", "holidays"} <= tools.UNTRUSTED_SOURCES
-
 
 
 def test_news_reads_a_topic() -> None:
@@ -89,7 +84,6 @@ def test_news_rejects_unknown_topics_and_respects_the_hourly_limit() -> None:
     assert addons._tagesschau_erlaubt(jetzt + 3601)
 
 
-
 def test_wikipedia_finds_and_summarises() -> None:
     gefragt: list[httpx.Request] = []
     basis = addons.WIKIPEDIA.format(sprache="de")
@@ -115,7 +109,6 @@ def test_wikipedia_needs_a_term_and_only_knows_two_languages() -> None:
     assert gefragt[0].url.host == "de.wikipedia.org"
 
 
-
 def test_currency_converts() -> None:
     gefragt: list[httpx.Request] = []
     client = _mock({addons.FRANKFURTER: {"amount": 1.0, "base": "EUR", "date": "2026-09-25",
@@ -129,7 +122,6 @@ def test_currency_rejects_nonsense() -> None:
     assert "dreistellig" in addons.currency(1, "EURO")["error"]
     assert "keine Zahl" in addons.currency("viel", "EUR")["error"]
     assert "groesser" in addons.currency(-5, "EUR")["error"]
-
 
 
 def test_holidays_filter_by_state() -> None:
@@ -149,7 +141,6 @@ def test_holidays_filter_by_state() -> None:
 def test_holidays_reject_nonsense() -> None:
     assert "zweistellig" in addons.holidays("Deutschland")["error"]
     assert "1990" in addons.holidays("DE", 3000)["error"]
-
 
 
 def test_the_holiday_right_only_germany_is_enforced(tmp_path: Path) -> None:

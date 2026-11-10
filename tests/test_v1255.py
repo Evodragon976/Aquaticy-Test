@@ -13,12 +13,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import pytest
 
-from aquaticy import aiguard, cluster, guardrails, homeassistant
+from aquaticy import aiguard, guardrails
 from aquaticy.agent import Agent
 from aquaticy.config import Settings
 from aquaticy.guardrails import BY_ID, Verdict, judge, own_data_request, refused_note
@@ -162,16 +161,8 @@ def test_both_judges_know_own_data_is_fine() -> None:
     assert "eigenen Mails" in aiguard.answer_prompt("x")
 
 
-@pytest.mark.parametrize(("bereich", "dienst"), [("light\n", "turn_on"), ("light", "turn_on\n")])
-def test_home_assistant_refuses_a_trailing_newline(bereich: str, dienst: str) -> None:
-    with pytest.raises(homeassistant.HomeAssistantError):
-        homeassistant.check_call(bereich, dienst, "light.kueche")
-    assert homeassistant.check_call("light", "turn_on", "light.kueche") == {
-        "entity_id": "light.kueche"}
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
-def test_the_cluster_refuses_an_account_with_a_trailing_newline(tmp_path: Path) -> None:
-    server = cluster.Cluster(tmp_path)
-    assert server._user_dir("anna").name == "anna"
-    with pytest.raises(cluster.ClusterError):
-        server._user_dir("anna\n")

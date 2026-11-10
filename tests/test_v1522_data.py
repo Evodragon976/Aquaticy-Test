@@ -1,24 +1,11 @@
 """15.2.2: nachgestellte Fehler in Daten, Terminen, Quellen und lokalen Befehlen."""
 
 import base64
-import struct
 
 import pytest
 from selectolax.parser import HTMLParser
 
-from aquaticy import (
-    calc,
-    export,
-    extract,
-    google,
-    homeassistant,
-    ownservices,
-    queries,
-    secure_tasks,
-    storage,
-    vm_ssh,
-    voice,
-)
+from aquaticy import calc, export, extract, google, queries, voice
 
 
 def encoded(text, charset="utf-8"):
@@ -47,7 +34,6 @@ def test_f04_a_later_valid_product_image_is_used():
 
 def test_f05_a_broken_image_url_does_not_abort_product_extraction():
     assert extract._absolute("http://[broken", "https://shop.example/") is None
-
 
 
 def test_f06_microdata_properties_belong_to_the_product_not_the_shop():
@@ -103,22 +89,14 @@ def test_f12_plaintext_attachments_do_not_replace_the_mail_body():
     assert google._body_text(payload) == "Message"
 
 
-def test_f13_home_assistant_rejects_an_unintended_all_entities_call():
-    with pytest.raises(homeassistant.HomeAssistantError):
-        homeassistant.check_call("light", "turn_on")
+# 16.0.1 (Aquaticy-Test): 5 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
-@pytest.mark.parametrize("normalize", [homeassistant.normalize_url, storage.normalize_url])
-@pytest.mark.parametrize("url", ["http://user:secret@home.local", "http://home.local?x=1",
-                                  "http://home.local#fragment"])
-def test_f14_service_urls_cannot_hide_api_paths_or_credentials(normalize, url):
-    assert normalize(url) == ""
-
-
-@pytest.mark.parametrize("question,domain", [("Wie steht der Ventilator?", "fan"),
-                                             ("Kontrolliere den Staubsauger", "vacuum")])
-def test_f15_home_queries_select_the_actual_device_domain(question, domain):
-    assert ownservices.home_domain(question) == domain
+# 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
 def test_f16_an_explicit_voice_refusal_is_respected():
@@ -127,18 +105,6 @@ def test_f16_an_explicit_voice_refusal_is_respected():
 
 def test_f17_a_city_inside_another_word_does_not_disable_the_location_filter():
     assert queries.with_place("Beste Orangenpressen", "Essen").endswith(" Essen")
-
-
-def test_f18_a_host_key_requires_key_material_not_just_an_algorithm_name():
-    name = b"ssh-ed25519"
-    header_only = "ssh-ed25519 " + base64.b64encode(struct.pack(">I", len(name)) + name).decode()
-    with pytest.raises(ValueError):
-        vm_ssh.host_key(header_only)
-
-
-def test_f19_a_malformed_task_ip_cannot_broaden_a_task_to_the_entire_network():
-    with pytest.raises(ValueError):
-        secure_tasks.parse("Melde neue Ports auf 999.1.1.1")
 
 
 def test_f20_export_links_require_an_actual_host():
@@ -151,10 +117,3 @@ def test_mail_html_boilerplate_does_not_hide_a_short_body():
     assert google._body_text(payload) == "Message"
 
 
-def test_new_safety_checks_keep_valid_values_usable():
-    assert homeassistant.check_call("light", "turn_on", "light.desk")["entity_id"] == "light.desk"
-    assert homeassistant.normalize_url("http://home.local:8123/base") == "http://home.local:8123/base"
-    assert google._times("2026-11-06", "", True) == (
-        {"date": "2026-11-06"}, {"date": "2026-11-07"})
-    assert voice.requested("Schicke mir eine Sprachnachricht.")
-    assert export.safe_link("https://example.com/path") == "https://example.com/path"

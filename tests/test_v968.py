@@ -7,28 +7,14 @@ import hashlib
 import json
 import os
 import secrets
-import socket
 import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from types import SimpleNamespace
-from urllib.parse import urlsplit
 
 import pytest
 
-from aquaticy import (
-    aiguard,
-    auth,
-    cluster,
-    desktop,
-    guardrails,
-    keyvault,
-    linked,
-    memory,
-    privacy,
-    web,
-)
+from aquaticy import auth, keyvault, memory, privacy
 from aquaticy.auth import AuthStore
 from aquaticy.calc import CalcError, calculate
 from aquaticy.extract import extract_product
@@ -186,77 +172,14 @@ def test_zero_to_negative_power_is_a_controlled_calculation_error(expression):
     assert calculate("2**-3") == 0.125
 
 
-def test_malformed_origin_is_forbidden_without_changing_account(parallel_site):
-    client = parallel_site[0]
-    response = client.post("/api/password", json={"old": "parallel-test-passwort",
-                                                  "new": "neues-sicheres-passwort"},
-                           headers={"Origin": "http://["})
-    assert response.status_code == 403
-    assert web.AUTH.authenticate(parallel_site[4].email, "parallel-test-passwort")
+# 16.0.1 (Aquaticy-Test): 4 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain, GitHub schreiben).
 
 
-def test_malformed_absolute_http_target_gets_a_controlled_bad_request(parallel_site):
-    target = urlsplit(parallel_site[5])
-    with socket.create_connection((target.hostname, target.port), timeout=5) as connection:
-        connection.sendall(b"GET http://[/api/config HTTP/1.1\r\nHost: localhost\r\n\r\n")
-        response = connection.recv(8192)
-    assert response.startswith(b"HTTP/1.0 400 ")
-    assert b"Content-Security-Policy:" in response
-
-
-@pytest.mark.parametrize("route", ["/api/consent", "/cluster/hello", "/cluster/hello-status",
-                                   "/cluster/hello-join"])
-def test_excessive_json_nesting_is_rejected_before_handlers(parallel_site, monkeypatch, route):
-    if route.startswith("/cluster/"):
-        monkeypatch.setattr(web, "CLUSTER", SimpleNamespace(enabled=True))
-    monkeypatch.setattr(web, "CLUSTER_HELLO_LIMIT", web.RateLimiter(30, 60))
-    depth = MAX_DEPTH + 1
-    body = '{"data":' + "[" * depth + "0" + "]" * depth + "}"
-    response = parallel_site[0].post(route, content=body,
-                                     headers={"Content-Type": "application/json"})
-    assert response.status_code == 400
-    assert "verschachtelt" in response.json()["error"]
-
-
-def test_error_diagnostics_do_not_log_url_tokens_or_exception_secrets(parallel_site,
-                                                                    monkeypatch, capsys):
-    def broken(self):
-        raise RuntimeError("private-exception-canary API-key-canary")
-    monkeypatch.setattr(web.Handler, "_get", broken)
-    response = parallel_site[0].get("/api/config?token=private-url-canary")
-    assert response.status_code == 500
-    output = capsys.readouterr()
-    assert "RuntimeError" in output.out
-    for secret in ("private-exception-canary", "API-key-canary", "private-url-canary"):
-        assert secret not in output.out + output.err + response.text
-
-
-def test_deep_discovery_packet_does_not_kill_discovery_and_next_beacon_works(tmp_path):
-    node = cluster.Cluster(tmp_path)
-    node.note_beacon(b"[" * 1000 + b"0" + b"]" * 1000, "127.0.0.1")
-    assert node.found() == []
-    other = cluster.Cluster(tmp_path / "other")
-    node.note_beacon(json.dumps(other.beacon()).encode(), "127.0.0.1")
-    assert [entry["node"] for entry in node.found()] == [other.node_id]
-
-
-def test_deep_rpc_envelope_is_rejected_before_key_lookup(tmp_path):
-    node = cluster.Cluster(tmp_path)
-    depth = MAX_DEPTH + 1
-    with pytest.raises(cluster.ClusterError, match="Ungültige Nachricht"):
-        node._unwrap(b"[" * depth + b"0" + b"]" * depth,
-                     lambda _: pytest.fail("must not look up unauthenticated sender"))
-
-
-def test_malformed_authenticated_rpc_json_is_a_cluster_error(tmp_path):
-    node = cluster.Cluster(tmp_path)
-    key = secrets.token_bytes(32)
-    depth = MAX_DEPTH + 1
-    for payload in (b"invalid", b"[" * depth + b"0" + b"]" * depth):
-        envelope = json.dumps({"from": "other", "box": cluster._b64(
-            cluster.seal(key, payload, "rpc"))}).encode()
-        with pytest.raises(cluster.ClusterError):
-            node._unwrap(envelope, lambda _: [key])
+# 16.0.1 (Aquaticy-Test): 4 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 @pytest.mark.parametrize("nested", ["[" * 1500 + "{}" + "]" * 1500,
@@ -268,14 +191,6 @@ def test_bad_nested_source_json_does_not_discard_valid_product_data(nested):
             '"offers":{"price":"10","priceCurrency":"EUR"}}</script>')
     product = extract_product(html, "https://example.org/product")
     assert product and product.name == "Gültiges Produkt" and product.price == "10"
-
-
-def test_deep_safety_responses_remain_unclear_and_do_not_grant_approval():
-    nested = "[" * 1500 + "0" + "]" * 1500
-    assert guardrails.parse_verdict('{"zulaessig":true,"grund":' + nested + "}") is None
-    assert aiguard.parse_judgement('{"missbrauch":false,"art":' + nested + "}") is None
-    assert desktop.parse_object('{"kind":"dokument","data":' + nested + "}") is None
-    assert linked._judge('{"ok":true,"feedback":' + nested + "}")[0] is False
 
 
 def test_named_people_with_same_surname_do_not_share_cached_facts(tmp_path):

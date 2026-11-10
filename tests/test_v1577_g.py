@@ -7,7 +7,7 @@ import sys
 import httpx
 import pytest
 
-from aquaticy import cli, fetch, lan, old_server, private_json, secure_pro
+from aquaticy import cli, fetch, old_server
 
 
 def test_f059_untrusted_robots_wildcards_cannot_trigger_exponential_matching():
@@ -37,42 +37,9 @@ def test_f062_an_unresolved_robots_redirect_is_not_treated_as_permission(monkeyp
         assert policy.check('https://example.org/private') == 'robots_unavailable'
 
 
-def _watcher(tmp_path, monkeypatch, send):
-    secure_pro.configure(tmp_path, '192.168.1.0/24')
-    monkeypatch.setattr(lan, 'scan', lambda *a, **kw: [
-        lan.Device(f'192.168.1.{n}', ports=[21]) for n in range(2, 22)])
-    return secure_pro.Watcher(tmp_path, send)
-
-
-def test_f063_revoking_secure_pro_stops_remaining_chunks_of_an_alert(tmp_path, monkeypatch):
-    sent = []
-
-    def send(text):
-        sent.append(text)
-        secure_pro.disable(tmp_path)
-        return True
-
-    watcher = _watcher(tmp_path, monkeypatch, send)
-    monkeypatch.setattr(secure_pro, 'RISK_PORTS', {21: 'FTP-' + 'x' * 220})
-    watcher.tick()
-    assert len(sent) == 1
-
-
-def test_f064_failed_history_writes_do_not_mark_findings_as_already_recorded(tmp_path, monkeypatch):
-    watcher = _watcher(tmp_path, monkeypatch, lambda text: True)
-    write = private_json.write
-    failed = []
-
-    def interrupted(path, data):
-        if path == secure_pro.history_path(tmp_path) and not failed:
-            failed.append(True)
-            raise OSError('disk temporarily unavailable')
-        write(path, data)
-
-    monkeypatch.setattr(private_json, 'write', interrupted)
-    watcher.tick()
-    watcher.tick()
-    assert secure_pro.read_history(tmp_path)['events']
+# 16.0.1 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (virtual machine, Messenger, Verbund, Auto-Upgrading, Coworker,
+# Heimnetz, Home Assistant, Lager, eigene Domain).
 
 
 def test_f065_the_default_terminal_chat_is_not_misidentified_as_a_web_server(monkeypatch):
