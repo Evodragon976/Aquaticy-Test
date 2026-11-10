@@ -19,9 +19,6 @@ from aquaticy.auth import AuthStore
 from aquaticy.calc import CalcError, calculate
 from aquaticy.extract import extract_product
 from aquaticy.jsonutil import MAX_DEPTH, JsonDepthError, loads
-from aquaticy.learning import Learning
-from aquaticy.legal import LEGAL_VERSION
-from tests.test_terra import FACT, QUESTION, SOURCE, remember
 from tests.test_v965 import parallel_site as parallel_site
 
 
@@ -193,11 +190,6 @@ def test_bad_nested_source_json_does_not_discard_valid_product_data(nested):
     assert product and product.name == "Gültiges Produkt" and product.price == "10"
 
 
-def test_named_people_with_same_surname_do_not_share_cached_facts(tmp_path):
-    store = Learning(tmp_path)
-    store.set_consent(True, LEGAL_VERSION)
-    assert remember(store) == 1
-    assert store.research.recall("Welche Arbeiten von Mileva Einstein sind bekannt?") == []
-    assert store.research.recall(QUESTION) == [{"text": "- " + FACT, "source": SOURCE}]
-    assert store.research.recall("Was erforschte Einstein?")
-    assert remember(store, question="Welche Arbeiten von Mileva Einstein sind bekannt?") == 0
+# 16.0.2 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (Gemeinsames Lernen, Recherchecache, Webcams und Satellitenbilder,
+# Einstellungen unter Helfer & Grenzen).

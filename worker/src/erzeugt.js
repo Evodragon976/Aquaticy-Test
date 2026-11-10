@@ -49,7 +49,6 @@ export const DATEN = {
    "system"
   ],
   "tracing": "bool",
-  "visual_sources": "bool",
   "voice_ok": "bool"
  },
  "pruefer": {
@@ -1046,8 +1045,8 @@ export const DATEN = {
    "UNKLAR": "nothing solid found"
   }
  },
- "version": "16.0.1",
- "version_label": "16.0.1",
+ "version": "16.0.2",
+ "version_label": "16.0.2",
  "wetterlage": {
   "0": "klar",
   "1": "überwiegend klar",
@@ -1098,7 +1097,6 @@ export const DATEN = {
   "structured": false,
   "theme": "system",
   "tracing": false,
-  "visual_sources": false,
   "voice_ok": false
  }
 };

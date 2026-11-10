@@ -198,7 +198,11 @@ def test_current_values_covers_every_setting_key(session: web.ChatSession) -> No
     assert set(values) == set(web.SETTING_KEYS)
     assert values["AQUATICY_MODEL"] == "mistral/mistral-large-latest"
     assert values["AQUATICY_LOCATION"] == "Bremen"
-    assert values["AQUATICY_SUBAGENTS_AUTO"] == "false"
+    # 16.0.2 (Aquaticy-Test): Die Einstellungen unter Helfer & Grenzen sind entfallen.
+    for weg in ("AQUATICY_SUBAGENTS_AUTO", "AQUATICY_MAX_SUBAGENTS", "AQUATICY_SUBAGENT_BUDGET",
+                "AQUATICY_SUBAGENT_PARALLEL", "AQUATICY_RPM", "AQUATICY_PARALLEL_CALLS",
+                "AQUATICY_MAX_TOOL_CALLS", "AQUATICY_PLANNER_TIMEOUT"):
+        assert weg not in values
 
 
 def test_current_values_are_all_strings(session: web.ChatSession) -> None:
@@ -337,34 +341,9 @@ def test_chat_streams_steps_and_answer(client, session: web.ChatSession) -> None
     assert events[0]["query"] == "Kaffee Bremen"
 
 
-def test_public_visual_sources_require_an_explicit_vision_model(client) -> None:
-    status, body = client(
-        "POST", "/api/chat", {"message": "Was passiert in Köln?", "visual_sources": True}
-    )
-    assert status == 400
-    assert "Vision-Modell" in body.decode("utf-8")
-
-
-def test_a_vision_capable_main_model_enables_public_visual_sources(
-    client, session: web.ChatSession, agent: FakeAgent
-) -> None:
-    session.settings().model = "ollama_chat/gemma4:latest"
-    status, _ = client(
-        "POST", "/api/chat", {"message": "Was passiert in Köln?", "visual_sources": True}
-    )
-    assert status == 200
-    assert agent.asked == ["Was passiert in Köln?"]
-
-
-def test_a_separately_selected_vision_model_enables_public_visual_sources(
-    client, session: web.ChatSession, agent: FakeAgent
-) -> None:
-    session.settings().vision_model = "ollama_chat/llava:7b"
-    status, _ = client(
-        "POST", "/api/chat", {"message": "Prüfe das Satellitenbild", "visual_sources": True}
-    )
-    assert status == 200
-    assert agent.asked == ["Prüfe das Satellitenbild"]
+# 16.0.2 (Aquaticy-Test): 4 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (Gemeinsames Lernen, Recherchecache, Webcams und Satellitenbilder,
+# Einstellungen unter Helfer & Grenzen).
 
 
 def test_done_arrives_exactly_once(client, session: web.ChatSession) -> None:
@@ -990,7 +969,7 @@ def test_a_broken_route_answers_500_instead_of_dying(
     monkeypatch.setattr(web, "current_values", boom)
     status, _, body = raw_request(port, "GET", "/api/config")
     assert status == 500
-    assert json.loads(body)["error"].startswith("Bei Aquaticy ist etwas schiefgelaufen.")
+    assert json.loads(body)["error"].startswith("Hoppla, da ist bei mir etwas schiefgelaufen.")
     output = capfd.readouterr()
     assert "RuntimeError" in output.out
     assert "kaputt" not in output.out
@@ -3003,9 +2982,10 @@ def test_no_plain_checkbox_is_left_over() -> None:
     html = web.UI_FILE.read_text(encoding="utf-8")
     roh = html.count('<input type="checkbox"')
     angezogen = html.count('<input type="checkbox" role="switch" class="schalter"')
-    assert roh == angezogen + 2
+    # 16.0.2 (Aquaticy-Test): Das Haekchen fuer Gemeinsames Lernen ist entfallen.
+    assert roh == angezogen + 1
     assert '<input type="checkbox" id="auth-terms" required>' in html
-    assert '<input type="checkbox" id="consent-learning">' in html
+    assert 'id="consent-learning"' not in html
 
 
 def test_changing_a_setting_does_not_start_a_new_chat(
@@ -3104,26 +3084,24 @@ def test_a_number_field_with_letters_is_refused(client) -> None:
 
 
 def test_a_number_outside_its_range_is_refused(client) -> None:
-    status, data = client("POST", "/api/config", {"AQUATICY_MAX_SUBAGENTS": "5000"})
+    # 16.0.2 (Aquaticy-Test): AQUATICY_MAX_SUBAGENTS ist nicht mehr einstellbar.
+    status, data = client("POST", "/api/config", {"AQUATICY_SEARCH_VARIANTS": "5000"})
     assert status == 400
     assert "ausserhalb" in json.loads(data)["error"]
 
 
-def test_the_request_rate_is_settable_and_checked(client) -> None:
-    """Wer einen größeren Vertrag hat, hebt die Grenze an -- aber mit Zahlen."""
-    assert "AQUATICY_RPM" in web.SETTING_KEYS
-    assert "AQUATICY_PARALLEL_CALLS" in web.SETTING_KEYS
-
-    status, data = client("POST", "/api/config", {"AQUATICY_RPM": "viele"})
-    assert status == 400
-    assert "keine Zahl" in json.loads(data)["error"]
-
-    status, data = client("POST", "/api/config", {"AQUATICY_PARALLEL_CALLS": "500"})
-    assert status == 400
-    assert "ausserhalb" in json.loads(data)["error"]
-
-
-    assert client("POST", "/api/config", {"AQUATICY_RPM": ""})[0] == 200
+def test_helper_limits_are_no_longer_settable(client, web_settings: Settings) -> None:
+    """16.0.2 (Aquaticy-Test): Helfer & Grenzen gibt es nicht mehr -- weder im Formular
+    noch ueber /api/config. Es gelten die festen Werte."""
+    html = web.UI_FILE.read_text(encoding="utf-8")
+    assert "Helfer &amp; Grenzen" not in html
+    for key in ("AQUATICY_RPM", "AQUATICY_PARALLEL_CALLS", "AQUATICY_SUBAGENT_BUDGET",
+                "AQUATICY_MAX_TOOL_CALLS", "AQUATICY_PLANNER_TIMEOUT"):
+        assert key not in web.SETTING_KEYS
+        assert f'name="{key}"' not in html
+    vorher = web.SESSION.settings().max_tool_calls
+    client("POST", "/api/config", {"AQUATICY_MAX_TOOL_CALLS": "199"})
+    assert web.SESSION.settings().max_tool_calls == vorher
 
 
 # 16.0.1 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
@@ -3603,7 +3581,8 @@ def test_a_fresh_form_can_be_saved_as_it_is(client, web_settings: Settings) -> N
     erst ab 1 zu -- ein frisches Konto konnte gar nichts speichern."""
     _, body = client("GET", "/api/config")
     werte = json.loads(body)["values"]
-    assert werte["AQUATICY_SUBAGENT_PARALLEL"] == "0"
+    # 16.0.2 (Aquaticy-Test): "Gleichzeitig" ist mit Helfer & Grenzen entfallen.
+    assert "AQUATICY_SUBAGENT_PARALLEL" not in werte
     status, data = client("POST", "/api/config", werte)
     assert status == 200, data
 

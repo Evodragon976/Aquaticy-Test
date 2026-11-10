@@ -96,7 +96,6 @@ FIELDS: dict[str, tuple[Any, Any]] = {
     "tracing": (False, bool),
     "load": (False, bool),
     "agents": (12, AGENT_COUNTS),
-    "visual_sources": (False, bool),
 
     "autoscroll": (True, bool),
     "voice_ok": (False, bool),

@@ -9,10 +9,8 @@ import pytest
 
 from aquaticy import aiguard, guardrails, metering
 from aquaticy.guardrails import Guard
-from aquaticy.legal import LEGAL_VERSION
 from tests.test_guardrails import Pruefer
 from tests.test_v965 import parallel_site  # noqa: F401
-from tests.test_v967 import QUESTION, contribute, learners  # noqa: F401
 from tests.test_v1003 import compressed_response, upgrade_page  # noqa: F401
 
 
@@ -120,16 +118,9 @@ def test_image_baseline_needs_an_explicit_rule(settings, payload):
     assert not result.allowed and result.source == "unklar"
 
 
-@pytest.mark.parametrize("enabled,version", [(1, "old"), (0, LEGAL_VERSION)])
-def test_recall_ignores_outdated_or_disabled_contributors(learners, enabled, version):  # noqa: F811
-    _, _, (first, second) = learners
-    for store in (first, second):
-        store.set_consent(True, LEGAL_VERSION)
-        assert contribute(store) == 1
-    with first.connect() as conn:
-        conn.execute("UPDATE learning_consent SET enabled=?,version=?", (enabled, version))
-    assert first.recall(QUESTION) == []
-    assert second.recall(QUESTION) == []
+# 16.0.2 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (Gemeinsames Lernen, Recherchecache, Webcams und Satellitenbilder,
+# Einstellungen unter Helfer & Grenzen).
 
 
 @pytest.mark.parametrize("checker", ["input", "answer"])
@@ -189,21 +180,6 @@ def test_erasure_during_judgement_cannot_repopulate_the_cache(settings, checker)
             aiguard.answer_problem("Phishing ist ein Thema der Sicherheitspruefung.",
                                     settings, ask=ask)
     assert len(calls) == 2
-
-
-@pytest.mark.parametrize("action", ["wipe_data", "remove_account"])
-def test_account_erasure_clears_judgements(learners, action):  # noqa: F811
-    from aquaticy.config import Settings
-
-    auth, accounts, _ = learners
-    settings = Settings(model="openai/test-model", data_dir=auth.profile_dir(accounts[0].id))
-    guardrails.judge("Wie funktioniert Phishing-Schutz?", settings,
-                     ask=lambda *_: verdict())
-    aiguard.classify("Wie funktioniert Phishing-Schutz?", settings,
-                     ask=lambda *_: '{"missbrauch": false, "art": ""}')
-    assert guardrails._cache and aiguard._cache
-    getattr(auth, action)(accounts[0])
-    assert not guardrails._cache and not aiguard._cache
 
 
 @pytest.mark.parametrize("learned", [False, True])

@@ -82,12 +82,14 @@ def test_follow_up_weather_question() -> None:
 
 def test_unknown_questions_are_honest_and_point_to_keys() -> None:
     antwort = frag("Wie geht es dem Universum?")
-    assert "ohne Sprachmodell nicht beantworten" in antwort and "Add-ons" in antwort
+    # 16.0.2: menschlicher formuliert -- ehrlich bleibt es, und der Weg zu den Schluesseln auch.
+    assert "ohne Sprachmodell" in antwort and "Add-ons" in antwort
+    assert "Was kannst du?" in antwort
 
 
 def test_weather_without_a_place_uses_the_home_town() -> None:
     assert "**Heute in Bremen:**" in frag("Wie wird das Wetter?", wohnort="Bremen")
-    assert "Für welchen Ort?" in frag("Wie wird das Wetter?")
+    assert standard.ORT_FRAGE in frag("Wie wird das Wetter?")
 
 
 def test_it_confirms_what_it_remembered() -> None:
@@ -165,3 +167,102 @@ def test_the_key_hint_comes_on_the_first_start_and_every_fifth_per_account(
     assert [web.key_hint_due(konto_a) for _ in range(11)] == [
         True, False, False, False, False, True, False, False, False, False, True]
     assert web.key_hint_due(konto_b) is True
+
+
+# -- 16.0.2: Gespraechsspeicher und neue Antworten ---------------------------------------------
+
+def gespraech(*fragen: str) -> list[str]:
+    verlauf: list[dict[str, Any]] = []
+    antworten = []
+    for text in fragen:
+        antwort = frag(text, verlauf=verlauf)
+        verlauf += [{"role": "user", "content": text}, {"role": "assistant", "content": antwort}]
+        antworten.append(antwort)
+    return antworten
+
+
+def test_the_place_after_the_question_answers_the_open_question() -> None:
+    """Der Fehler aus 16.0.1: nach "Fuer welchen Ort?" kam bei "Erkelenz" nur "Kann ich nicht"."""
+    frage, ort = gespraech("wie wird das wetter heute", "Erkelenz")
+    assert standard.ORT_FRAGE in frage
+    assert "**Heute in Bremen:**" not in ort and "Heute in" in ort
+    assert "ohne Sprachmodell" not in ort
+
+
+def test_the_last_place_counts_for_the_next_questions() -> None:
+    antworten = gespraech("Wetter in Berlin", "was soll ich anziehen?", "und morgen?",
+                          "brauche ich morgen einen Schirm?")
+    assert "in **Berlin**" in antworten[1] and "zieh am besten" in antworten[1]
+    assert "**Morgen in Berlin:**" in antworten[2]
+    assert "Für morgen in **Berlin**" in antworten[3] and "Schirm" in antworten[3]
+
+
+def test_clothing_advice_asks_for_the_place_first() -> None:
+    frage, rat = gespraech("Was soll ich heute anziehen?", "in Bremen")
+    assert standard.ORT_FRAGE in frage and "Anziehen" in frage
+    assert "in **Bremen**" in rat and "zieh am besten" in rat
+
+
+def test_a_normal_question_is_not_taken_for_a_place() -> None:
+    _, rechnung = gespraech("Wie wird das Wetter?", "Was ist 2 + 3?")
+    assert rechnung == "**5**"
+
+
+@pytest.mark.parametrize(("frage", "teil"), [
+    ("Wann geht die Sonne unter in Berlin?", "Sonne"),
+    ("Wie wird das Wetter die nächsten Tage in Berlin?", "Die nächsten Tage in Berlin"),
+    ("Wann ist der nächste Feiertag?", "1. Weihnachtstag"),
+    ("Wann ist Pfingstmontag?", "Pfingstmontag"),
+    ("Ist heute Vollmond?", "Vollmond"),
+    ("Ich bin am 3.5.1990 geboren. Wie alt bin ich?", "**36 Jahre**"),
+    ("15 % Trinkgeld auf 42 Euro", "**6,30 €**"),
+    ("BMI 80 kg 1,80 m", "**24,7**"),
+    ("Mir ist langweilig", "Ideen"),
+    ("Erzähl mir einen Fun Fact", "Wusstest du schon?"),
+    ("Was kannst du?", "ohne Sprachmodell"),
+])
+def test_new_answers(frage: str, teil: str) -> None:
+    assert teil in frag(frage)
+
+
+def test_a_password_is_random_long_and_mixed() -> None:
+    import re
+
+    antwort = frag("Generiere ein Passwort mit 16 Zeichen")
+    wort = re.search(r"`([^`]+)`", antwort)
+    assert wort and len(wort[1]) == 16
+    assert any(c.isupper() for c in wort[1]) and any(c.isdigit() for c in wort[1])
+    assert frag("Generiere ein Passwort") != antwort
+
+
+def test_the_time_in_another_city() -> None:
+    def mit_zone(url: str) -> Any:
+        if "geocoding" in url:
+            return {"results": [{"name": "New York", "timezone": "America/New_York"}]}
+        return holen(url)
+
+    antwort = frag("Wie spät ist es in New York?", holen=mit_zone)
+    assert "**11:30 Uhr**" in antwort and "6 Stunden weniger" in antwort
+
+
+def test_the_weekend_forecast() -> None:
+    def sieben_tage(url: str) -> Any:
+        if "forecast" in url:
+            return {"daily": {"weather_code": [61, 0, 3, 1, 2, 0, 63],
+                              "temperature_2m_max": [9, 11, 8, 10, 12, 14, 7],
+                              "temperature_2m_min": [3, 4, 2, 3, 5, 6, 2],
+                              "precipitation_probability_max": [70, 10, 20, 5, 10, 0, 80]}}
+        return holen(url)
+
+    antwort = frag("Wetter in Berlin am Wochenende", holen=sieben_tage)
+    assert "**Das Wochenende in Berlin:**" in antwort
+    assert "**Sa 14.11.:**" in antwort and "**So 15.11.:**" in antwort
+    assert "Am schönsten wird es wohl" in antwort
+
+
+def test_a_new_home_town_wins_over_the_last_place() -> None:
+    verlauf = [{"role": "user", "content": "Wetter in Berlin"},
+               {"role": "assistant", "content": frag("Wetter in Berlin")},
+               {"role": "user", "content": "Ich wohne in Bremen."},
+               {"role": "assistant", "content": "Alles klar, das merke ich mir."}]
+    assert "in Bremen:**" in frag("Wie wird das Wetter morgen?", verlauf=verlauf, wohnort="Bremen")

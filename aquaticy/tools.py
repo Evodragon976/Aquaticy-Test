@@ -17,7 +17,6 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +43,6 @@ EventHook = Callable[[str, dict[str, Any]], None]
 SpecExtractor = Callable[[str, str], dict[str, str]]
 
 AskHandler = Callable[[str, list[str]], str]
-VisualInspector = Callable[[str, str], str]
 
 
 MAX_QUESTIONS = 2
@@ -162,28 +160,6 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
 ]
-
-PUBLIC_VISUAL_SCHEMA: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "inspect_public_visual",
-        "description": (
-            "Öffnet ein frei zugängliches Webcam-, Satelliten-, Karten- oder Straßenbild "
-            "(oder eine Seite, die es enthält), nimmt einen Schnappschuss und lässt ihn "
-            "vom Vision-Modell beschreiben. "
-            "Nutze nur öffentliche Quellen und übergib den sichtbaren Sachverhalt, den "
-            "du prüfen möchtest. Das Ergebnis ist eine Beobachtung, kein Ereignisnachweis."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "url": {"type": "string", "description": "Öffentliche http(s)-Adresse."},
-                "question": {"type": "string", "description": "Was im Bild geprüft werden soll."},
-            },
-            "required": ["url", "question"],
-        },
-    },
-}
 
 
 NEWS_SCHEMA: dict[str, Any] = {
@@ -635,7 +611,7 @@ WORK_TOOLS: dict[str, str] = {
     "secure_advisories": "suche", "secure_read_advisory": "seite",
     "web_search": "suche", "search_news": "suche", "local_places": "suche",
     "find_profiles": "suche", "weather": "suche", "github": "suche",
-    "fetch_page": "seite", "inspect_public_visual": "seite", "read_feeds": "seite",
+    "fetch_page": "seite", "read_feeds": "seite",
     "news_tagesschau": "suche", "wikipedia": "suche", "currency": "suche",
     "holidays": "suche",
 }
@@ -870,11 +846,11 @@ SETTING_SCHEMA: dict[str, Any] = {
         "name": "change_setting",
         "description": (
             "Aendert eine Einstellung, wenn der Nutzer darum bittet -- etwa 'mach den "
-            "Hintergrund weiss', 'such lieber auf Englisch', 'nimm weniger Teilfragen'. "
+            "Hintergrund weiss', 'such lieber auf Englisch'. "
             "Moegliche Namen: aussehen (hell/dunkel), farbschema (standard, nord, "
             "catppuccin, gruvbox, tokyo_night, solarized, dracula, rose_pine), "
             "ort, sprache, land, suchmaschine, "
-            "formulierungen, subagenten (an/aus), subagenten_anzahl, werkzeug_budget, "
+            "formulierungen, "
             "kontextfenster, browser_fallback (an/aus), modell. "
             "NICHT aenderbar sind Zugangsdaten und alles, was mir mehr Zugriff gaebe: "
             "Schalten im Haus, Mail und Kalender, Schreibrechte im Lager, Netzzugriff, "
@@ -914,8 +890,6 @@ class ToolStats:
     products: list[Product] = field(default_factory=list)
     visuals: list[dict[str, str]] = field(default_factory=list)
     sources: list[dict[str, str]] = field(default_factory=list)
-    learning_pages: list[tuple[str, str]] = field(default_factory=list)
-    research_pages: list[tuple[str, str]] = field(default_factory=list)
     calculations: int = 0
     notes_saved: int = 0
 
@@ -963,8 +937,6 @@ class ToolStats:
         self.products.clear()
         self.visuals.clear()
         self.sources.clear()
-        self.learning_pages.clear()
-        self.research_pages.clear()
         self.calculations = 0
         self.notes_saved = 0
         self.questions = 0
@@ -1012,13 +984,11 @@ class Toolbox:
         on_event: EventHook | None = None,
         spec_extractor: SpecExtractor | None = None,
         fetcher: Fetcher | None = None,
-        visual_inspector: VisualInspector | None = None,
     ) -> None:
         self.settings = settings
         self.cache = cache
         self.on_event = on_event
         self.spec_extractor = spec_extractor
-        self.visual_inspector = visual_inspector
         self.rules = load_rules()
         self.stats = ToolStats()
 
@@ -1033,8 +1003,6 @@ class Toolbox:
         self._github_private = False
 
         self.untrusted_seen = False
-
-        self.learning_ticket = ""
 
         self.user_said = ""
 
@@ -1243,18 +1211,6 @@ class Toolbox:
                     self.cache.set(key, page.model_dump(), kind="page", label=page.title or url,
                                    ttl=dauer)
         if page.ok:
-            if getattr(self, "learning_ticket", "") and len(self.stats.learning_pages) < 6:
-                from aquaticy.learning import public_source
-
-                source = page.final_url or url
-                if public_source(url) and public_source(source):
-                    self.stats.learning_pages.append((source, page.text[:48000]))
-            if getattr(self, "learning_ticket", "") and len(self.stats.research_pages) < 6:
-                from aquaticy.research import source_url
-
-                source = page.final_url or url
-                if source_url(url) and source_url(source):
-                    self.stats.research_pages.append((source, page.text[:48000]))
             self.stats.fetched.append(page.final_url or url)
             domain = page.source_domain or domain_of(url)
             self.stats.sources.append(
@@ -2024,65 +1980,6 @@ class Toolbox:
             )
         if name == "fetch_page":
             return self.fetch_page(url=str(arguments.get("url", "")))
-        if name == "inspect_public_visual":
-            if self.visual_inspector is None:
-                return {"error": "Es ist kein Vision-Modell ausgewählt."}
-            source_url = str(arguments.get("url", "")).strip()
-            loaded = None
-            loader = getattr(self._fetcher, "load_public_visual", None)
-            if loader is not None:
-                import base64
-
-                loaded, error = loader(source_url)
-                url = loaded.url if loaded else ""
-                vision_url = (
-                    f"data:{loaded.content_type};base64,"
-                    + base64.b64encode(loaded.content).decode("ascii")
-                    if loaded
-                    else ""
-                )
-                mime_type = loaded.content_type if loaded else ""
-            else:
-                url, error = self._fetcher.find_public_visual(source_url)
-                vision_url = url
-                mime_type = ""
-            if error:
-                return {"error": error}
-            question = str(arguments.get("question", "")).strip()
-            try:
-                analysis = self.visual_inspector(vision_url, question)
-            except Exception as exc:
-                return {"error": str(exc), "url": url}
-            checked_at = datetime.now(UTC).isoformat(timespec="seconds")
-            media_id = ""
-            if loaded:
-                try:
-                    from aquaticy.media import save_snapshot
-
-                    media_id = save_snapshot(
-                        self.settings.data_dir, loaded.content, loaded.content_type
-                    )
-                except (OSError, ValueError):
-                    media_id = ""
-            self.stats.fetched.append(url)
-            visual = {
-                "url": url,
-                "source_url": source_url,
-                "title": question or "Öffentliches aktuelles Bild",
-                "kind": "public_visual",
-            }
-            if loaded:
-                visual["captured_at"] = checked_at
-            if media_id:
-                visual["media_id"] = media_id
-            if mime_type:
-                visual["mime_type"] = mime_type
-            self.stats.visuals.append(visual)
-            return {
-                **visual,
-                "checked_at": checked_at,
-                "observation": analysis,
-            }
         if name == "search_news":
             return self.search_news(
                 query=str(arguments.get("query", "")),

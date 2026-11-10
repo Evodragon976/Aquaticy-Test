@@ -101,8 +101,8 @@ def test_settings_are_grouped() -> None:
     legenden = re.findall(r"<legend>(.*?)</legend>", formular)
     # 16.0.0 (Aquaticy-Test): ohne Mitlesen, Auslastung, Zuhause & Netz, VM und Messenger;
     # Add-ons und Secure Pro (nur Fragen) haben eigene Abschnitte.
-    assert legenden == ["Konto", "Nutzung", "Speicher", "Gemeinsames Lernen",
-                        "Ort &amp; Sprache", "Suche", "Helfer &amp; Grenzen",
+    # 16.0.2 (Aquaticy-Test): ohne Gemeinsames Lernen und ohne Helfer & Grenzen.
+    assert legenden == ["Konto", "Nutzung", "Speicher", "Ort &amp; Sprache", "Suche",
                         "Gmail &amp; Kalender", "Add-ons", "Secure Pro", "Dev settings"]
 
     def abschnitt(legende: str) -> str:
@@ -122,6 +122,5 @@ def test_settings_are_grouped() -> None:
     assert dev.index('id="legalguard"') < dev.index('id="legal-rules"') < dev.index(
         'id="automodel"'), "die Leitplanken stehen bei ihren Regeln"
     assert formular.count('href="/privacy"') == 1, "der Datenschutz-Link stand doppelt da"
-    assert "Ab Werk an." in " ".join(abschnitt("Helfer &amp; Grenzen").split())
 
 

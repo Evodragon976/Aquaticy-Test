@@ -335,7 +335,8 @@ def test_the_page_solves_in_the_background_and_shows_the_slider() -> None:
     assert 'data.code === "dropped"' in absenden
     formular = html[html.index('<form id="auth-form">'):html.index("</form>")]
     assert '<input type="range" id="human-slider"' in formular
-    assert "Bestätige kurz, dass du ein Mensch bist" in formular
+    # 16.0.2 (Aquaticy-Test): freundlicher formuliert.
+    assert "Schieb den Regler ganz nach rechts" in formular
 
 
 def test_the_javascript_hash_matches_python() -> None:

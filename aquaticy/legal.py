@@ -83,75 +83,8 @@ getippte Frage. Eine Aufnahme erreicht den Server nie. Vor der ersten Nutzung er
 Hinweis; dass du ihn bestätigt hast, merkt sich dein Konto.</p>
 <p>Aquaticy enthält keine Werbe-, Analyse- oder Tracking-SDKs und verkauft keine Nutzerdaten.</p>
 <h2>Speicherdauer und Kontrolle</h2>
-<h3>Freiwilliges gemeinsames Lernen</h3>
-<p>Nur mit deiner gesonderten Zustimmung unter Einstellungen → Gemeinsames Lernen
-kann Aquaticy passende kurze Auszüge aus bereits gelesenen öffentlichen Sachartikeln
-für spätere Chats aller Konten dieser Installation und ihres verbundenen Server-Verbunds
-speichern. Alte Datenschutz-Zustimmungen aktivieren dies nicht. Die App bleibt ohne diese
-freiwillige Zustimmung nutzbar. Es werden keine privaten Fragen, Antworten, Uploads,
-Erinnerungen, Kontonamen oder Chatkennungen als Lerntexte übernommen. Zurzeit sind nur
-ausgewählte Wikipedia-Sachartikel zu Mathematik, Naturwissenschaften und Informatik erlaubt.
-Personenangaben, erkennbare Geheimnisse und Anweisungen werden zusätzlich aussortiert.</p>
-<p>Gespeichert werden verschlüsselte Originalauszüge und ihre öffentliche Quellenadresse
-für höchstens 30 Tage zur Nutzung. Abgelaufene Auszüge werden beim nächsten Zugriff auf den
-Wissensspeicher gelöscht. Die Texte enthalten keinen Bezug zu deinem Chat. Für Widerruf und
-Löschung wird getrennt ein Schlüssel-Hash deines Kontos mit den Beiträgen verknüpft;
-diese Verwaltungsdaten sind pseudonym, nicht vollständig anonym. Aquaticy nutzt die Auszüge
-als ausdrücklich unvertrauenswürdiges Recherchematerial, trainiert damit keine Modellgewichte
-und sendet sie beim Beantworten passender Fragen an den dafür ausgewählten Modellanbieter.
-Öffentliche Quellen können Fehler enthalten; wichtige Angaben müssen erneut geprüft werden.</p>
-<p>Wenn ein Ultra-Konto das serverweite Auto-Upgrading einschaltet, können von mindestens
-zwei aktuell zustimmenden Konten unabhängig bestätigte Auszüge außerdem in den Systemtext
-abgeleiteter lokaler Ollama-Modelle übernommen werden. Auch hierbei werden keine Modellgewichte
-trainiert und keine privaten Chats übernommen. Ollama speichert diese öffentlichen Auszüge
-im Modell-Systemtext unverschlüsselt; Zugriff auf den Ollama-Dienst muss der Betreiber schützen.
-Aquaticy prüft vor der Nutzung solcher Fassungen, ob alle eingebauten Auszüge noch gültig und
-ausreichend bestätigt sind. Bei Ablauf, Widerruf, Kontolöschung oder erforderlicher erneuter
-Zustimmung zieht Aquaticy betroffene Fassungen zurück und nutzt das Ausgangsmodell.
-Die Löschung im Ollama-Dienst wird beim nächsten Hintergrundabgleich versucht
-(außerhalb aktiver Trainingsläufe etwa alle zehn Minuten) und bei Ausfällen wiederholt.
-Alte Fassungen ohne
-nachprüfbare Quellenzuordnung werden ebenfalls zurückgezogen; neue Fassungen entstehen erst
-aus aktuell freigegebenem Wissen. Bereits entstandene externe Sicherungen des Ollama-Dienstes
-liegen in der Verantwortung des Betreibers.</p>
-<p>Du kannst die Zustimmung jederzeit dort widerrufen. Das stoppt neue Übernahmen und
-entfernt deine Beitragszuordnung. Ein Auszug wird gelöscht, wenn kein anderes zustimmendes
-Konto denselben öffentlichen Auszug unabhängig beigetragen hat. „Alle Daten löschen“ und
-„Konto löschen“ widerrufen ebenfalls die Zustimmung und entfernen deine Beiträge.
-Der Server-Verbund übernimmt Löschungen beim nächsten erfolgreichen Abgleich; dessen
-verschlüsseltes Änderungsprotokoll wird nach seiner vorhandenen Aufbewahrungsfrist bereinigt.
-Bereits in Antworten anderer Konten verwendete öffentliche Auszüge und Sicherungen lassen
-sich dadurch nicht nachträglich entfernen. Änderungen dieser Erklärung erfordern eine
-neue ausdrückliche Zustimmung.</p>
-<h3>Kontoeigener Recherchecache (48 Stunden)</h3>
-<p>Die oben beschriebene freiwillige Zustimmung umfasst zusätzlich einen getrennten
-Recherchecache für dein Konto. Er speichert kurze Originalaussagen als einzelne
-Stichpunkte aus öffentlichen Wikipedia-Artikeln, auch über Personen, mit ihrer Quelle.
-Dabei können weitere zulässige Aussagen desselben recherchierten Artikels aufgenommen
-werden, auch wenn sie nicht in der ersten Antwort enthalten waren. Aus höchstens sechs
-gelesenen Artikeln werden je die ersten 48.000 Zeichen beziehungsweise 300 Sätze geprüft;
-die bestehenden Grenzen von 100 Stichpunkten pro Konto und 2.000 insgesamt gelten weiter.
-Jeder Stichpunkt enthält höchstens 400 Zeichen Quellentext. Beim Abruf werden höchstens
-zwölf passende Stichpunkte mit zusammen höchstens 3.200 Zeichen Quellentext ergänzt.
-Private Chatangaben und vollständige Antworten werden nicht übernommen. Erkennbare
-Kontaktangaben, Geheimnisse und sensible Personenangaben werden ausgeschlossen. Diese
-Filter können nicht jeden Grenzfall erkennen; deshalb sind die Auszüge ausschließlich
-für dein eigenes Konto verfügbar und werden nicht in das gemeinsame Wissen übernommen.</p>
-<p>Texte und Quellen sind verschlüsselt, die Suchbegriffe und Kontozuordnung sind
-Schlüssel-Hashes. Bei späteren passenden Fragen dienen die Auszüge nur als zusätzliche,
-unvertrauenswürdige Recherchegrundlage für eine neu formulierte Antwort. Sie werden an
-den dafür gewählten Modellanbieter übermittelt. Wichtige und aktuelle Angaben sollen
-erneut geprüft werden. Es findet kein Training der Modellgewichte statt.</p>
-<p>Ab der ersten Übernahme ist ein Auszug höchstens 48 Stunden nutzbar. Erneute Fragen
-verlängern diese Frist nicht. Jeder Lesezugriff sperrt abgelaufene Auszüge sofort und
-bereinigt sie. Zusätzlich räumt der laufende Webserver automatisch zum Ablauf auf;
-bei ausgeschaltetem Server erfolgt die Bereinigung nach dem nächsten Start.
-Pro Konto sind höchstens 100, insgesamt 2.000 Auszüge gespeichert. Ausschalten,
-„Alle Daten löschen“ und „Konto löschen“ entfernen auch diesen Recherchecache.
-Im verbundenen Server-Verbund wird er zur Nutzung desselben Kontos repliziert;
-andere Konten erhalten keinen Zugriff. Löschungen im Verbund gelten nach dem nächsten
-erfolgreichen Abgleich. Bestehende Chatverläufe, Sicherungen und das verschlüsselte
-Verbund-Änderungsprotokoll haben ihre eigenen Aufbewahrungsfristen.</p>
+<p>Gemeinsames Lernen und den kontoeigenen Recherchecache gibt es seit 16.0.2 nicht mehr.
+Was dort früher gespeichert war, löscht Aquaticy beim nächsten Start des Servers.</p>
 <p>Sitzungen laufen nach 30 Tagen ab. Alte Werkstätten werden nach ihrer Leerlaufzeit entfernt.
 Chats, Uploads, Erinnerungen und Aufträge bleiben bis zum Löschen durch den Nutzer oder
 Betreiber erhalten. In der Web-App kannst du Chats einzeln entfernen, Uploads leeren und

@@ -80,6 +80,27 @@ _SESSIONS_DDL = (
 )
 
 
+# 16.0.2 (Aquaticy-Test): Gemeinsames Lernen und der 48-Stunden-Recherchecache sind entfallen.
+# Was frueher dort gespeichert wurde, wird beim Start sicher geloescht.
+OLD_LEARNING_TABLES = ("learning_consent", "learning_facts", "learning_contributions",
+                       "learning_terms", "research_facts", "research_terms")
+
+
+def forget_shared_learning(db_path: Path | str) -> None:
+    """Loescht die Tabellen des frueheren gemeinsamen Lernens, falls es sie noch gibt."""
+    pfad = Path(db_path)
+    if not pfad.exists():
+        return
+    conn = sqlite3.connect(pfad, timeout=10)
+    try:
+        conn.execute("PRAGMA secure_delete=ON")
+        with conn:
+            for tabelle in OLD_LEARNING_TABLES:
+                conn.execute(f"DROP TABLE IF EXISTS {tabelle}")  # nosec B608 -- feste Namen
+    finally:
+        conn.close()
+
+
 @dataclass(frozen=True, slots=True)
 class Account:
     id: str
@@ -429,9 +450,7 @@ class AuthStore:
 
         self._vault_secret: bytes | None = None
         self._setup()
-        from aquaticy.learning import Learning
-
-        Learning(self.data_dir)
+        forget_shared_learning(self.db_path)
 
     def _load_pepper(self) -> bytes:
         path = self.data_dir / "auth.key"
@@ -1410,16 +1429,13 @@ class AuthStore:
         if profile.is_symlink():
             raise ValueError("Das Kontoprofil ist ein symbolischer Link; nichts gelöscht.")
         from aquaticy import aiguard, guardrails
-        from aquaticy.learning import Learning
 
-        learning = Learning(profile)
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             self._require_current_credential(conn, account)
 
             guardrails.forget_verdicts()
             aiguard.forget_judgements()
-            learning.forget(conn)
             for table, column in (("account_devices", "user_id"),
                                   ("account_events", "user_id"),
                                   ("api_keys", "account_id")):
@@ -1438,9 +1454,7 @@ class AuthStore:
         if profile.is_symlink():
             raise ValueError("Das Kontoprofil ist ein symbolischer Link; Löschung abgebrochen.")
         from aquaticy import aiguard, guardrails
-        from aquaticy.learning import Learning
 
-        learning = Learning(profile)
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             self._require_current_credential(conn, account)
@@ -1448,7 +1462,6 @@ class AuthStore:
             aiguard.forget_judgements()
             if conn.execute("DELETE FROM users WHERE id=?", (account.id,)).rowcount != 1:
                 raise ValueError("Das Konto existiert nicht mehr.")
-            learning.forget(conn)
             for table, column in (("token_usage", "account_id"),
                                   ("token_sessions", "account_id"),
                                   ("aiguard_flags", "user_id"),

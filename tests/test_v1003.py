@@ -12,7 +12,6 @@ from aquaticy import web
 from aquaticy.auth import ultra_code_for
 from tests.anmeldung import AGENT, FETCH, SPRACHE, wie_die_app
 from tests.test_v965 import parallel_site as parallel_site
-from tests.test_v967 import learners as learners
 
 
 @pytest.fixture

@@ -188,7 +188,9 @@ def test_simultaneous_first_requests_build_only_one_complete_agent(settings, mon
     def first_request():
         start.wait(timeout=5)
         result = session.agent()
-        assert result.learning is not None, "kein halb aufgebauter Agent"
+        # 16.0.2 (Aquaticy-Test): agent.learning ist entfallen -- es zaehlt, dass alle
+        # denselben, fertig gebauten Agenten bekommen.
+        assert result is made[0], "kein halb aufgebauter Agent"
         return result
 
     monkeypatch.setattr(agent_module, "Agent", build)

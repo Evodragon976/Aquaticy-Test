@@ -55,7 +55,6 @@ from aquaticy.config import (
     read_env_file,
     reset_settings_cache,
     resolve_model,
-    selected_vision_model,
     suggest_model,
     write_env_file,
 )
@@ -300,15 +299,7 @@ SETTING_KEYS: tuple[str, ...] = (
     "AQUATICY_LOCATION",
     "AQUATICY_LANG",
     "AQUATICY_COUNTRY",
-    "AQUATICY_SUBAGENTS_AUTO",
-    "AQUATICY_MAX_SUBAGENTS",
-    "AQUATICY_SUBAGENT_BUDGET",
-    "AQUATICY_SUBAGENT_PARALLEL",
-    "AQUATICY_RPM",
-    "AQUATICY_PARALLEL_CALLS",
-    "AQUATICY_MAX_TOOL_CALLS",
     "AQUATICY_CONTEXT_TOKENS",
-    "AQUATICY_PLANNER_TIMEOUT",
     "AQUATICY_ENABLE_PLAYWRIGHT",
     "AQUATICY_GOOGLE",
     "AQUATICY_GOOGLE_WRITE",
@@ -323,16 +314,9 @@ SETTING_KEYS: tuple[str, ...] = (
 NUMBERS: dict[str, tuple[int, int]] = {
 
     "AQUATICY_SEARCH_VARIANTS": (1, 3),
-    "AQUATICY_MAX_SUBAGENTS": (1, 12),
-    "AQUATICY_SUBAGENT_BUDGET": (1, 40),
 
-    "AQUATICY_SUBAGENT_PARALLEL": (0, 12),
-    "AQUATICY_RPM": (1, 100_000),
-    "AQUATICY_PARALLEL_CALLS": (1, 64),
-    "AQUATICY_MAX_TOOL_CALLS": (1, 200),
 
     "AQUATICY_CONTEXT_TOKENS": (256, 2_000_000),
-    "AQUATICY_PLANNER_TIMEOUT": (1, 600),
 }
 
 
@@ -436,7 +420,7 @@ Start im Terminal steht &mdash; die mit <code>?token=</code> am Ende.</p>
 </div></body></html>"""
 
 
-GENERIC_ERROR = "Bei Aquaticy ist etwas schiefgelaufen. Versuch es gleich noch einmal."
+GENERIC_ERROR = "Hoppla, da ist bei mir etwas schiefgelaufen. Versuch es gleich noch einmal."
 
 
 _TECHNISCH = re.compile(
@@ -532,7 +516,6 @@ POST_WHEN_BANNED = frozenset({
 
     "/api/account/delete", "/api/account/wipe", "/api/account/password",
     "/api/account/logout-all", "/api/account/events-seen",
-    "/api/learning",
 })
 
 ACCOUNT_ROUTES = frozenset({
@@ -579,7 +562,6 @@ _STRING_SETTINGS = {
     "GOOGLE_CLIENT_SECRET": "google_client_secret",
 }
 _BOOL_SETTINGS = {
-    "AQUATICY_SUBAGENTS_AUTO": "subagents_auto",
     "AQUATICY_ENABLE_PLAYWRIGHT": "enable_playwright",
     "AQUATICY_GOOGLE": "google_enabled",
     "AQUATICY_GOOGLE_WRITE": "google_write",
@@ -590,14 +572,7 @@ _BOOL_SETTINGS = {
 }
 _INT_SETTINGS = {
     "AQUATICY_SEARCH_VARIANTS": "search_variants",
-    "AQUATICY_MAX_SUBAGENTS": "max_subagents",
-    "AQUATICY_SUBAGENT_BUDGET": "subagent_budget",
-    "AQUATICY_SUBAGENT_PARALLEL": "subagent_parallel",
-    "AQUATICY_RPM": "rpm",
-    "AQUATICY_PARALLEL_CALLS": "parallel_calls",
-    "AQUATICY_MAX_TOOL_CALLS": "max_tool_calls",
     "AQUATICY_CONTEXT_TOKENS": "context_tokens",
-    "AQUATICY_PLANNER_TIMEOUT": "planner_timeout",
 }
 
 
@@ -1230,9 +1205,6 @@ class ChatSession:
                 settings = self.settings()
                 cache = Cache(settings.db_path, settings.cache_ttl_hours)
                 agent = Agent(settings, cache=cache)
-                from aquaticy.learning import Learning
-
-                agent.learning = Learning(settings.data_dir)
 
                 if self._carry_over:
                     weiter, self._carry_over = self._carry_over, ""
@@ -1370,7 +1342,6 @@ class ChatSession:
         effort: str = "",
         online: bool | None = None,
         agents: int | None = None,
-        visual_sources: bool | None = None,
     ) -> Any:
         """Fuehrt eine Anfrage aus und meldet jeden Zwischenschritt an *emit*.
 
@@ -1403,13 +1374,9 @@ class ChatSession:
                 if secure:
                     # 16.0.0 (Aquaticy-Test): Secure Pro beantwortet nur Fragen -- jedes Konto.
                     mode, structured, recheck = "normal", False, False
-                    visual_sources = False
                     agent._refresh_system()
                 elif previous_secure:
-                    from aquaticy.learning import Learning
-
                     agent.use_subagents = self.settings().max_subagents > 0
-                    agent.learning = Learning(self.settings().data_dir)
                     agent._refresh_system()
                 previous_agent_limit = getattr(agent, "_agent_limit_override", None)
                 try:
@@ -1435,8 +1402,6 @@ class ChatSession:
                     if plugin is not None:
                         mode = plugin.mode or mode
                         structured, recheck = False, False
-
-                        visual_sources = False
                         if plugin.online is not None:
                             online = plugin.online
                         context = ""
@@ -1479,7 +1444,6 @@ class ChatSession:
                     if isinstance(agent, BuiltinAgent):
                         agent.answer_check_enabled = lambda: (
                             self.settings().legal_guard and self.settings().answer_check)
-                        ask_options["visual_sources"] = visual_sources
                         if plugin_prompt:
                             ask_options["plugin_prompt"] = plugin_prompt
 
@@ -2101,16 +2065,8 @@ def current_values() -> dict[str, str]:
         "AQUATICY_LOCATION": settings.location,
         "AQUATICY_LANG": settings.lang,
         "AQUATICY_COUNTRY": settings.country,
-        "AQUATICY_SUBAGENTS_AUTO": "true" if settings.subagents_auto else "false",
-        "AQUATICY_MAX_SUBAGENTS": str(settings.max_subagents),
-        "AQUATICY_SUBAGENT_BUDGET": str(settings.subagent_budget),
-        "AQUATICY_SUBAGENT_PARALLEL": str(settings.subagent_parallel),
 
-        "AQUATICY_RPM": str(settings.rpm) if settings.rpm else "",
-        "AQUATICY_PARALLEL_CALLS": str(settings.parallel_calls) if settings.parallel_calls else "",
-        "AQUATICY_MAX_TOOL_CALLS": str(settings.max_tool_calls),
         "AQUATICY_CONTEXT_TOKENS": str(settings.context_tokens),
-        "AQUATICY_PLANNER_TIMEOUT": str(int(settings.planner_timeout)),
         "AQUATICY_ENABLE_PLAYWRIGHT": "true" if settings.enable_playwright else "false",
         "AQUATICY_GOOGLE": "true" if settings.google_enabled else "false",
         "AQUATICY_GOOGLE_WRITE": "true" if settings.google_write else "false",
@@ -3418,7 +3374,6 @@ class Handler(BaseHTTPRequestHandler):
             self._json(
                 {
                     "consent": self._cookie(CONSENT_COOKIE) == "yes",
-                    "learning_version": LEGAL_VERSION,
                     "authenticated": account is not None,
                     "account": (
                         {"email": account.email, "username": account.username,
@@ -3432,10 +3387,6 @@ class Handler(BaseHTTPRequestHandler):
             )
         elif route == "/api/auth/challenge":
             self._json(botguard.issue("visit"))
-        elif route == "/api/learning":
-            from aquaticy.learning import Learning
-
-            self._json(Learning(SESSION.settings().data_dir).status())
         elif route == "/api/media":
             query = parse_qs(urlsplit(self.path).query)
             media_id = (query.get("id") or [""])[0].strip()
@@ -3815,13 +3766,6 @@ class Handler(BaseHTTPRequestHandler):
 
             with contextlib.suppress(Exception):
                 AUTH.note_device(account.id, geraet)
-            if (payload.get("learning_accepted") is True
-                    and payload.get("learning_version") == LEGAL_VERSION
-                    and (AIGUARD is None or AIGUARD.is_banned(
-                        user_id=account.id, ip=self._client_ip()) is None)):
-                from aquaticy.learning import Learning
-
-                Learning(AUTH.profile_dir(account.id)).set_consent(True, LEGAL_VERSION)
             self._json_cookie(
                 {"ok": True, "account": {"email": account.email,
                   "username": account.username, "plan": account.plan}},
@@ -3840,24 +3784,6 @@ class Handler(BaseHTTPRequestHandler):
         elif route == "/api/linked":
             antwort, status = linked_action(self._read_json(limit=AUTH_BODY_BYTES))
             self._json(antwort, status)
-        elif route == "/api/learning":
-            from aquaticy.learning import Learning
-
-            payload = self._read_json(limit=AUTH_BODY_BYTES)
-            account = self._account()
-            if (payload.get("enabled") is True and AIGUARD is not None
-                    and account is not None and AIGUARD.is_banned(
-                        user_id=account.id, ip=self._client_ip()) is not None):
-                self._json({"error": "Solange dein Konto gesperrt ist, kannst du Gemeinsames "
-                            "Lernen nur ausschalten."}, 403)
-                return
-            try:
-                state = Learning(SESSION.settings().data_dir).set_consent(
-                    payload.get("enabled"), str(payload.get("version", "")))
-            except ValueError as exc:
-                self._json({"error": str(exc)}, 400)
-                return
-            self._json({"ok": True, **state})
         elif route == "/api/chat":
             self._chat()
         elif route == "/api/key-hint":
@@ -4451,15 +4377,14 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
         wunsch: dict[str, Any] = {
             name: payload[name]
             for name in (
-                "mode", "effort", "structured", "recheck", "online", "agents", "visual_sources"
+                "mode", "effort", "structured", "recheck", "online", "agents"
             )
             if name in payload
         }
         if "structured" not in wunsch and "thinking" in payload:
             wunsch["structured"] = payload["thinking"]
         if secure:
-            wunsch.update(mode="normal", structured=False, recheck=False,
-                          visual_sources=False, agents=1)
+            wunsch.update(mode="normal", structured=False, recheck=False, agents=1)
 
         if payload.get("image_mode") not in (None, False):
             self._json({"error": "Diesen Modus gibt es nicht mehr."}, 400)
@@ -4475,7 +4400,6 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
             return
         if gewuenscht == "code":
             wunsch.pop("online", None)
-            wunsch.pop("visual_sources", None)
         stand = ui_state().write(wunsch) if wunsch else ui_state().read()
         mode = str(stand["mode"])
         effort = str(stand["effort"])
@@ -4483,19 +4407,10 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
         recheck = bool(stand["recheck"])
         online = bool(stand["online"])
         agents = int(stand.get("agents", 12))
-        visual_sources = bool(stand.get("visual_sources", False))
         agents = max(1, min(50 if mode == "pro" else 12, agents))
 
         if mode == "code":
             online = True
-            visual_sources = False
-
-        if visual_sources and not selected_vision_model(SESSION.settings()):
-            self._json(
-                {"error": "Webcams und Satellitenbilder brauchen ein bildfähiges "
-                 "Hauptmodell oder ein Vision-Modell unter Chat → Modelle und Verbindungen."}, 400
-            )
-            return
         if not message and not attachments:
             self._json({"error": "leere Nachricht"}, 400)
             return
@@ -4598,7 +4513,6 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
                     effort=effort,
                     online=online,
                     agents=agents,
-                    visual_sources=visual_sources,
                 )
             except Exception as exc:
                 meldung = user_hint(exc)
@@ -5099,13 +5013,10 @@ def _serve(host: str, port: int, open_browser: bool, token: str) -> None:
         for address, note in addresses_for(host, server.server_address[1], token):
             print(f"  {address} ({note})")
     port = server.server_address[1]
-    research_stop: threading.Event | None = None
-    research_worker: threading.Thread | None = None
     try:
-        from aquaticy.learning import Learning
-        from aquaticy.research import start_cleanup
+        from aquaticy.auth import forget_shared_learning
 
-        research_stop, research_worker = start_cleanup(Learning(data_dir).research)
+        forget_shared_learning(Path(data_dir) / "accounts.sqlite3")
         SERVER = server
         if open_browser:
             local = urls_for(host, port, token)[-1]
@@ -5115,8 +5026,5 @@ def _serve(host: str, port: int, open_browser: bool, token: str) -> None:
         pass
     finally:
         server.server_close()
-        if research_stop is not None and research_worker is not None:
-            research_stop.set()
-            research_worker.join(timeout=6)
         TOKEN = ""
         AUTH = None

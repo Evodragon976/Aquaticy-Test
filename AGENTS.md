@@ -54,6 +54,8 @@ Vor jedem Commit: `python tools/pruefung.py` muss mit 0 enden.
   - Seit 16.0.1 gibt es in Aquaticy-Test keine virtual machine, keine Messenger, keinen
     Server-Verbund, kein Auto-Upgrading, keine Coworker, kein Heimnetz, kein Home Assistant,
     kein Lager und keine eigene Domain mehr -- auch nicht im Code.
+  - Seit 16.0.2 auch kein Gemeinsames Lernen (`learning.py`, `research.py`), keine Webcams und
+    Satellitenbilder und keine Einstellungen unter „Helfer & Grenzen“.
 - `worker/` – die Cloudflare-Fassung (JavaScript, `worker/README.md`). `worker/src/erzeugt.js`
   kommt aus `tools/worker_bauen.py` und wird nie von Hand geändert.
 - Vercel-Modus (nur Aquaticy-Test): `aquaticy/vercel.py` reicht Anfragen an `web.Handler`

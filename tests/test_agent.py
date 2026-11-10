@@ -135,23 +135,9 @@ def test_tools_are_offered_to_the_llm(
     ]
 
 
-def test_public_visual_mode_names_the_preferred_official_sources(
-    settings: Settings, toolbox: Toolbox
-) -> None:
-    settings.vision_model = "ollama_chat/llava:7b"
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    agent.visual_sources = True
-    agent._refresh_system()
-    prompt = agent.messages[0]["content"]
-    for domain in (
-        "worldview.earthdata.nasa.gov",
-        "firms.modaps.eosdis.nasa.gov",
-        "browser.dataspace.copernicus.eu",
-        "view.eumetsat.int",
-        "star.nesdis.noaa.gov/GOES",
-    ):
-        assert domain in prompt
-    assert "offizielle Seite der Stadt" in prompt
+# 16.0.2 (Aquaticy-Test): 6 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (Gemeinsames Lernen, Recherchecache, Webcams und Satellitenbilder,
+# Einstellungen unter Helfer & Grenzen).
 
 
 def test_done_event_contains_product_cards_and_public_images(
@@ -3459,122 +3445,6 @@ def test_answer_urls_reads_addresses_out_of_a_text() -> None:
         "https://a.example/cam",
         "https://b.example/live",
     ]
-
-
-def test_a_listed_webcam_without_a_picture_is_sent_back_once(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
-) -> None:
-    """Nur Adressen aufzuzaehlen ist mit dem Schalter keine Antwort."""
-    llm = ScriptedLLM(
-        _message(content="Schau auf https://cam.example/live"),
-        _message(
-            tool_calls=[
-                _tool_call(
-                    "inspect_public_visual",
-                    {"url": "https://cam.example/live", "question": "Was ist zu sehen?"},
-                    "c9",
-                )
-            ]
-        ),
-        _message(content="Auf dem Bild sind Wolken."),
-    )
-    monkeypatch.setattr("litellm.completion", llm)
-    settings.vision_model = "ollama_chat/llava:7b"
-    toolbox.visual_inspector = lambda url, question: "Wolken."
-    monkeypatch.setattr(
-        toolbox._fetcher,
-        "load_public_visual",
-        lambda url: (
-            SimpleNamespace(url=url, content=b"bild", content_type="image/jpeg"),
-            "",
-        ),
-    )
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-
-    result = agent.ask("Wie sieht es aus?", stream=False, visual_sources=True)
-
-    assert result.visuals and result.visuals[0]["source_url"] == "https://cam.example/live"
-
-    nudge = [
-        m
-        for m in agent.messages
-        if m.get("role") == "user" and "inspect_public_visual" in str(m.get("content", ""))
-    ]
-    assert nudge and "https://cam.example/live" in nudge[0]["content"]
-
-
-def test_the_agent_opens_the_picture_itself_when_the_model_keeps_refusing(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
-) -> None:
-    """Zweimal gebeten reicht -- dann ruft der Agent das Werkzeug selbst auf."""
-    llm = ScriptedLLM(
-        _message(content="Ich empfehle https://cam.example/live"),
-        _message(content="Nein, schau selbst auf https://cam.example/live"),
-    )
-    monkeypatch.setattr("litellm.completion", llm)
-    settings.vision_model = "ollama_chat/llava:7b"
-    toolbox.visual_inspector = lambda url, question: "Startbahn mit zwei Flugzeugen."
-    monkeypatch.setattr(
-        toolbox._fetcher,
-        "load_public_visual",
-        lambda url: (
-            SimpleNamespace(url=url, content=b"bild", content_type="image/jpeg"),
-            "",
-        ),
-    )
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-
-    result = agent.ask("Wie voll ist der Flughafen?", stream=False, visual_sources=True)
-
-    assert result.visuals, "ohne Bild darf der Zug nicht enden"
-    assert "Startbahn mit zwei Flugzeugen." in result.answer
-
-
-def test_the_agent_says_so_when_no_source_gives_a_picture(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
-) -> None:
-    llm = ScriptedLLM(
-        _message(content="Versuch es auf https://tot.example/live"),
-        _message(content="Ich bleibe dabei: https://tot.example/live"),
-    )
-    monkeypatch.setattr("litellm.completion", llm)
-    settings.vision_model = "ollama_chat/llava:7b"
-    toolbox.visual_inspector = lambda url, question: "egal"
-    monkeypatch.setattr(
-        toolbox._fetcher, "load_public_visual", lambda url: (None, "Kein Bild gefunden.")
-    )
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-
-    result = agent.ask("Zeig mir die Kamera", stream=False, visual_sources=True)
-
-    assert not result.visuals
-    assert "kam nicht zustande" in result.answer
-    assert "tot.example" in result.answer
-
-
-def test_without_the_switch_nothing_is_forced(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings, toolbox: Toolbox
-) -> None:
-    llm = ScriptedLLM(_message(content="Schau auf https://cam.example/live"))
-    monkeypatch.setattr("litellm.completion", llm)
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-
-    result = agent.ask("Wie sieht es aus?", stream=False, visual_sources=False)
-
-    assert result.answer == "Schau auf https://cam.example/live"
-    assert not result.visuals
-
-
-def test_a_pending_question_is_not_pushed_for_a_picture(
-    settings: Settings, toolbox: Toolbox
-) -> None:
-    """Wer gerade zurueckfragt, wartet auf eine Antwort und nicht auf ein Bild."""
-    settings.vision_model = "ollama_chat/llava:7b"
-    agent = Agent(settings, cache=None, toolbox=toolbox)
-    agent.visual_sources = True
-    assert agent._should_force_visual()
-    toolbox.stats.questions = 1
-    assert not agent._should_force_visual()
 
 
 def test_the_wait_for_a_loading_model_is_announced(

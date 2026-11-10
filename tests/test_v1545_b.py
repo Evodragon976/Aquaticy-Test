@@ -5,8 +5,6 @@ import httpx
 import pytest
 
 from aquaticy import extract, github_repo, google, voice
-from aquaticy.learning import Learning
-from aquaticy.legal import LEGAL_VERSION
 
 
 @pytest.mark.parametrize('payload', [{}, {'error': {'message': 'Not accepted'}}])
@@ -42,21 +40,9 @@ def test_f014_private_key_fragments_in_diff_hunks_remain_masked():
     assert fragment not in github_repo.redact(patch)
 
 
-def test_one_damaged_shared_fact_does_not_hide_other_confirmed_facts(tmp_path):
-    store = Learning(tmp_path)
-    store.set_consent(True, LEGAL_VERSION)
-    first = ('Photosynthese bezeichnet die Umwandlung von Lichtenergie in chemische Energie '
-             'durch Pflanzen und andere Organismen unter Verwendung lichtabsorbierender Stoffe.')
-    second = ('Photosynthese liefert Pflanzen chemische Energie aus Lichtenergie und ermöglicht '
-              'die Bildung von Zucker aus Wasser und Kohlendioxid in den Blättern.')
-    question = 'Wie speichern Pflanzen bei der Photosynthese chemische Energie?'
-    assert store.learn(store.ticket(), question, first + ' ' + second,
-                       [('https://de.wikipedia.org/wiki/Photosynthese', first + ' ' + second)]) == 2
-    assert len(store.recall(question)) == 2
-    with store.connect() as conn:
-        key = conn.execute('SELECT id FROM learning_facts ORDER BY id LIMIT 1').fetchone()[0]
-        conn.execute('UPDATE learning_facts SET text=? WHERE id=?', ('damaged', key))
-    assert len(store.recall(question)) == 1
+# 16.0.2 (Aquaticy-Test): 1 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (Gemeinsames Lernen, Recherchecache, Webcams und Satellitenbilder,
+# Einstellungen unter Helfer & Grenzen).
 
 
 @pytest.mark.parametrize(('text', 'expected'), [('-12.50 EUR', '-12.50'), ('1e3', '1000')])

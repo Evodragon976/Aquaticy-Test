@@ -1383,27 +1383,19 @@ html.vv,html.vv body{height:var(--app-h)}
 <div class="auth-gate" id="auth-gate">
   <section class="auth-card" id="consent-card" hidden>
     <h1>Bevor es losgeht</h1>
-    <p>Kurz vorab: Damit dein Konto sicher ist, speichert Aquaticy ein paar Dinge.</p>
+    <p>Schön, dass du da bist! Damit dein Konto sicher bleibt, speichert Aquaticy ein paar
+      Dinge. Hier steht ehrlich, welche.</p>
     <ul>
-      <li>Ein Cookie merkt sich, dass du angemeldet bist — nur dafür.</li>
-      <li>Aquaticy speichert verschlüsselt: deine IP-Adresse, eine Kennung für dein Gerät und Angaben zu Gerät und Browser. Der Betreiber sieht das nicht. So fällt auf, wenn ein Fremder dein Konto nutzt. Oder wenn viele Konten vom selben Gerät kommen.</li>
-      <li>Name, E-Mail, Einstellungen und Chats gehören nur zu deinem Konto. Andere sehen das nicht.</li>
-      <li>Keine Werbung, kein Tracking.</li>
+      <li>Ein Cookie merkt sich, dass du angemeldet bist. Für nichts anderes.</li>
+      <li>Deine IP-Adresse, eine Kennung für dein Gerät und ein paar Angaben zu Gerät und
+        Browser. Das liegt verschlüsselt, auch der Betreiber sieht es nicht. So merkt Aquaticy,
+        wenn jemand Fremdes dein Konto nutzt. Oder wenn viele Konten vom selben Gerät kommen.</li>
+      <li>Name, E-Mail, Einstellungen und Chats gehören nur zu deinem Konto. Andere sehen sie
+        nicht.</li>
+      <li>Keine Werbung. Kein Tracking.</li>
     </ul>
-    <label><input type="checkbox" id="consent-learning">
-      Freiwillig: Stellen aus öffentlichen Seiten zum gemeinsamen Lernen und für deine Stichpunkte nutzen.</label>
-    <p class="note">Nur kurze Stellen aus Sachtexten, nie private Chats. Das hilft später allen
-      Konten hier. Du kannst es jederzeit zurücknehmen: Einstellungen → Gemeinsames Lernen. Aquaticy
-      geht auch ohne diesen Haken.</p>
-    <p class="note">Wenn Auto-Upgrading an ist, können mehrfach bestätigte Auszüge auch in lokale
-      Ollama-Modelltexte kommen. Dort liegen öffentliche Auszüge unverschlüsselt. Laufen sie ab oder
-      fehlt die Bestätigung, werden die betroffenen Fassungen zurückgezogen und gelöscht.
-      Einzelheiten stehen im Datenschutz.</p>
-    <p class="note">Dein Konto merkt sich auch kurze Stichpunkte aus öffentlichen Seiten, auch zu
-      Personen. Das bleibt höchstens 48 Stunden. Andere Konten sehen es nicht. Ausschalten löscht
-      diese Stichpunkte.</p>
-    <p>Ohne diese Angaben kannst du Aquaticy hier nicht nutzen. Das freiwillige Lernen ist eine
-      eigene Frage.</p>
+    <p>Ohne diese Angaben geht Aquaticy hier leider nicht. Alles Weitere steht im
+      Datenschutz.</p>
     <nav class="auth-legal" aria-label="Rechtliche Informationen">
       <a href="/privacy" target="_blank" rel="noopener">Datenschutz</a>
       <a href="/cookies" target="_blank" rel="noopener">Cookies</a>
@@ -1411,14 +1403,14 @@ html.vv,html.vv body{height:var(--app-h)}
       <a href="/accessibility" target="_blank" rel="noopener">Barrierefreiheit</a>
     </nav>
     <div class="auth-actions">
-      <button type="button" class="btn" id="consent-no">Ablehnen</button>
-      <button type="button" class="btn" id="consent-yes">Zustimmen und weiter</button>
+      <button type="button" class="btn" id="consent-no">Nein, danke</button>
+      <button type="button" class="btn" id="consent-yes">Einverstanden, weiter</button>
     </div>
   </section>
 
   <section class="auth-card" id="login-card" hidden>
     <h1>Willkommen bei Aquaticy</h1>
-    <p id="auth-lead">Erstelle dein Konto. Deine Chats und Einstellungen sieht dann nur du.</p>
+    <p id="auth-lead">Schön, dass du hier bist! Leg dir ein Konto an. Deine Chats und Einstellungen siehst nur du.</p>
     <div class="auth-tabs" id="auth-tabs">
       <button type="button" class="active" id="tab-register">Registrieren</button>
       <button type="button" id="tab-login">Anmelden</button>
@@ -1447,7 +1439,7 @@ html.vv,html.vv body{height:var(--app-h)}
           und den <a href="/terms" target="_blank" rel="noopener">Nutzungsbedingungen</a> zu.</span>
       </label>
       <div class="human-check" id="human-check" hidden>
-        <p>Bestätige kurz, dass du ein Mensch bist: Schieb den Regler ganz nach rechts.</p>
+        <p>Kurz zur Sicherheit: Schieb den Regler ganz nach rechts. So weiß Aquaticy, dass du ein Mensch bist.</p>
         <input type="range" id="human-slider" min="0" max="100" step="1" value="0"
                aria-label="Regler ganz nach rechts schieben">
       </div>
@@ -1460,8 +1452,7 @@ html.vv,html.vv body{height:var(--app-h)}
 
   <section class="auth-card" id="leave-card" hidden>
     <h1>Alles klar</h1>
-    <p>Ohne diese Angaben kann Aquaticy dein Konto nicht schützen. Schließ das Fenster. Oder geh
-      zurück und stimm zu.</p>
+    <p>Kein Problem. Ohne diese Angaben kann Aquaticy dein Konto aber nicht schützen. Du kannst das Fenster einfach schließen. Oder du gehst zurück und stimmst doch noch zu.</p>
     <div class="auth-actions"><button type="button" class="btn" id="consent-back">Zurück</button></div>
   </section>
 </div>
@@ -1580,13 +1571,6 @@ html.vv,html.vv body{height:var(--app-h)}
         <span class="why">Aus: Aquaticy sucht nicht im Internet. Es antwortet mit seinem Wissen, dem
           Chat und deinen Dateien. Es sagt dir, wo das alt sein kann.</span></span>
     </label>
-    <label class="picker-think only-normal" for="visual-sources">
-      <input type="checkbox" role="switch" class="schalter" id="visual-sources">
-      <span><b>Öffentliche Webcams &amp; Satellitenbilder</b>
-        <span class="why">Schaut auch auf öffentliche Webcams und Satellitenbilder. Zum Beispiel, ob
-          irgendwo Schnee liegt. Quelle und Uhrzeit stehen immer dabei. Ein Bild ist ein Hinweis,
-          kein Beweis.</span></span>
-    </label>
     <label class="picker-think only-normal" for="denken">
       <input type="checkbox" role="switch" class="schalter" id="denken">
       <span><b>Denken</b>
@@ -1633,8 +1617,7 @@ html.vv,html.vv body{height:var(--app-h)}
 
   <footer>
     <div class="limit-banner key-banner" id="key-banner" role="status" hidden>
-      <span class="txt">Du nutzt Aquaticy Standard: Es antwortet ohne Sprachmodell. Mit einem
-        eigenen API-Schlüssel beantwortet Aquaticy alles.</span>
+      <span class="txt">Gerade antwortet dir Aquaticy Standard, ganz ohne Sprachmodell. Mit deinem eigenen API-Schlüssel kann ich dir zu allem frei antworten.</span>
       <button type="button" id="key-banner-open">API-Schlüssel hinzufügen</button>
       <button type="button" id="key-banner-x" aria-label="Hinweis schließen">✕</button>
     </div>
@@ -1995,28 +1978,8 @@ html.vv,html.vv body{height:var(--app-h)}
           <span class="note">Nachsehen, was Aquaticy weiß, und einzelne Dinge löschen.</span>
           <button type="button" class="btn" id="btn-memory">Was weißt du über mich?</button>
         </div>
-      </fieldset>
-
-      <fieldset><legend>Gemeinsames Lernen</legend>
-        <p class="note">Ist Auto-Upgrading an, können mehrfach bestätigte Auszüge auch in lokale
-          Ollama-Modelltexte kommen (dort unverschlüsselt). Ist Wissen abgelaufen oder nicht mehr
-          bestätigt, werden die betroffenen Fassungen zurückgezogen. Aquaticy versucht das Löschen
-          so lange, bis der Ollama-Dienst erreichbar ist. Einzelheiten: <a href="/privacy" target="_blank"
+        <p class="note">Was mit deinen Daten passiert, steht im <a href="/privacy" target="_blank"
           rel="noopener">Datenschutz</a>.</p>
-        <label class="check"><input type="checkbox" role="switch" class="schalter"
-            id="learning-enabled" disabled>
-          Ich bin einverstanden mit dem gemeinsamen Lernen und meinen Stichpunkten aus öffentlichen Seiten.</label>
-        <p class="note">Aquaticy nimmt nur kurze Stellen aus öffentlichen Sachtexten. Nie deine
-          Fragen, Antworten, Dateien oder Erinnerungen. Die Stellen helfen allen Konten auf diesem
-          Server, höchstens 30 Tage lang. Sie können Fehler enthalten. Das Modell selbst wird damit
-          nicht trainiert.</p>
-        <p class="note">Dein Konto merkt sich auch kurze Stichpunkte aus öffentlichen Seiten, auch
-          zu Personen. Das bleibt höchstens 48 Stunden. Andere Konten sehen es nicht. Ausschalten
-          löscht diese Stichpunkte.</p>
-        <p class="note">Damit wir deine Beiträge löschen können, speichern wir eine Kennung ohne
-          deinen Namen. Ausschalten nimmt deine Zustimmung zurück und löscht deine Beiträge. Gleiche
-          Stellen von anderen Konten bleiben.</p>
-        <p class="note" id="learning-status" role="status" aria-live="polite"></p>
       </fieldset>
 
       <fieldset><legend>Ort &amp; Sprache</legend>
@@ -2062,38 +2025,6 @@ html.vv,html.vv body{height:var(--app-h)}
           <label for="pw" style="margin:0">Seiten mit echtem Browser laden
             <span class="why">Für Seiten, die ihren Inhalt erst später nachladen. Dafür
               muss einmal <code>aquaticy install-browser</code> ausgeführt werden.</span></label>
-        </div>
-      </fieldset>
-
-      <fieldset><legend>Helfer &amp; Grenzen</legend>
-        <div class="check">
-          <input type="checkbox" role="switch" class="schalter" id="auto" name="AQUATICY_SUBAGENTS_AUTO">
-          <label for="auto" style="margin:0">Fragen automatisch aufteilen
-            <span class="why">Große Fragen teilt Aquaticy auf und lässt Helfer die Teile
-              gleichzeitig suchen. Das ist schneller, braucht aber mehr von deiner Grenze. Ab
-              Werk an.</span></label>
-        </div>
-        <div class="row">
-          <label><span class="lbl">Suchen je Helfer <span class="why">Wie oft ein Helfer suchen oder eine Seite lesen darf</span></span>
-            <input type="text" name="AQUATICY_SUBAGENT_BUDGET"></label>
-        </div>
-        <div class="row">
-          <label><span class="lbl">Suchen je Anfrage <span class="why">Höchstzahl für Suchen und gelesene Seiten zusammen</span></span>
-            <input type="text" name="AQUATICY_MAX_TOOL_CALLS"></label>
-          <label><span class="lbl">Gedächtnis im Gespräch <span class="why">Wie viel vom Gespräch das Modell im Blick behält. Nur für lokale Modelle</span></span>
-            <input type="text" name="AQUATICY_CONTEXT_TOKENS"></label>
-        </div>
-        <div class="row">
-          <label><span class="lbl">Zeit fürs Planen <span class="why">Wie lange das Aufteilen einer Frage dauern darf (Sekunden)</span></span>
-            <input type="text" name="AQUATICY_PLANNER_TIMEOUT"></label>
-          <label><span class="lbl">Gleichzeitig <span class="why">Wie viele Helfer gleichzeitig arbeiten. 0 = Aquaticy entscheidet</span></span>
-            <input type="text" name="AQUATICY_SUBAGENT_PARALLEL"></label>
-        </div>
-        <div class="row">
-          <label><span class="lbl">Anfragen pro Minute <span class="why">Wie viele Anfragen pro Minute dein KI-Anbieter erlaubt. Gilt für deine eigenen Schlüssel. Leer lassen = kostenloser Tarif (NVIDIA 40, Mistral 240)</span></span>
-            <input type="text" name="AQUATICY_RPM" placeholder="leer lassen = kostenloser Tarif"></label>
-          <label><span class="lbl">Gleichzeitige Anfragen <span class="why">Mehr auf einmal macht jede Antwort langsamer. Leer lassen = NVIDIA 4, Mistral 8</span></span>
-            <input type="text" name="AQUATICY_PARALLEL_CALLS" placeholder="leer lassen = kostenloser Tarif"></label>
         </div>
       </fieldset>
 
@@ -2268,7 +2199,7 @@ const thread = $("#thread"), main = $("#main"), input = $("#input"), send = $("#
 let busy = false;
 let currentChat = "";
 let secureChat = false;
-const aquaticyVersion = window.__AQUATICY_VERSION__ || "16.0.1";
+const aquaticyVersion = window.__AQUATICY_VERSION__ || "16.0.2";
 $("#version").textContent = "v" + aquaticyVersion;
 // Laeuft noch die alte Version, obwohl eine neue installiert ist? (15.0.0)
 const aquaticyInstalliert = window.__AQUATICY_INSTALLED__ || "";
@@ -2296,7 +2227,6 @@ let structured = false;
 let recheck = false;
 let effort = "medium";
 let online = true;
-let visualSources = false;
 let currentUsername = "";
 let agents = 12;
 const agentsByMode = {normal: 12, code: 12, pro: 44};
@@ -2407,18 +2337,10 @@ function setRecheck(on, { merken = true } = {}){
 function setOnline(on, { merken = true } = {}){
   online = !!on;
   $("#online").checked = online;
-  $("#visual-sources").disabled = !online;
-  if (!online) setVisualSources(false, { merken });
   if (merken) merkeZustand({ online });
   refreshHeader();
 }
 
-function setVisualSources(on, { merken = true } = {}){
-  visualSources = !!on && online;
-  $("#visual-sources").checked = visualSources;
-  if (merken) merkeZustand({ visual_sources: visualSources });
-  refreshHeader();
-}
 
 
 
@@ -2466,7 +2388,6 @@ document.querySelectorAll("#modes .mode").forEach(button =>
 document.querySelectorAll("#efforts .eff").forEach(button =>
   button.addEventListener("click", () => setEffort(button.dataset.effort)));
 $("#online").addEventListener("change", (e) => setOnline(e.target.checked));
-$("#visual-sources").addEventListener("change", (e) => setVisualSources(e.target.checked));
 $("#denken").addEventListener("change", (e) => setDenken(e.target.checked));
 $("#structure").addEventListener("change", (e) => setStructured(e.target.checked));
 $("#recheck").addEventListener("change", (e) => setRecheck(e.target.checked));
@@ -2481,7 +2402,6 @@ setStructured(START.structured === true, { merken: false });
 setRecheck(START.recheck === true, { merken: false });
 setEffort(START.effort || "medium", { merken: false });
 setOnline(START.online !== false, { merken: false });
-setVisualSources(START.visual_sources === true, { merken: false });
 setDenken(START.denken === true, { merken: false });
 setAgents(START.agents || 12, { merken: false });
 
@@ -2591,7 +2511,6 @@ function api(path, options = {}, versuch = 0){
 const authGate = $("#auth-gate"), consentCard = $("#consent-card");
 const loginCard = $("#login-card"), leaveCard = $("#leave-card");
 let authMode = "register";
-let learningVersion = "";
 
 function showAuth(card){
   [consentCard, loginCard, leaveCard].forEach(item => { item.hidden = item !== card; });
@@ -2618,8 +2537,8 @@ function setAuthMode(mode){
     ? "Erstelle dein Konto. Das erste Konto hier bekommt Ultra, jedes weitere Pro. Einen Code "
       + "brauchst du nicht."
     : registering
-    ? "Erstelle dein Konto. Deine Chats und Einstellungen sieht dann nur du."
-    : "Melde dich an, um deine Chats und Einstellungen auf diesem Gerät zu öffnen.";
+    ? "Schön, dass du hier bist! Leg dir ein Konto an. Deine Chats und Einstellungen siehst nur du."
+    : "Schön, dich wiederzusehen! Melde dich an, dann geht es da weiter, wo du aufgehört hast.";
   $("#auth-password").autocomplete = registering ? "new-password" : "current-password";
 
 
@@ -2658,7 +2577,7 @@ function einzelKontoZeigen(registering){
   $("#auth-lead").textContent = registering
     ? "Leg dein Konto an. Es ist das einzige hier und hat alle Rechte. Den Einrichtungscode "
       + "findest du im Terminal, in dem Aquaticy läuft."
-    : "Melde dich mit deinem Nutzernamen und Passwort an.";
+    : "Schön, dich wiederzusehen! Melde dich mit deinem Nutzernamen und Passwort an.";
 }
 function showProCode(){
   const wahl = document.querySelector('input[name="plan"]:checked')?.value;
@@ -2828,8 +2747,6 @@ $("#auth-form").addEventListener("submit", async (event) => {
       ? $("#auth-pro-code").value.trim()
       : $("#auth-pro-code").value.trim().toUpperCase()),
     terms_accepted: authMode === "register" && $("#auth-terms").checked,
-    learning_accepted: $("#consent-learning").checked,
-    learning_version: learningVersion,
     device: geraeteInfo(),
   };
   const anmelden = authMode === "login";
@@ -2866,7 +2783,6 @@ $("#auth-form").addEventListener("submit", async (event) => {
 async function bootAuth(){
   try {
     const state = await (await api("/api/auth/status")).json();
-    learningVersion = state.learning_version || "";
     einzelKonto = state.single === true;
     autoPlan = state.auto_plan === true;
     kontoEinrichten = state.setup_needed === true;
@@ -3661,7 +3577,6 @@ async function ask(text){
       method: "POST", headers: {"Content-Type":"application/json"},
       body: JSON.stringify({
         message: text, attachments, mode, structured, recheck, effort, agents,
-        visual_sources: mode === "code" ? false : visualSources,
 
 
 
@@ -4801,6 +4716,21 @@ try {
 
 
 const EN = {
+"Was mit deinen Daten passiert, steht im": "What happens to your data? See",
+"Gerade antwortet dir Aquaticy Standard, ganz ohne Sprachmodell. Mit deinem eigenen API-Schlüssel kann ich dir zu allem frei antworten.": "Right now Aquaticy Standard is answering you, without a language model. With your own API key I can answer anything freely.",
+"Kein Problem. Ohne diese Angaben kann Aquaticy dein Konto aber nicht schützen. Du kannst das Fenster einfach schließen. Oder du gehst zurück und stimmst doch noch zu.": "No problem. Without this, though, Aquaticy can't protect your account. You can simply close the window. Or go back and agree after all.",
+"Kurz zur Sicherheit: Schieb den Regler ganz nach rechts. So weiß Aquaticy, dass du ein Mensch bist.": "Quick safety check: slide the control all the way to the right. That way Aquaticy knows you're human.",
+"Schön, dich wiederzusehen! Melde dich mit deinem Nutzernamen und Passwort an.": "Good to see you again! Sign in with your username and password.",
+"Schön, dich wiederzusehen! Melde dich an, dann geht es da weiter, wo du aufgehört hast.": "Good to see you again! Sign in and pick up right where you left off.",
+"Schön, dass du hier bist! Leg dir ein Konto an. Deine Chats und Einstellungen siehst nur du.": "Great to have you here! Create your account. Only you can see your chats and settings.",
+"Schön, dass du da bist! Damit dein Konto sicher bleibt, speichert Aquaticy ein paar Dinge. Hier steht ehrlich, welche.": "Great to have you here! To keep your account safe, Aquaticy stores a few things. Here's honestly which ones.",
+"Ein Cookie merkt sich, dass du angemeldet bist. Für nichts anderes.": "A cookie remembers that you're signed in. Nothing else.",
+"Deine IP-Adresse, eine Kennung für dein Gerät und ein paar Angaben zu Gerät und Browser. Das liegt verschlüsselt, auch der Betreiber sieht es nicht. So merkt Aquaticy, wenn jemand Fremdes dein Konto nutzt. Oder wenn viele Konten vom selben Gerät kommen.": "Your IP address, an ID for your device and a few details about your device and browser. It's stored encrypted, and not even the operator can see it. That way Aquaticy notices when a stranger uses your account. Or when many accounts come from the same device.",
+"Name, E-Mail, Einstellungen und Chats gehören nur zu deinem Konto. Andere sehen sie nicht.": "Name, email, settings and chats belong only to your account. Nobody else sees them.",
+"Keine Werbung. Kein Tracking.": "No ads. No tracking.",
+"Ohne diese Angaben geht Aquaticy hier leider nicht. Alles Weitere steht im Datenschutz.": "Sorry, Aquaticy can't work here without this. You'll find everything else in the privacy policy.",
+"Nein, danke": "No, thanks",
+"Einverstanden, weiter": "Agreed, let's go",
 "Dateien und Änderungen": "Files and changes",
 "Smart-Home-Gerät": "Smart home device",
 "Kamera": "Camera",
@@ -4830,19 +4760,6 @@ const EN = {
 
 
 "Dieses Modell braucht mehr Speicher, als erlaubt ist.": "This model needs more memory than allowed.",
-"Solange dein Konto gesperrt ist, kannst du Gemeinsames Lernen nur ausschalten.": "While your account is blocked, you can only turn shared learning off.",
-"Ohne diese Angaben kannst du Aquaticy hier nicht nutzen. Das freiwillige Lernen ist eine eigene Frage.": "Without this information you can't use Aquaticy here. Optional learning is a separate question.",
-"Gemeinsames Lernen": "Shared learning",
-"Dein Konto merkt sich auch kurze Stichpunkte aus öffentlichen Seiten, auch zu Personen. Das bleibt höchstens 48 Stunden. Andere Konten sehen es nicht. Ausschalten löscht diese Stichpunkte.": "Your account also keeps short notes from public pages, including about people. They stay for up to 48 hours. Other accounts can't see them. Turning this off deletes these notes.",
-"Freiwillig: Stellen aus öffentlichen Seiten zum gemeinsamen Lernen und für deine Stichpunkte nutzen.": "Optional: use parts of public pages for shared learning and for your notes.",
-"Nur kurze Stellen aus Sachtexten, nie private Chats. Das hilft später allen Konten hier. Du kannst es jederzeit zurücknehmen: Einstellungen → Gemeinsames Lernen. Aquaticy geht auch ohne diesen Haken.": "Only short parts of factual texts, never private chats. This later helps all accounts here. You can take it back at any time: Settings → Shared learning. Aquaticy works without this tick too.",
-"Ich bin einverstanden mit dem gemeinsamen Lernen und meinen Stichpunkten aus öffentlichen Seiten.": "I agree to shared learning and my notes from public pages.",
-"Aquaticy nimmt nur kurze Stellen aus öffentlichen Sachtexten. Nie deine Fragen, Antworten, Dateien oder Erinnerungen. Die Stellen helfen allen Konten auf diesem Server, höchstens 30 Tage lang. Sie können Fehler enthalten. Das Modell selbst wird damit nicht trainiert.": "Aquaticy only takes short parts of public factual texts. Never your questions, answers, files or memories. These parts help all accounts on this server for up to 30 days. They may contain mistakes. The model itself is not trained with them.",
-"Damit wir deine Beiträge löschen können, speichern wir eine Kennung ohne deinen Namen. Ausschalten nimmt deine Zustimmung zurück und löscht deine Beiträge. Gleiche Stellen von anderen Konten bleiben.": "So we can delete your contributions, we keep an ID without your name. Turning this off takes back your consent and deletes your contributions. The same parts from other accounts stay.",
-"Gemeinsames Lernen geht gerade nicht.": "Shared learning isn't working right now.",
-"Gespeichert. Ab jetzt helfen nur neue Chats mit.": "Saved. From now on, only new chats help.",
-"Zustimmung zurückgenommen. Deine Beiträge sind gelöscht.": "Consent taken back. Your contributions are deleted.",
-"Speichern hat nicht geklappt.": "Saving didn't work.",
 "Die Sicherheit lässt sich gerade nicht laden.": "Security can't be loaded right now.",
 "Schriftgröße": "Font size",
 "Hier fügst du KI-Modelle, Dienste und Programme hinzu. Du kannst sie an- und ausschalten oder entfernen. Anmelden musst du dich selbst. Aquaticy kennt deine Passwörter nie. Über den Chat lässt sich hier nichts ändern.": "Add AI models, services and programs here. You can turn them on and off or remove them. You sign in yourself. Aquaticy never knows your passwords. Nothing here can be changed through the chat.",
@@ -4933,20 +4850,13 @@ const EN = {
 "Ändern": "Change",
 "Zum Chat springen": "Skip to chat",
 "Bevor es losgeht": "Before we start",
-"Kurz vorab: Damit dein Konto sicher ist, speichert Aquaticy ein paar Dinge.": "Quick note: to keep your account safe, Aquaticy saves a few things.",
-"Ein Cookie merkt sich, dass du angemeldet bist — nur dafür.": "A cookie remembers that you are signed in — only for that.",
-"Aquaticy speichert verschlüsselt: deine IP-Adresse, eine Kennung für dein Gerät und Angaben zu Gerät und Browser. Der Betreiber sieht das nicht. So fällt auf, wenn ein Fremder dein Konto nutzt. Oder wenn viele Konten vom selben Gerät kommen.": "Aquaticy saves in encrypted form: your IP address, an ID for your device and details about your device and browser. The operator can't see this. That way we notice if a stranger uses your account. Or if many accounts come from the same device.",
-"Name, E-Mail, Einstellungen und Chats gehören nur zu deinem Konto. Andere sehen das nicht.": "Name, email, settings and chats belong only to your account. Others can't see them.",
-"Keine Werbung, kein Tracking.": "No ads, no tracking.",
 "Rechtliche Informationen": "Legal information",
 "Datenschutz": "Privacy",
 "Nutzungsbedingungen": "Terms of use",
 "Barrierefreiheit": "Accessibility",
 "Ablehnen": "Decline",
-"Zustimmen und weiter": "Agree and continue",
 "Willkommen bei Aquaticy": "Welcome to Aquaticy",
 "Erstelle dein Konto. Das erste Konto hier bekommt Ultra, jedes weitere Pro. Einen Code brauchst du nicht.": "Create your account. The first account here gets Ultra, every other one gets Pro. You need no code.",
-"Erstelle dein Konto. Deine Chats und Einstellungen sieht dann nur du.": "Create your account. Then only you can see your chats and settings.",
 "Registrieren": "Sign up",
 "Anmelden": "Sign in",
 "Nutzername": "Username",
@@ -4961,7 +4871,6 @@ const EN = {
 "zu.": ".",
 "Konto erstellen": "Create account",
 "Alles klar": "Got it",
-"Ohne diese Angaben kann Aquaticy dein Konto nicht schützen. Schließ das Fenster. Oder geh zurück und stimm zu.": "Without this information Aquaticy can't protect your account. Close the window. Or go back and agree.",
 "Zurück": "Back",
 "Neuer Chat": "New chat",
 "Letzte Chats": "Recent chats",
@@ -4989,8 +4898,6 @@ const EN = {
 "So viele Helfer suchen gleichzeitig, wenn „Strukturieren“ an ist. Normal: 1 bis 12.": "This many helpers search at the same time when “Structure” is on. Normal: 1 to 12.",
 "Im Web suchen": "Search the web",
 "Aus: Aquaticy sucht nicht im Internet. Es antwortet mit seinem Wissen, dem Chat und deinen Dateien. Es sagt dir, wo das alt sein kann.": "Off: Aquaticy doesn't search the internet. It answers with what it knows, the chat and your files. It tells you where that may be out of date.",
-"Öffentliche Webcams & Satellitenbilder": "Public webcams & satellite images",
-"Schaut auch auf öffentliche Webcams und Satellitenbilder. Zum Beispiel, ob irgendwo Schnee liegt. Quelle und Uhrzeit stehen immer dabei. Ein Bild ist ein Hinweis, kein Beweis.": "Also looks at public webcams and satellite images. For example, whether there's snow somewhere. Source and time are always shown. An image is a hint, not proof.",
 "Denken": "Thinking",
 "An: Du siehst, wie Aquaticy nachdenkt. Aus: Du siehst nur die Antwort. Die Antwort wird dadurch nicht besser und nicht langsamer.": "On: you see how Aquaticy thinks. Off: you only see the answer. This doesn't make the answer better or slower.",
 "Strukturieren": "Structure",
@@ -5121,7 +5028,6 @@ const EN = {
 "Was weißt du über mich?": "What do you know about me?",
 "Frag mich zu Sicherheit: Malware, Passwörter, sichere Einstellungen und Sicherheitslücken. Ich suche nicht in deinem Netz.": "Ask me about security: malware, passwords, safe settings and security holes. I don't search your network.",
 "Secure Pro beantwortet deine Fragen zu Sicherheit: Malware, Passwörter, sichere Einstellungen und Sicherheitslücken. Es sucht nicht in deinem Netz.": "Secure Pro answers your security questions: malware, passwords, safe settings and security holes. It doesn't search your network.",
-"Du nutzt Aquaticy Standard: Es antwortet ohne Sprachmodell. Mit einem eigenen API-Schlüssel beantwortet Aquaticy alles.": "You are using Aquaticy Standard: it answers without a language model. With your own API key Aquaticy answers everything.",
 "API-Schlüssel hinzufügen": "Add API key",
 "Hinweis schließen": "Close notice",
 "Ohne Sprachmodell und ohne Schlüssel": "Without a language model and without a key",
@@ -5202,24 +5108,9 @@ const EN = {
 "Ort & Sprache": "Place & language",
 "Standard-Ort": "Default place",
 "Sprache / Land": "Language / country",
-"Helfer & Grenzen": "Helpers & limits",
-"Fragen automatisch aufteilen": "Split questions automatically",
-"Große Fragen teilt Aquaticy auf und lässt Helfer die Teile gleichzeitig suchen. Das ist schneller, braucht aber mehr von deiner Grenze. Ab Werk an.": "Aquaticy splits big questions and lets helpers search the parts at the same time. That's faster, but uses more of your limit. On by default.",
-"Suchen je Helfer": "Searches per helper",
-"Wie oft ein Helfer suchen oder eine Seite lesen darf": "How often a helper may search or read a page",
-"Suchen je Anfrage": "Searches per request",
-"Höchstzahl für Suchen und gelesene Seiten zusammen": "Maximum for searches and pages read, combined",
-"Gedächtnis im Gespräch": "Memory in the conversation",
-"Wie viel vom Gespräch das Modell im Blick behält. Nur für lokale Modelle": "How much of the chat the model keeps in mind. Local models only",
-"Zeit fürs Planen": "Time for planning",
-"Wie lange das Aufteilen einer Frage dauern darf (Sekunden)": "How long splitting a question may take (seconds)",
 "Gleichzeitig": "At the same time",
-"Wie viele Helfer gleichzeitig arbeiten. 0 = Aquaticy entscheidet": "How many helpers work at the same time. 0 = Aquaticy decides",
 "Anfragen pro Minute": "Requests per minute",
-"Wie viele Anfragen pro Minute dein KI-Anbieter erlaubt. Gilt für deine eigenen Schlüssel. Leer lassen = kostenloser Tarif (NVIDIA 40, Mistral 240)": "How many requests per minute your AI provider allows. Applies to your own keys. Leave empty = free tier (NVIDIA 40, Mistral 240)",
-"leer lassen = kostenloser Tarif": "leave empty = free tier",
 "Gleichzeitige Anfragen": "Simultaneous requests",
-"Mehr auf einmal macht jede Antwort langsamer. Leer lassen = NVIDIA 4, Mistral 8": "More at once makes each answer slower. Leave empty = NVIDIA 4, Mistral 8",
 "Seiten mit echtem Browser laden": "Load pages with a real browser",
 "Für Seiten, die ihren Inhalt erst später nachladen. Dafür muss einmal": "For pages that only load their content later. For this, run once",
 "ausgeführt werden.": ".",
@@ -5240,7 +5131,6 @@ const EN = {
 "deine Farben": "your colours",
 "Sprache": "Language",
 "Aquaticy ist gerade nicht erreichbar. Versuch es gleich noch einmal.": "Aquaticy can't be reached right now. Try again in a moment.",
-"Bestätige kurz, dass du ein Mensch bist: Schieb den Regler ganz nach rechts.": "Quickly confirm you're human: slide the control all the way to the right.",
 "Regler ganz nach rechts schieben": "Slide the control all the way to the right",
 "Zu viele verdächtige Anmeldeversuche von hier. Versuch es später noch einmal.": "Too many suspicious sign-in attempts from here. Try again later.",
 "Zu viele Anfragen laufen in diesem Chat. Warte auf eine Antwort.": "Too many requests are running in this chat. Wait for an answer.",
@@ -5359,9 +5249,8 @@ const EN = {
 "Die Verbindung ist mittendrin abgerissen. Oben steht, was bis dahin ankam.": "The connection dropped midway. Above is what had arrived by then.",
 "Keine Verbindung zu Aquaticy. Läuft das Programm noch? Bei einem Modell aus der Cloud kann die erste Antwort etwas dauern.": "No connection to Aquaticy. Is the program still running? With a cloud model the first answer can take a moment.",
 "Da ist etwas schiefgelaufen. Versuch es gleich noch einmal.": "Something went wrong. Try again in a moment.",
-"Bei Aquaticy ist etwas schiefgelaufen. Versuch es gleich noch einmal.": "Something went wrong at Aquaticy. Try again in a moment.",
+"Hoppla, da ist bei mir etwas schiefgelaufen. Versuch es gleich noch einmal.": "Oops, something went wrong on my end. Try again in a moment.",
 "Keine Verbindung zu Aquaticy. Prüf deine Verbindung und versuch es gleich noch einmal.": "No connection to Aquaticy. Check your connection and try again in a moment.",
-"Wenn Auto-Upgrading an ist, können mehrfach bestätigte Auszüge auch in lokale Ollama-Modelltexte kommen. Dort liegen öffentliche Auszüge unverschlüsselt. Laufen sie ab oder fehlt die Bestätigung, werden die betroffenen Fassungen zurückgezogen und gelöscht. Einzelheiten stehen im Datenschutz.": "When Auto-Upgrading is on, excerpts confirmed several times can also go into local Ollama model texts. Public excerpts are stored there unencrypted. If they expire or are no longer confirmed, the affected versions are withdrawn and deleted. Details are in the privacy policy.",
 
 
 
@@ -5375,11 +5264,9 @@ const EN = {
 "Da ist etwas schiefgelaufen.": "Something went wrong.",
 "Versuch es gleich noch einmal. Bleibt es so, lade die Seite neu.": "Try again in a moment. If it keeps happening, reload the page.",
 "Seite neu laden": "Reload page",
-"Ist Auto-Upgrading an, können mehrfach bestätigte Auszüge auch in lokale Ollama-Modelltexte kommen (dort unverschlüsselt). Ist Wissen abgelaufen oder nicht mehr bestätigt, werden die betroffenen Fassungen zurückgezogen. Aquaticy versucht das Löschen so lange, bis der Ollama-Dienst erreichbar ist. Einzelheiten:": "If Auto-Upgrading is on, excerpts confirmed several times can also go into local Ollama model texts (unencrypted there). If knowledge expires or is no longer confirmed, the affected versions are withdrawn. Aquaticy keeps trying to delete them until the Ollama service is reachable. Details:",
 "IP-Adresse": "IP address",
 "kein Ortsfilter": "no location filter",
 "ohne Web": "without web",
-"Webcams & Satelliten": "webcams & satellites",
 "strukturiert": "structured",
 "4 Prüfer": "4 checkers",
 "gegenprüfen": "double-check",
@@ -5387,10 +5274,8 @@ const EN = {
 "Wie viele Helfer gleichzeitig suchen, wenn „Strukturieren“ an ist. Pro: 1 bis 50.": "How many helpers search at the same time when “Structure” is on. Pro: 1 to 50.",
 "Das gibt es nur mit einem Ultra-Konto.": "That's only available with an Ultra account.",
 "Das ließ sich nicht speichern.": "That couldn't be saved.",
-"Melde dich an, um deine Chats und Einstellungen auf diesem Gerät zu öffnen.": "Sign in to open your chats and settings on this device.",
 "Einrichtungscode": "Setup code",
 "Leg dein Konto an. Es ist das einzige hier und hat alle Rechte. Den Einrichtungscode findest du im Terminal, in dem Aquaticy läuft.": "Create your account. It is the only one here and has all rights. You find the setup code in the terminal where Aquaticy runs.",
-"Melde dich mit deinem Nutzernamen und Passwort an.": "Sign in with your username and password.",
 "Als Datei": "As file",
 "Ging nicht": "Didn't work",
 "KI-Bild": "AI image",
@@ -5569,7 +5454,6 @@ const EN = {
 "Chat-Infos verbergen": "Hide chat details",
 "Infos": "Details",
 "Diesen Modus gibt es nicht mehr.": "This mode no longer exists.",
-"Ausschalten": "Turn off",
 "Google Kalender": "Google Calendar",
 "Bild ansehen": "Viewing image"
 };
@@ -6628,7 +6512,6 @@ async function showSettings(){
   api("/api/memory").then(r => r.json()).then(d => showStorage(d.usage)).catch(() => {});
   loadUsage();
   loadAccount(cfg.account);
-  loadLearning();
   eigeneModelleZeigen();
   $("#probe-note").textContent = ""; $("#probe-note").className = "note";
   $("#google-step").hidden = true;
@@ -6641,40 +6524,6 @@ async function showSettings(){
   featureLoad();
 }
 $("#btn-settings").addEventListener("click", showSettings);
-
-async function loadLearning(){
-  const control = $("#learning-enabled"), status = $("#learning-status");
-  control.disabled = true;
-  try {
-    const res = await api("/api/learning");
-    if (!res.ok) throw new Error();
-    const data = await res.json();
-    learningVersion = data.version;
-    control.checked = data.enabled === true;
-    status.textContent = sprache === "en"
-      ? `${data.contributions || 0} shared excerpts; ${data.research_items || 0} facts in your 48-hour cache.`
-      : `${data.contributions || 0} eigene gemeinsame Auszüge; ${data.research_items || 0} Fakten im 48-Stunden-Cache.`;
-    control.disabled = false;
-  } catch { status.textContent = "Gemeinsames Lernen geht gerade nicht."; }
-}
-$("#learning-enabled").addEventListener("change", async (event) => {
-  const control = event.target, enabled = control.checked;
-  control.disabled = true;
-  try {
-    const res = await api("/api/learning", {method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({enabled, version:learningVersion})});
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Speichern hat nicht geklappt.");
-    control.checked = data.enabled === true;
-    $("#learning-status").textContent = enabled
-      ? "Gespeichert. Ab jetzt helfen nur neue Chats mit."
-      : "Zustimmung zurückgenommen. Deine Beiträge sind gelöscht.";
-  } catch (err) {
-    control.checked = !enabled;
-    $("#learning-status").textContent = nutzerFehler(err && err.message);
-  } finally { control.disabled = false; }
-});
 
 async function loadAccount(account){
   currentUsername = account?.username || currentUsername;

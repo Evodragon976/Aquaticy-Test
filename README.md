@@ -1,4 +1,4 @@
-# Aquaticy AI 16.0.1
+# Aquaticy AI 16.0.2
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,24 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.0.2
+
+Aquaticy Standard ist schlauer geworden, nur in Aquaticy-Test.
+
+- **Kleines Gedächtnis im Gespräch:** Fragt Aquaticy Standard „Für welchen Ort?“, reicht als
+  Antwort einfach „Erkelenz“. Danach weiß es den Ort auch bei „und morgen?“ oder
+  „was soll ich anziehen?“.
+- **Antwortet wie ein Mensch:** ganze Sätze, ein Tipp und eine Idee, was du als Nächstes fragen
+  kannst.
+- **Neue Fragen:** Was soll ich anziehen? Brauche ich einen Schirm? Wird es sonnig? Wetter am
+  Wochenende und für die nächsten Tage, Uhrzeit in anderen Städten, Feiertage, Mondphase,
+  Alter, BMI, Trinkgeld, sichere Passwörter, Witze, Fakten und ein offenes Ohr, wenn es dir
+  nicht gut geht.
+- **Freundlichere Texte:** zum Beispiel bei „Bevor es losgeht“, bei der Anmeldung und bei Fehlern.
+- **Entfernt:** öffentliche Webcams und Satellitenbilder, die Einstellungen unter
+  „Helfer & Grenzen“ und das Gemeinsame Lernen samt 48-Stunden-Recherchecache. Was dort
+  gespeichert war, löscht Aquaticy beim nächsten Start.
 
 ## Neu in 16.0.1
 
@@ -82,7 +100,6 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 - [Add-ons](#add-ons)
 - [Speicher](#speicher)
 - [Gmail und Kalender](#gmail-und-kalender)
-- [Gemeinsames Lernen](#gemeinsames-lernen)
 - [Sicherheit, Rechts-Leitplanken und Ai-guard](#sicherheit-rechts-leitplanken-und-ai-guard)
 - [Modelle und Anbieter](#modelle-und-anbieter)
 - [Suche](#suche)
@@ -150,7 +167,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/jonasenriklaumen-a11y/Aquaticy-Ai.git
 cd Aquaticy-Ai
 uv tool install --force --reinstall .
-aquaticy --version            # 16.0.1
+aquaticy --version            # 16.0.2
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup
@@ -489,8 +506,8 @@ die Frage noch einmal.
 Ultra darf, trägt ein 🔒.
 - **Konto:** Name, E-Mail, Kontotyp, Nutzung, Abmelden. **Sicherheit** mit deinen Geräten,
   Passwort ändern, überall sonst abmelden. **Daten und Konto löschen**.
-- Dazu: Gemeinsames Lernen, Speicher, Nutzung, Gmail & Kalender, Secure Pro, Suche,
-  Ort & Sprache, Helfer & Grenzen, **Dev settings** (Ultra).
+- Dazu: Speicher, Nutzung, Gmail & Kalender, Secure Pro, Suche, Ort & Sprache,
+  **Dev settings** (Ultra).
 
 **Auf dem Handy** wird die Kopfzeile nach dem Senden mit einer kurzen Animation kompakter.
 „Infos“ klappt Ortsfilter und Chat-Status wieder auf. Seitenleiste, Einstellungen und neuer
@@ -723,21 +740,6 @@ Hat es Mails oder Webseiten gelesen, fragt es trotzdem. Dein eigener Kalender z�
 Im Terminal: `aquaticy google` (oder `aquaticy google --aendern`). Von einem anderen Gerät aus
 kopierst du die Adresse, auf der Google endet, in das Feld in den Einstellungen. **Trennen**
 löscht die Zugangsdaten.
-
----
-
-## Gemeinsames Lernen
-
-**Gemeinsames Lernen** (freiwillig, *Einstellungen → Gemeinsames Lernen*). Mit deiner Zustimmung
-übernimmt Aquaticy kurze **Auszüge aus öffentlichen Sachartikeln**, die es für dich gelesen hat.
-Zurzeit sind das Wikipedia-Artikel zu Mathematik, Naturwissenschaften und Informatik. Private
-Chats werden nie geteilt.
-
-- Andere Konten sehen einen Auszug erst, wenn **zwei Konten** ihn unabhängig gefunden haben.
-- Alles ist verschlüsselt. Auszüge bleiben höchstens 30 Tage.
-- Dazu ein persönlicher **Recherchecache**: kurze Stichpunkte mit Quelle, nur für dich,
-  höchstens 48 Stunden.
-- Widerruf und Löschen entfernen deine Beiträge und deinen Cache.
 
 ---
 

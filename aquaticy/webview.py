@@ -233,8 +233,6 @@ def header_view(
     teile = [str(getattr(settings, "location", "") or "") or "kein Ortsfilter"]
     if modus != "code" and stand.get("online") is False:
         teile.append("ohne Web")
-    if modus != "code" and stand.get("visual_sources"):
-        teile.append("Webcams & Satelliten")
     if modus == "pro":
         teile.append("Pro")
     if stand.get("structured"):

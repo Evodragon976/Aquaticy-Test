@@ -208,8 +208,7 @@ def setup_command(
             backend_key_name, default=current, hide_input=not current
         ).strip()
 
-    # Die Agenten (Fragen aufteilen) sind ab 14.1.3 Luna immer an. Ausschalten geht in der
-    # Weboberflaeche unter Einstellungen -> Helfer & Grenzen.
+    # Die Agenten (Fragen aufteilen) sind immer an.
     console.print("\n[bold]3. Voreinstellungen[/bold]")
     location = typer.prompt("Standard-Ort (optional, z.B. Mönchengladbach)", default="").strip()
     lang = typer.prompt("Sprache (ISO-Code)", default="de").strip() or "de"
@@ -248,7 +247,6 @@ def setup_command(
         "AQUATICY_LOCATION": location,
         "AQUATICY_LANG": lang,
         "AQUATICY_COUNTRY": country,
-        "AQUATICY_SUBAGENTS_AUTO": "true",
     }
     if backend_key_name and backend_key:
         values[backend_key_name] = backend_key

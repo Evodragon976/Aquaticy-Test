@@ -4,7 +4,7 @@
 import httpx
 import pytest
 
-from aquaticy import addons, cache, local_model, media, research, webview
+from aquaticy import addons, cache, local_model, media, webview
 from aquaticy.tools import Toolbox
 from tests.test_v1500 import FakeGitHub
 
@@ -66,16 +66,9 @@ def test_f35_invalid_persisted_timestamps_do_not_break_the_ui(timestamp):
     assert webview.moment_text(timestamp) == ""
 
 
-def test_f36_research_cache_keeps_person_disambiguation():
-    url = "https://de.wikipedia.org/wiki/Karl_Müller_(Politiker)"
-    question = "Was weißt du über den Arzt Karl Müller?"
-    assert not research.matches_subject(url, research.words(question), question)
-
-
-def test_qualifiers_still_allow_learning_about_the_right_person():
-    url = "https://de.wikipedia.org/wiki/Karl_Müller_(Politiker)"
-    question = "Wer ist der Politiker Karl Müller?"
-    assert research.matches_subject(url, research.words(question), question)
+# 16.0.2 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (Gemeinsames Lernen, Recherchecache, Webcams und Satellitenbilder,
+# Einstellungen unter Helfer & Grenzen).
 
 
 def test_missing_capability_notes_are_private_to_the_profile_and_expire(monkeypatch):

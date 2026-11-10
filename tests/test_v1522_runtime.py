@@ -66,7 +66,8 @@ def test_f40_yesterday_uses_local_calendar_days_across_dst(
 
 
 def test_f42_integer_preferences_do_not_silently_truncate_fractional_values():
-    preference = preferences.find("subagenten_anzahl")
+    # 16.0.2 (Aquaticy-Test): subagenten_anzahl ist entfallen, formulierungen ist auch eine Zahl.
+    preference = preferences.find("formulierungen")
     assert preference is not None
     with pytest.raises(preferences.BadValue):
         preferences.coerce(preference, "2.9")

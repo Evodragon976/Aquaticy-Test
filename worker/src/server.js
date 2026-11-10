@@ -390,7 +390,7 @@ export async function bearbeite(request, env = {}, ctx = {}) {
   if (methode === "GET") {
     switch (pfad) {
       case "/api/auth/status":
-        return json({ consent: true, learning_version: "", authenticated: true,
+        return json({ consent: true, authenticated: true,
           account: { email: "", username: "", plan: "normal" }, worker: true });
       case "/api/config": return json(konfiguration(env, stand));
       case "/api/header": return json(kopf(env, stand));

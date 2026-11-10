@@ -11,7 +11,7 @@ import pytest
 
 from aquaticy.cache import Cache
 from aquaticy.config import Settings
-from aquaticy.fetch import Fetcher, PublicVisual, RobotsPolicy
+from aquaticy.fetch import Fetcher, RobotsPolicy
 from aquaticy.models import SearchResult
 from aquaticy.tools import TOOL_SCHEMAS, Toolbox
 
@@ -46,51 +46,9 @@ def test_core_tool_schemas() -> None:
     ]
 
 
-def test_public_visual_is_resolved_and_sent_to_the_vision_callback(settings: Settings) -> None:
-    class VisualFetcher:
-        def find_public_visual(self, url: str) -> tuple[str, str]:
-            assert url == "https://example.org/webcam"
-            return "https://example.org/current.jpg", ""
-
-    box = Toolbox(
-        settings,
-        fetcher=VisualFetcher(),  # type: ignore[arg-type]
-        visual_inspector=lambda url, question: f"{question}: {url}",
-    )
-    result = box.call(
-        "inspect_public_visual",
-        {"url": "https://example.org/webcam", "question": "Ist Rauch sichtbar?"},
-    )
-    assert result["url"] == "https://example.org/current.jpg"
-    assert "Ist Rauch sichtbar?" in result["observation"]
-    assert box.stats.visuals == [{
-        "url": "https://example.org/current.jpg",
-        "source_url": "https://example.org/webcam",
-        "title": "Ist Rauch sichtbar?",
-        "kind": "public_visual",
-    }]
-
-
-def test_public_visual_bytes_are_sent_to_the_model_as_data_url(settings: Settings) -> None:
-    class VisualFetcher:
-        def load_public_visual(self, url: str) -> tuple[PublicVisual, str]:
-            return PublicVisual("https://camera.example/live.jpg", b"bilddaten", "image/jpeg"), ""
-
-    seen: list[str] = []
-    box = Toolbox(
-        settings,
-        fetcher=VisualFetcher(),  # type: ignore[arg-type]
-        visual_inspector=lambda url, question: seen.append(url) or "sichtbar",
-    )
-    result = box.call(
-        "inspect_public_visual",
-        {"url": "https://camera.example/page", "question": "Was ist sichtbar?"},
-    )
-    assert seen[0].startswith("data:image/jpeg;base64,")
-    assert result["url"] == "https://camera.example/live.jpg"
-    assert box.stats.visuals[0]["mime_type"] == "image/jpeg"
-    assert box.stats.visuals[0]["media_id"].endswith(".jpg")
-    assert box.stats.visuals[0]["captured_at"] == result["checked_at"]
+# 16.0.2 (Aquaticy-Test): 2 Test(s) entfallen -- sie pruefen Teile, die es hier
+# nicht mehr gibt (Gemeinsames Lernen, Recherchecache, Webcams und Satellitenbilder,
+# Einstellungen unter Helfer & Grenzen).
 
 
 def test_web_search_uses_settings_defaults(
@@ -860,7 +818,8 @@ def test_a_bad_value_is_reported_not_stored(
     target.write_text("", encoding="utf-8")
     monkeypatch.setattr("aquaticy.config.find_env_file", lambda: target)
     box = Toolbox(settings, cache=None, fetcher=_mock_fetcher(_html_handler("<html></html>")))
-    assert "zwischen 1 und 60" in box.change_setting("werkzeug_budget", "9999")["error"]
+    # 16.0.2 (Aquaticy-Test): werkzeug_budget ist entfallen, formulierungen geht weiter.
+    assert "zwischen 1 und 3" in box.change_setting("formulierungen", "9999")["error"]
     assert target.read_text(encoding="utf-8") == "", "nichts geschrieben"
 
 
