@@ -61,7 +61,8 @@ Vor jedem Commit: `python tools/pruefung.py` muss mit 0 enden.
 - Vercel-Modus (nur Aquaticy-Test): `aquaticy/vercel.py` reicht Anfragen an `web.Handler`
   weiter, `aquaticy/vercel_blob.py` sichert den Datenordner verschlüsselt im Blob-Speicher.
   Sind Postgres-Datenbanken verbunden (Neon, Supabase), teilt `aquaticy/vercel_verbund.py`
-  den Ordner auf sie auf: Konten, Profile je Konto (mit Spiegel) und ein Cache. Tests dazu
+  den Ordner in Teile: Konten und Profile je Konto. Der Inhalt liegt im Blob-Speicher
+  (Hauptspeicher), die Datenbanken halten Verzeichnis, Spiegel und einen Cache. Tests dazu
   laufen ohne Server; mit `AQUATICY_TEST_POSTGRES` zusätzlich gegen echtes Postgres.
 - `tests/` – je Fassung eine Datei (`test_v1122.py` für 11.2.2), dazu Dateien je Thema.
   `tests/ollama_nachbau.py` ist ein nachgebautes Ollama: Damit lassen sich lokale Modelle

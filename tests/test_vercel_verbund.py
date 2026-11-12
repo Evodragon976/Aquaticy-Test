@@ -38,6 +38,8 @@ class NachbauDatenbank:
             raise vv.VerbundFehler(f"{self.name} antwortet nicht (Test).")
         if sql.startswith("SELECT version, daten"):
             return [self.teile[werte[0]]] if werte[0] in self.teile else []
+        if sql.startswith("SELECT version, ''::bytea"):
+            return [(self.teile[werte[0]][0], b"")] if werte[0] in self.teile else []
         if "VALUES (%s, 1, %s)" in sql:
             name, daten = werte
             fassung = self.teile.get(name, (0, b""))[0] + 1
@@ -311,7 +313,11 @@ def test_a_deleted_account_disappears_everywhere(schluessel: bytes, tmp_path: Pa
     zwei.konto_laden(B)
     shutil.rmtree(tmp_path / "eins" / ".aquaticy" / "users" / B)
     assert eins.sichern() == 1
-    assert all(f"konto/{B}" not in db.teile for db in dbs), "auch der Spiegel ist weg"
+    # 16.1.4: Geloescht heisst: eine neue, leere Fassung -- auch im Spiegel. So zaehlen die
+    # Fassungsnummern weiter, und kein alter Stand kommt zurueck.
+    reste = [db.teile[f"konto/{B}"] for db in dbs if f"konto/{B}" in db.teile]
+    assert reste and all(daten == b"" and fassung == 2 for fassung, daten in reste)
+    assert eins.sichern() == 0, "ein geloeschter Teil wird nicht noch einmal geloescht"
     assert zwei.auffrischen(jetzt=1000.0) == 1
     assert not (tmp_path / "zwei" / ".aquaticy" / "users" / B).exists()
 
@@ -392,6 +398,183 @@ def test_errors_never_show_addresses_or_passwords() -> None:
     with pytest.raises(vv.VerbundFehler, match="Pause"):
         db.ausfuehren("SELECT 1")
     assert time.monotonic() - start < 0.5
+
+
+# -- 16.1.4: Der Blob-Speicher ist der Hauptspeicher ---------------------------------------------
+
+class NachbauBlob:
+    """Der Blob-Speicher fuer einzelne Teile -- im Speicher."""
+
+    def __init__(self) -> None:
+        self.teile: dict[str, tuple[int, bytes]] = {}
+        self.kaputt = False
+        self.gelesen: list[str] = []
+
+    def holen(self, teil: str) -> tuple[int, bytes] | None:
+        if self.kaputt:
+            raise vercel_blob.BlobError("weg")
+        self.gelesen.append(teil)
+        return self.teile.get(teil)
+
+    def schreiben(self, teil: str, fassung: int, daten: bytes) -> None:
+        if self.kaputt:
+            raise vercel_blob.BlobError("weg")
+        self.teile[teil] = (int(fassung), bytes(daten))
+
+
+def mit_blob(dbs: list[NachbauDatenbank], blob: NachbauBlob, schluessel: bytes,
+             home: Path) -> vv.Verbund:
+    return vv.Verbund(dbs, schluessel, home, blob=blob)  # type: ignore[arg-type]
+
+
+def test_the_blob_store_is_the_main_store_and_the_databases_mirror_it(
+        schluessel: bytes, tmp_path: Path) -> None:
+    dbs, blob = vier(), NachbauBlob()
+    eins = mit_blob(dbs, blob, schluessel, tmp_path / "eins")
+    assert eins.auskunft()["haupt"] == "Blob-Speicher"
+    assert eins.start_laden() is False
+    stand_aus_dem_blob(tmp_path / "eins")
+    eins.alles_bekannt()
+    assert eins.sichern() == 3
+    assert set(blob.teile) == {"kern", f"konto/{A}", f"konto/{B}"}
+    # Blob und Spiegel tragen dieselbe Fassung und denselben verschluesselten Inhalt.
+    for teil, (fassung, daten) in blob.teile.items():
+        assert daten.startswith(b"gAAAA")
+        assert eins.orte(teil)[0].teile[teil] == (fassung, daten)  # type: ignore[attr-defined]
+    # Eine zweite Instanz liest den Inhalt aus dem Blob.
+    zwei = mit_blob(dbs, blob, schluessel, tmp_path / "zwei")
+    assert zwei.start_laden() is True
+    zwei.konto_laden(A)
+    assert blob.gelesen[-2:] == ["kern", f"konto/{A}"]
+    assert lies(chat_db(tmp_path / "zwei", A)) == ["chat-a1"]
+
+
+def test_parts_from_16_1_3_move_into_the_blob_store_when_they_are_read(
+        schluessel: bytes, tmp_path: Path) -> None:
+    """16.1.3 legte die Teile nur in die Datenbanken. Beim ersten Lesen ziehen sie um."""
+    dbs, blob = vier(), NachbauBlob()
+    alt = vv.Verbund(dbs, schluessel, tmp_path / "alt")  # type: ignore[arg-type]
+    stand_aus_dem_blob(tmp_path / "alt")
+    alt.alles_bekannt()
+    alt.sichern()
+    neu = mit_blob(dbs, blob, schluessel, tmp_path / "neu")
+    assert neu.start_laden() is True
+    neu.konto_laden(A)
+    assert lies(chat_db(tmp_path / "neu", A)) == ["chat-a1"]
+    assert set(blob.teile) == {"kern", f"konto/{A}"}
+    assert neu.sichern() == 0, "der Umzug ist keine Aenderung"
+
+
+def test_the_newer_version_wins_when_a_blob_write_failed(
+        schluessel: bytes, tmp_path: Path) -> None:
+    dbs, blob = vier(), NachbauBlob()
+    eins = mit_blob(dbs, blob, schluessel, tmp_path / "eins")
+    stand_aus_dem_blob(tmp_path / "eins")
+    eins.alles_bekannt()
+    eins.sichern()
+    blob.kaputt = True
+    schreibe(chat_db(tmp_path / "eins", A), "chat-a2")
+    assert eins.sichern() == 1, "der Spiegel in den Datenbanken hat die Fassung"
+    blob.kaputt = False
+    zwei = mit_blob(dbs, blob, schluessel, tmp_path / "zwei")
+    zwei.start_laden()
+    zwei.konto_laden(A)
+    assert lies(chat_db(tmp_path / "zwei", A)) == ["chat-a1", "chat-a2"]
+    assert blob.teile[f"konto/{A}"][0] == 2, "der Blob ist wieder auf dem neuen Stand"
+
+
+def test_saving_goes_on_in_the_blob_store_when_the_databases_are_down(
+        schluessel: bytes, tmp_path: Path) -> None:
+    dbs, blob = vier(), NachbauBlob()
+    eins = mit_blob(dbs, blob, schluessel, tmp_path / "eins")
+    stand_aus_dem_blob(tmp_path / "eins")
+    eins.alles_bekannt()
+    eins.sichern()
+    for db in dbs:
+        db.kaputt = True
+    schreibe(chat_db(tmp_path / "eins", A), "chat-a2")
+    assert eins.sichern() == 1 and not eins.offen
+    assert blob.teile[f"konto/{A}"][0] == 2
+    # Auch der Kaltstart geht nur mit dem Blob.
+    zwei = mit_blob(dbs, blob, schluessel, tmp_path / "zwei")
+    assert zwei.start_laden() is True
+    zwei.konto_laden(A)
+    assert lies(chat_db(tmp_path / "zwei", A)) == ["chat-a1", "chat-a2"]
+    # Sind die Datenbanken zurueck, gilt weiter die hoehere Fassung aus dem Blob.
+    for db in dbs:
+        db.kaputt = False
+    drei = mit_blob(dbs, blob, schluessel, tmp_path / "drei")
+    drei.start_laden()
+    drei.konto_laden(A)
+    assert lies(chat_db(tmp_path / "drei", A)) == ["chat-a1", "chat-a2"]
+
+
+def test_nothing_is_guessed_when_blob_and_databases_are_both_silent(
+        schluessel: bytes, tmp_path: Path) -> None:
+    dbs, blob = vier(), NachbauBlob()
+    blob.kaputt = True
+    for db in dbs:
+        db.kaputt = True
+    verbund = mit_blob(dbs, blob, schluessel, tmp_path)
+    with pytest.raises(vv.VerbundFehler):
+        verbund.start_laden()
+    # Sagt der Blob "gibt es nicht" und die Datenbanken schweigen, ist das auch kein "leer".
+    blob.kaputt = False
+    with pytest.raises(vv.VerbundFehler):
+        verbund.start_laden()
+
+
+def test_a_deleted_account_stays_deleted_in_the_blob_store(
+        schluessel: bytes, tmp_path: Path) -> None:
+    dbs, blob = vier(), NachbauBlob()
+    eins = mit_blob(dbs, blob, schluessel, tmp_path / "eins")
+    stand_aus_dem_blob(tmp_path / "eins")
+    eins.alles_bekannt()
+    eins.sichern()
+    shutil.rmtree(tmp_path / "eins" / ".aquaticy" / "users" / B)
+    assert eins.sichern() == 1
+    assert blob.teile[f"konto/{B}"] == (2, b"")
+    zwei = mit_blob(dbs, blob, schluessel, tmp_path / "zwei")
+    zwei.start_laden()
+    zwei.konto_laden(B)
+    assert not (tmp_path / "zwei" / ".aquaticy" / "users" / B).exists()
+    # Dasselbe Konto legt wieder etwas an: Es zaehlt weiter und ist danach wieder da.
+    schreibe(chat_db(tmp_path / "zwei", B), "neu")
+    assert zwei.sichern() == 1 and blob.teile[f"konto/{B}"][0] == 3
+
+
+def test_the_blob_part_store_speaks_the_blob_protocol(monkeypatch: pytest.MonkeyPatch) -> None:
+    import httpx
+
+    monkeypatch.setenv("AQUATICY_BLOB_TOKEN", "vercel_blob_rw_AbCdEf123_geheimerTeil")
+    dateien: dict[str, bytes] = {}
+    gesehen: list[httpx.Request] = []
+
+    def antworten(request: httpx.Request) -> httpx.Response:
+        gesehen.append(request)
+        if request.method == "PUT":
+            dateien[request.url.params["pathname"]] = request.content
+            return httpx.Response(200, json={})
+        name = request.url.path.lstrip("/")
+        if name == "kaputt":
+            return httpx.Response(500)
+        return httpx.Response(200, content=dateien[name]) if name in dateien \
+            else httpx.Response(404)
+
+    teile = vercel_blob.BlobTeile(httpx.Client(transport=httpx.MockTransport(antworten)))
+    assert teile.holen(f"konto/{A}") is None
+    teile.schreiben(f"konto/{A}", 7, b"gAAAAinhalt")
+    assert list(dateien) == [f"aquaticy/teile/konto-{A}.enc"]
+    assert teile.holen(f"konto/{A}") == (7, b"gAAAAinhalt")
+    teile.schreiben("kern", 3, b"")
+    assert teile.holen("kern") == (3, b"")
+    put = gesehen[1]
+    assert put.headers["x-vercel-blob-access"] == "private"
+    assert put.headers["x-allow-overwrite"] == "1"
+    assert gesehen[0].url.host == "abcdef123.private.blob.vercel-storage.com"
+    dateien[f"aquaticy/teile/konto-{B}.enc"] = b"ohne kopf"
+    with pytest.raises(vercel_blob.BlobError, match="beschädigt"):
+        teile.holen(f"konto/{B}")
 
 
 # -- Cache --------------------------------------------------------------------------------------

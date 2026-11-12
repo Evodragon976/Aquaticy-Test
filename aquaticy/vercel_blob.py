@@ -251,3 +251,63 @@ def save(data_dir: Path, client: Any = None) -> bool:
     if antwort.status_code not in (200, 201):
         raise BlobError(f"Die Sicherung ließ sich nicht speichern (HTTP {antwort.status_code}).")
     return True
+
+
+TEIL_KOPF = b"AQV1 "
+
+
+class BlobTeile:
+    """Einzelne Teile des Datenordners im privaten Blob-Speicher (16.1.4).
+
+    Der Speicher-Verbund (aquaticy/vercel_verbund.py) legt hier den Inhalt ab -- der
+    Blob-Speicher ist der groesste und damit der Hauptspeicher. Jeder Teil ist eine Datei
+    ``aquaticy/teile/<name>.enc``: eine Kopfzeile mit der Fassungsnummer, dann der schon
+    verschluesselte Inhalt. Ein leerer Inhalt heisst: geloescht.
+    """
+
+    def __init__(self, client: Any = None) -> None:
+        self._client = client
+
+    @staticmethod
+    def pfad(teil: str) -> str:
+        return "aquaticy/teile/" + teil.replace("/", "-") + ".enc"
+
+    def _zugang(self) -> tuple[str, str]:
+        zugang = credentials()
+        if not zugang:
+            raise BlobError("Der Blob-Speicher ist nicht verbunden.")
+        return zugang
+
+    def _mit_client(self, tun: Callable[[Any], Any], sekunden: int) -> Any:
+        import httpx
+
+        if self._client is not None:
+            return tun(self._client)
+        with httpx.Client(timeout=sekunden, follow_redirects=False) as client:
+            return tun(client)
+
+    def holen(self, teil: str) -> tuple[int, bytes] | None:
+        """Fassung und Inhalt eines Teils -- None, wenn es ihn hier nicht gibt."""
+        wert, speicher = self._zugang()
+        antwort = self._mit_client(lambda client: client.get(
+            f"https://{speicher}.private.blob.vercel-storage.com/{self.pfad(teil)}",
+            params={"cache": "0"}, headers={"authorization": f"Bearer {wert}"}), 30)
+        if antwort.status_code == 404:
+            return None
+        if antwort.status_code != 200:
+            raise BlobError(f"Der Blob-Speicher antwortet mit HTTP {antwort.status_code}.")
+        kopf, trenner, inhalt = bytes(antwort.content).partition(b"\n")
+        if not trenner or not kopf.startswith(TEIL_KOPF) or not kopf[len(TEIL_KOPF):].isdigit():
+            raise BlobError("Ein Teil im Blob-Speicher ist beschädigt.")
+        return int(kopf[len(TEIL_KOPF):]), inhalt
+
+    def schreiben(self, teil: str, fassung: int, daten: bytes) -> None:
+        wert, speicher = self._zugang()
+        inhalt = TEIL_KOPF + str(int(fassung)).encode("ascii") + b"\n" + bytes(daten)
+        antwort = self._mit_client(lambda client: client.put(
+            f"{API_URL}/", params={"pathname": self.pfad(teil)}, content=inhalt,
+            headers={**_headers(wert, speicher), "x-vercel-blob-access": "private",
+                     "x-add-random-suffix": "0", "x-allow-overwrite": "1",
+                     "x-content-type": "application/octet-stream"}), 60)
+        if antwort.status_code not in (200, 201):
+            raise BlobError(f"Der Blob-Speicher nimmt nicht an (HTTP {antwort.status_code}).")

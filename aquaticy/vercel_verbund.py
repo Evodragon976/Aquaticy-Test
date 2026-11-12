@@ -11,6 +11,11 @@ Postgres):
   Teil liegt zusaetzlich als Spiegel auf einer zweiten Datenbank.
 * **Cache** (Datenbank 3): kurzlebige Abrufe mit Ablaufzeit -- Bilder, Wetter, Wikipedia.
 
+Seit 16.1.4 ist der **Blob-Speicher der Hauptspeicher** (er ist der groesste): Der Inhalt
+jedes Teils liegt dort als eigene Datei. Die Datenbanken fuehren das Verzeichnis der
+Fassungen, halten denselben Inhalt als Spiegel und den Cache. Gelesen wird aus dem Blob; nur
+wenn dort eine Fassung fehlt oder aelter ist, kommt sie aus dem Spiegel und zieht in den Blob.
+
 Was das bringt:
 
 * Gespeichert wird nur der Teil, der sich geaendert hat -- nicht mehr alles.
@@ -208,9 +213,14 @@ def teil_von(relativ: Path) -> str:
 class Verbund:
     """Teilt den Ordner *home* auf die Datenbanken auf und haelt ihn aktuell."""
 
-    def __init__(self, datenbanken: list[Datenbank], schluessel: bytes, home: Path) -> None:
+    def __init__(self, datenbanken: list[Datenbank], schluessel: bytes, home: Path,
+                 blob: Any = None) -> None:
         if not datenbanken:
             raise ValueError("Der Verbund braucht mindestens eine Datenbank.")
+        #: 16.1.4: Der Blob-Speicher ist der Hauptspeicher fuer den Inhalt der Teile (er ist
+        #: der groesste). Die Datenbanken fuehren das Verzeichnis der Fassungen, halten den
+        #: Spiegel und den Cache. None: nur Datenbanken.
+        self.blob = blob
         self.home = Path(home)
         self.datenbanken = list(datenbanken)
         self._schluessel = schluessel
@@ -308,7 +318,60 @@ class Verbund:
 
     # -- Lesen und Schreiben in den Datenbanken ---------------------------------------------
 
+    def _blob_holen(self, teil: str) -> tuple[int, bytes] | None:
+        try:
+            ergebnis: tuple[int, bytes] | None = self.blob.holen(teil)
+        except Exception as fehler:
+            raise VerbundFehler(
+                f"Der Blob-Speicher antwortet nicht ({type(fehler).__name__}).") from None
+        return ergebnis
+
+    def _blob_schreiben(self, teil: str, fassung: int, daten: bytes) -> None:
+        try:
+            self.blob.schreiben(teil, fassung, daten)
+        except Exception as fehler:
+            raise VerbundFehler(
+                f"Der Blob-Speicher nimmt nicht an ({type(fehler).__name__}).") from None
+
     def _holen(self, teil: str) -> tuple[int, bytes] | None:
+        """Fassung und Inhalt eines Teils. Leerer Inhalt heisst: geloescht.
+
+        Mit Blob-Speicher kommt der Inhalt von dort. Die Datenbanken sagen, welche Fassung
+        gilt: Ist ihre neuer (eine Speicherung im Blob scheiterte) oder fehlt der Teil im
+        Blob, kommt der Inhalt aus dem Spiegel und geht gleich wieder in den Blob.
+
+        Raises:
+            VerbundFehler: wenn nicht sicher ist, was gilt -- nie "gibt es nicht" raten.
+        """
+        if self.blob is None:
+            return self._db_holen(teil)
+        blob_fehler: VerbundFehler | None = None
+        im_blob: tuple[int, bytes] | None = None
+        try:
+            im_blob = self._blob_holen(teil)
+        except VerbundFehler as fehler:
+            blob_fehler = fehler
+            melde(f"{fehler} Ich nehme den Spiegel in den Datenbanken.")
+        try:
+            dort = self._db_holen(teil, nur_fassung=True)
+        except VerbundFehler:
+            if im_blob is None:
+                raise
+            melde("Die Datenbanken antworten nicht. Es gilt der Blob-Speicher.")
+            return im_blob
+        if im_blob is not None and im_blob[0] >= (dort[0] if dort else 0):
+            return im_blob
+        if dort is None:
+            if blob_fehler is not None:
+                raise blob_fehler
+            return None
+        aus_db = self._db_holen(teil)
+        if aus_db is not None and blob_fehler is None:
+            with contextlib.suppress(VerbundFehler):
+                self._blob_schreiben(teil, aus_db[0], aus_db[1])
+        return aus_db
+
+    def _db_holen(self, teil: str, nur_fassung: bool = False) -> tuple[int, bytes] | None:
         """Die Fassung und der Inhalt eines Teils -- vom Hauptort, sonst vom Spiegel.
 
         Raises:
@@ -318,10 +381,11 @@ class Verbund:
         orte = self.orte(teil) + self._andere(teil)
         geantwortet = False
         fehler: VerbundFehler | None = None
+        spalten = "version, ''::bytea" if nur_fassung else "version, daten"
         for db in orte:
             try:
                 zeilen = db.ausfuehren(
-                    f"SELECT version, daten FROM {SCHEMA}.teile WHERE name = %s", (teil,))
+                    f"SELECT {spalten} FROM {SCHEMA}.teile WHERE name = %s", (teil,))
             except VerbundFehler as exc:
                 fehler = exc
                 melde(f"{exc} Ich versuche es beim Spiegel.")
@@ -336,7 +400,28 @@ class Verbund:
         return None
 
     def _schreiben(self, teil: str, daten: bytes) -> int:
-        """Legt die neue Fassung ab. Returns: ihre Nummer."""
+        """Legt die neue Fassung ab (leer: geloescht). Returns: ihre Nummer.
+
+        Die Datenbank vergibt die Nummer und haelt den Spiegel, der Blob-Speicher den Inhalt.
+        Antwortet die Datenbank nicht, zaehlt diese Instanz selbst weiter und schreibt in den
+        Blob -- gelesen wird immer die hoehere Fassung.
+        """
+        if self.blob is None:
+            return self._db_schreiben(teil, daten)
+        try:
+            fassung = self._db_schreiben(teil, daten)
+        except VerbundFehler as fehler:
+            fassung = self.stand.get(teil, (0, (), ""))[0] + 1
+            melde(f"{fehler} Ich speichere nur im Blob-Speicher.")
+            self._blob_schreiben(teil, fassung, daten)
+            return fassung
+        try:
+            self._blob_schreiben(teil, fassung, daten)
+        except VerbundFehler as fehler:
+            melde(f"{fehler} Der Spiegel in den Datenbanken hat die Fassung.")
+        return fassung
+
+    def _db_schreiben(self, teil: str, daten: bytes) -> int:
         orte = self.orte(teil)
         zeilen = orte[0].ausfuehren(
             f"INSERT INTO {SCHEMA}.teile (name, version, daten) VALUES (%s, 1, %s) "
@@ -368,10 +453,14 @@ class Verbund:
         orte = self.orte(teil)
         return [db for db in [*self.profile, self.konten] if db not in orte]
 
-    def _loeschen(self, teil: str) -> None:
-        self._fundort.pop(teil, None)
-        for db in self.orte(teil) + self._andere(teil):
-            db.ausfuehren(f"DELETE FROM {SCHEMA}.teile WHERE name = %s", (teil,))
+    def _uebernehmen(self, teil: str, zeile: tuple[int, bytes]) -> None:
+        """Bringt die Platte auf den geholten Stand. Leerer Inhalt: Der Teil ist geloescht."""
+        if zeile[1]:
+            self._gleichstand(teil, zeile[0], self._entpacken(teil, zeile[1]))
+            return
+        if teil != KERN:
+            shutil.rmtree(self._ordner(teil), ignore_errors=True)
+        self.stand[teil] = (zeile[0], (), "")
 
     # -- Ablauf -----------------------------------------------------------------------------
 
@@ -379,7 +468,7 @@ class Verbund:
         """Beim Kaltstart: holt den Teil ``kern``. Returns: False, wenn der Verbund leer ist."""
         with self._sperre:
             zeile = self._holen(KERN)
-            if zeile is None:
+            if zeile is None or not zeile[1]:
                 return False
             self._gleichstand(KERN, zeile[0], self._entpacken(KERN, zeile[1]))
             self.bekannt.add(KERN)
@@ -401,7 +490,7 @@ class Verbund:
                 return
             zeile = self._holen(teil)
             if zeile is not None:
-                self._gleichstand(teil, zeile[0], self._entpacken(teil, zeile[1]))
+                self._uebernehmen(teil, zeile)
             else:
                 # Neu hier: Was schon auf der Platte liegt, muss noch hoch.
                 self.stand[teil] = (0, (), "")
@@ -438,15 +527,18 @@ class Verbund:
                 self.offen.discard(teil)
                 gespeichert += 1
             for teil in [t for t in self.stand if t != KERN and t not in abdruecke]:
-                if self.stand[teil][0] > 0:
+                # Hier geloescht (Konto oder alle Daten): als leere Fassung ablegen, damit es
+                # ueberall gilt und die Fassungsnummern weiterzaehlen.
+                fassung = self.stand[teil][0]
+                if fassung > 0 and self.stand[teil][2]:
                     try:
-                        self._loeschen(teil)
+                        fassung = self._schreiben(teil, b"")
                     except VerbundFehler as fehler:
                         self.letzter_fehler = str(fehler)
                         melde(f"Nicht gelöscht: {fehler}")
                         continue
                     gespeichert += 1
-                self.stand[teil] = (0, (), "")
+                self.stand[teil] = (fassung, (), "")
                 self.offen.discard(teil)
         return gespeichert
 
@@ -484,7 +576,7 @@ class Verbund:
                             zeile = self._holen(teil)
                             if zeile is None:
                                 continue
-                            self._gleichstand(teil, zeile[0], self._entpacken(teil, zeile[1]))
+                            self._uebernehmen(teil, zeile)
                         except VerbundFehler as fehler:
                             self.letzter_fehler = str(fehler)
                             continue
@@ -557,6 +649,7 @@ class Verbund:
     def auskunft(self) -> dict[str, Any]:
         """Was der Verbund gerade tut -- ohne Adressen und Zugangsdaten."""
         return {
+            "haupt": "Blob-Speicher" if self.blob is not None else self.konten.name,
             "datenbanken": len(self.datenbanken),
             "konten": self.konten.name,
             "profile": [db.name for db in self.profile],
@@ -583,4 +676,6 @@ def aus_umgebung(home: Path, umgebung: Mapping[str, str] | None = None) -> Verbu
     gefunden = adressen(umgebung)
     if not schluessel or not gefunden:
         return None
-    return Verbund([Datenbank(name, adresse) for name, adresse in gefunden], schluessel, home)
+    blob = vercel_blob.BlobTeile() if vercel_blob.credentials() else None
+    return Verbund([Datenbank(name, adresse) for name, adresse in gefunden], schluessel, home,
+                   blob=blob)

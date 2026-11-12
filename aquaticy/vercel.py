@@ -162,6 +162,7 @@ def start() -> str:
                 vercel_verbund.melde(f"Übernahme aus dem Blob-Speicher: {teile} Teile.")
             auskunft = verbund.auskunft()
             vercel_verbund.melde(
+                f"Hauptspeicher {auskunft['haupt']}. "
                 f"{auskunft['datenbanken']} Datenbanken: Konten {auskunft['konten']}, Profile "
                 f"{', '.join(auskunft['profile'])}, Cache {auskunft['cache']}.")
         return ""

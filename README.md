@@ -1,4 +1,4 @@
-# Aquaticy AI 16.1.3
+# Aquaticy AI 16.1.4
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,20 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.1.4
+
+Nur in Aquaticy-Test, für Vercel.
+
+- **Der Blob-Speicher ist wieder der Hauptspeicher.** Er ist der größte. Jeder Teil (die
+  Konten und je Konto ein Profil) liegt dort als eigene Datei. Aquaticy liest von dort.
+- **Die Datenbanken helfen mit:** Neon und Supabase führen das Verzeichnis der Fassungen,
+  halten jeden Teil zusätzlich als Spiegel und den Cache. Fällt der Blob-Speicher aus, liest
+  Aquaticy vom Spiegel. Fallen die Datenbanken aus, speichert es weiter im Blob-Speicher.
+- **Umzug von selbst:** Was 16.1.3 nur in die Datenbanken gelegt hat, zieht beim ersten Lesen
+  in den Blob-Speicher.
+- **Löschen:** Ein gelöschtes Konto wird als leere Fassung abgelegt. So kommt kein alter Stand
+  zurück.
 
 ## Neu in 16.1.3
 
@@ -207,7 +221,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.1.3
+aquaticy --version            # 16.1.4
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup
@@ -388,21 +402,23 @@ mit dem Projekt (*Storage* im Vercel-Dashboard), nutzt Aquaticy sie statt des ei
 Blob-Speicher. Es erkennt sie an den Variablen `POSTGRES_URL`, `STORAGE_POSTGRES_URL`,
 `STORAGE2_POSTGRES_URL` und so weiter. Die Reihenfolge legt die Aufgaben fest:
 
-| Datenbank | Aufgabe |
+| Speicher | Aufgabe |
 |---|---|
-| 1. (ohne Präfix) | Konten, Anmeldungen, Einstellungen |
-| 2. und alle ab der 4. | Profile: Chats, Gedächtnis und Dateien je Konto |
-| 3. | Cache mit Ablaufzeit: Bilder, Wetter, Wikipedia |
+| Blob-Speicher | Hauptspeicher (seit 16.1.4): der Inhalt aller Teile |
+| 1. Datenbank (ohne Präfix) | Verzeichnis und Spiegel der Konten |
+| 2. und alle ab der 4. | Verzeichnis und Spiegel der Profile je Konto |
+| 3. Datenbank | Cache mit Ablaufzeit: Bilder, Wetter, Wikipedia |
 
 - Mit einer Datenbank macht sie alles. Mit zweien hält die zweite Profile und Cache.
 - Jeder Teil liegt zusätzlich als Spiegel auf einer zweiten Datenbank. Fällt eine aus, liest
   Aquaticy vom Spiegel.
 - Alles ist mit `AQUATICY_VERCEL_SECRET` verschlüsselt. Die Tabellen liegen im Schema
   `aquaticy`. Die Daten-API von Supabase zeigt dieses Schema nicht.
-- Beim ersten Start übernimmt Aquaticy den Stand aus dem Blob-Speicher. Danach schreibt es
-  nicht mehr dorthin. Der Blob-Speicher bleibt als alter Stand liegen.
-- `AQUATICY_VERBUND=0` schaltet den Verbund ab. Aquaticy nimmt dann wieder den Stand aus dem
-  Blob-Speicher. Was seit der Übernahme dazukam, fehlt dort.
+- Beim ersten Start übernimmt Aquaticy das alte Gesamtpaket aus dem Blob-Speicher und teilt
+  es auf. Das Paket bleibt als alter Stand liegen. Die Teile liegen daneben unter
+  `aquaticy/teile/`.
+- `AQUATICY_VERBUND=0` schaltet den Verbund ab. Aquaticy nimmt dann wieder das alte
+  Gesamtpaket. Was seit der Übernahme dazukam, fehlt dort.
 - Grenze: Die Konten-Datenbank ist eine Einheit. Schreiben zwei Instanzen sie in derselben
   Sekunde, gewinnt die spätere.
 - Die Datenbanken speichern nur. Ein Sprachmodell läuft dort nicht.
