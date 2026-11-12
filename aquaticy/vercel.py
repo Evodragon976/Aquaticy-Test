@@ -11,9 +11,11 @@ Anders als am eigenen Rechner:
   weitere Pro -- ohne Token-Grenze. Was in der App an Ultra haengt, weil es Sicherheit
   betrifft (Rechts-Leitplanken abschalten, eigene Adressen fuer Modell oder Suche, nie vom
   Missbrauchsschutz gesperrt werden), bleibt beim Besitzer.
-* **Daten:** liegen in /tmp und werden nach jeder Aenderung verschluesselt im privaten
-  Blob-Speicher gesichert (``vercel_blob.py``). Ohne ``AQUATICY_VERCEL_SECRET`` und einen
-  verbundenen Speicher gibt es keine Sicherung: Beim naechsten Kaltstart ist dann alles weg.
+* **Daten:** liegen in /tmp und werden nach jeder Aenderung verschluesselt gesichert. Sind
+  Postgres-Datenbanken verbunden (Neon, Supabase), teilt der Speicher-Verbund sie auf
+  (``vercel_verbund.py``, 16.1.3): Konten, Profile je Konto und ein Cache. Sonst geht alles
+  als ein Archiv in den privaten Blob-Speicher (``vercel_blob.py``). Ohne
+  ``AQUATICY_VERCEL_SECRET`` gibt es keine Sicherung: Beim naechsten Kaltstart ist alles weg.
 * **Aus:** virtual machine, WhatsApp/Signal, Secure Pro, Coworker-Zeitplan, Werkstatt,
   Plugins, Heimnetz-Dienste, Server-Verbund, lokale Modelle und deren Upgrades. Das braucht
   einen Rechner, der dauerhaft laeuft.
@@ -56,9 +58,16 @@ HOP_BY_HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", 
 #: Nur fuer den Blob-Speicher -- geht nicht an web.Handler weiter.
 PRIVATE_HEADERS = {"x-vercel-oidc-token"}
 
-_STATE: dict[str, Any] = {"error": "", "web": None, "handler": None, "stand": None}
+def new_state() -> dict[str, Any]:
+    """Der Zustand einer frischen Instanz (auch fuer Tests)."""
+    return {"error": "", "web": None, "handler": None, "stand": None, "verbund": None,
+            "aktiv": 0}
+
+
+_STATE: dict[str, Any] = new_state()
 _START_LOCK = threading.Lock()
 _SAVE_LOCK = threading.Lock()
+_AKTIV_LOCK = threading.Lock()
 
 
 def _prepare_env() -> None:
@@ -103,14 +112,21 @@ def start() -> str:
         if _STATE["handler"] is not None or _STATE["error"]:
             return str(_STATE["error"])
         _prepare_env()
-        from aquaticy import vercel_blob
+        from aquaticy import vercel_blob, vercel_verbund
 
+        verbund = vercel_verbund.aus_umgebung(HOME)
+        uebernahme = False
         try:
-            vercel_blob.restore(HOME)
+            # 16.1.3: Erst im Speicher-Verbund nachsehen. Ist er noch leer, kommt der Stand
+            # einmalig aus dem Blob-Speicher und geht danach in die Datenbanken.
+            if verbund is None or not verbund.start_laden():
+                vercel_blob.restore(HOME)
+                uebernahme = verbund is not None
         except Exception as exc:
             # Nie mit leeren Daten weitermachen: die naechste Sicherung loeschte sonst alles.
             _STATE["error"] = f"Die Sicherung ließ sich nicht laden: {exc}"
             return str(_STATE["error"])
+        _STATE["verbund"] = verbund
         modell = preset_model()
         from aquaticy.config import write_env_file
 
@@ -138,7 +154,74 @@ def start() -> str:
         _STATE["web"] = web
         _STATE["handler"] = _handler_class(web)
         _STATE["stand"] = _fingerprint()
+        if verbund is not None:
+            _cache_einbinden(web, verbund)
+            if uebernahme:
+                verbund.alles_bekannt()
+                teile = verbund.sichern()
+                vercel_verbund.melde(f"Übernahme aus dem Blob-Speicher: {teile} Teile.")
+            auskunft = verbund.auskunft()
+            vercel_verbund.melde(
+                f"{auskunft['datenbanken']} Datenbanken: Konten {auskunft['konten']}, Profile "
+                f"{', '.join(auskunft['profile'])}, Cache {auskunft['cache']}.")
         return ""
+
+
+#: Wie lange ein Abruf von Aquaticy Standard im Cache bleibt (Sekunden), je Dienst.
+CACHE_DAUER = (("geocoding-api.open-meteo.com", 30 * 86400), ("api.open-meteo.com", 600),
+               ("wikipedia.org", 86400), ("api.frankfurter.app", 3600),
+               ("www.tagesschau.de", 300))
+BILD_DAUER = 86400
+
+
+def _cache_einbinden(web: Any, verbund: Any) -> None:
+    """Stellt den gemeinsamen Cache vor oeffentliche Abrufe (16.1.3).
+
+    Nur Oeffentliches, das fuer alle gleich ist: Bilder der Bildvorschau und die Abrufe von
+    Aquaticy Standard (Wetter, Orte, Wikipedia, Kurse, Nachrichten). Nichts aus einem Konto.
+    """
+    import json
+    from urllib.parse import urlsplit
+
+    from aquaticy import standard
+
+    def dauer(adresse: str) -> int:
+        host = urlsplit(adresse).hostname or ""
+        return next((sek for name, sek in CACHE_DAUER if host.endswith(name)), 0)
+
+    echt_holen = standard.holen_json
+
+    def roh_holen(adresse: str) -> bytes | None:
+        daten = echt_holen(adresse)
+        return None if daten is None else json.dumps(daten).encode("utf-8")
+
+    gemerkt = verbund.gemerkt("standard", dauer, roh_holen)
+
+    def holen_json(url: str) -> Any:
+        roh = gemerkt(url)
+        if roh is None:
+            return None
+        try:
+            return json.loads(roh)
+        except ValueError:
+            return None
+
+    standard.holen_json = holen_json
+
+    echt_bild = web.media_by_url
+
+    def media_by_url(settings: Any, target: str) -> tuple[int, bytes, str]:
+        vorhanden = verbund.cache_holen("bild", target)
+        if vorhanden is not None and b"\n" in vorhanden:
+            art, _, inhalt = vorhanden.partition(b"\n")
+            return 200, inhalt, art.decode("ascii", "replace")
+        status, inhalt, art = echt_bild(settings, target)
+        if status == 200 and inhalt and art.startswith("image/") and "\n" not in art:
+            verbund.cache_setzen("bild", target, art.encode("ascii", "replace") + b"\n" + inhalt,
+                                 BILD_DAUER)
+        return status, inhalt, art
+
+    web.media_by_url = media_by_url
 
 
 def shared_key_names() -> set[str]:
@@ -172,6 +255,14 @@ def _auth_class(basis: type) -> type:
         """Konten ohne Code: das erste Ultra, jedes weitere Pro."""
 
         auto_plan = True
+
+        def profile_dir(self, user_id: str) -> Path:
+            # 16.1.3: Das Profil kommt erst aus dem Speicher-Verbund, wenn es gebraucht wird.
+            verbund = _STATE.get("verbund")
+            if verbund is not None:
+                verbund.konto_laden(str(user_id))
+            ordner: Path = super().profile_dir(user_id)
+            return ordner
 
         def register(self, email: str, password: str, plan: str, pro_code: str = "",
                      **kwargs: Any) -> Any:
@@ -302,6 +393,14 @@ def save_if_changed() -> None:
     """Nach einer Aenderung: neue Sicherung, aber nur wenn sich in /tmp etwas getan hat."""
     from aquaticy import vercel_blob
 
+    verbund = _STATE.get("verbund")
+    if verbund is not None:
+        with _SAVE_LOCK:
+            try:
+                verbund.sichern()
+            except Exception as exc:
+                print(f"  [Vercel] Sicherung fehlgeschlagen: {type(exc).__name__}: {exc}")
+        return
     with _SAVE_LOCK:
         stand = _fingerprint()
         if stand == _STATE["stand"]:
@@ -335,6 +434,11 @@ def app(environ: dict[str, Any],
         return _plain(start_response, "413 Content Too Large", "Die Anfrage ist zu groß.")
     body = environ["wsgi.input"].read(laenge) if laenge else b""
     methode = str(environ.get("REQUEST_METHOD") or "GET").upper()
+    verbund = _STATE.get("verbund")
+    if verbund is not None and _STATE["aktiv"] == 0:
+        # Nur wenn gerade keine andere Anfrage laeuft: holen, was andere Instanzen aenderten.
+        with contextlib.suppress(Exception), _SAVE_LOCK:
+            verbund.auffrischen()
     return _relay(_raw_request(environ, body), ip, methode, start_response)
 
 
@@ -342,6 +446,17 @@ def _relay(roh: bytes, ip: str, methode: str,
            start_response: Callable[..., Any]) -> Iterator[bytes]:
     """Laesst web.Handler die Anfrage ueber ein Socket-Paar beantworten."""
     handler = _STATE["handler"]
+    with _AKTIV_LOCK:
+        _STATE["aktiv"] += 1
+    try:
+        yield from _weiterreichen(handler, roh, ip, methode, start_response)
+    finally:
+        with _AKTIV_LOCK:
+            _STATE["aktiv"] -= 1
+
+
+def _weiterreichen(handler: Any, roh: bytes, ip: str, methode: str,
+                   start_response: Callable[..., Any]) -> Iterator[bytes]:
     innen, aussen = socket.socketpair()
 
     def bedienen() -> None:

@@ -19,10 +19,14 @@ SECRET = "x" * 40
 @pytest.fixture(autouse=True)
 def _no_vercel_credentials(monkeypatch):
     """Keine Zugangsdaten aus der Umgebung des Rechners, auf dem die Tests laufen."""
-    from aquaticy import vercel_blob
+    import os
+
+    from aquaticy import vercel_blob, vercel_verbund
 
     for name in ("AQUATICY_BLOB_TOKEN", "BLOB_READ_WRITE_TOKEN", "BLOB_STORE_ID",
-                 "VERCEL_OIDC_TOKEN", "AQUATICY_VERCEL_SECRET"):
+                 "VERCEL_OIDC_TOKEN", "AQUATICY_VERCEL_SECRET", "AQUATICY_VERBUND"):
+        monkeypatch.delenv(name, raising=False)
+    for name in [n for n in os.environ if vercel_verbund.URL_NAME.match(n)]:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(vercel_blob, "OIDC_TOKEN", "")
 
@@ -205,8 +209,8 @@ def vercel_app(monkeypatch, tmp_path):
     monkeypatch.delenv("AQUATICY_BLOB_TOKEN", raising=False)
     monkeypatch.delenv("BLOB_READ_WRITE_TOKEN", raising=False)
     monkeypatch.delenv("VERCEL", raising=False)
-    monkeypatch.setattr(vercel, "_STATE", {"error": "", "web": None, "handler": None,
-                                           "stand": None})
+    # 16.1.3: Der Zustand kennt jetzt auch den Speicher-Verbund -- die Vorlage kommt von dort.
+    monkeypatch.setattr(vercel, "_STATE", vercel.new_state())
     for name in ("AUTH", "AIGUARD", "TOKEN", "account_quota", "_profile_settings"):
         monkeypatch.setattr(web, name, getattr(web, name))
     config.reset_settings_cache()

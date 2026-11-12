@@ -1,6 +1,6 @@
 [project]
 name = "aquaticy"
-version = "16.0.3"
+version = "16.1.3"
 description = "Ein KI-Agent fuer Kommandozeile und Browser, der eigenstaendig das Web durchsucht, Seiten liest und die Ergebnisse ausgewertet zurueckgibt."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -35,6 +35,9 @@ dependencies = [
     "PyYAML>=6.0.3,<7",
     "pypdf>=6.21.4,<7",
     "cryptography>=50.0.1,<52",
+    # 16.1.3: Treiber fuer den Speicher-Verbund auf Vercel (Neon, Supabase). Wird erst geladen,
+    # wenn eine Datenbank verbunden ist (aquaticy/vercel_verbund.py).
+    "psycopg[binary]>=3.2.3,<4",
 
     # 16.0.0 (Aquaticy-Test): ohne virtual machine kein WhatsApp/Signal -- neonize, Pillow und
     # zxing-cpp (nur fuer den QR-Code der Kopplung) sind raus. Das Paket fuer Vercel wird kleiner.

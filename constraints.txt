@@ -57,6 +57,8 @@ primp==2.0.1
 propcache==0.5.4
 pycparser==3.0
 pydantic==2.13.5
+psycopg==3.3.9
+psycopg-binary==3.3.9
 pydantic-core==2.46.5
 pydantic-settings==2.15.0
 pyee==13.0.1

@@ -33,6 +33,7 @@ import io
 import os
 import tarfile
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -112,28 +113,49 @@ def _sqlite_copy(datei: Path, ziel: Path) -> bool:
     return True
 
 
-def pack(data_dir: Path) -> bytes:
-    """Der Datenordner als tar.gz -- ohne Caches, uebergrosse Dateien und Links.
-
-    SQLite-Datenbanken gehen als stimmige Kopie mit (Backup-API), ihre -wal/-shm-Dateien nicht.
-    """
-    import tempfile
-
-    puffer = io.BytesIO()
-    with tempfile.TemporaryDirectory() as tmp, \
-            tarfile.open(fileobj=puffer, mode="w:gz", compresslevel=6) as archiv:
-        for datei in sorted(Path(data_dir).rglob("*")):
-            relativ = datei.relative_to(data_dir)
-            if (datei.is_symlink() or not datei.is_file()
+def belongs(datei: Path, relativ: Path) -> bool:
+    """Gehoert diese Datei in die Sicherung? Keine Caches, Links, Sperren, WAL-Dateien."""
+    try:
+        return not (datei.is_symlink() or not datei.is_file()
                     or any(teil in SKIP_DIRS for teil in relativ.parts)
                     or datei.suffix in (".lock", ".tmp")
                     or datei.name.endswith(("-wal", "-shm", "-journal"))
-                    or datei.stat().st_size > MAX_FILE):
+                    or datei.stat().st_size > MAX_FILE)
+    except OSError:
+        return False
+
+
+def pack(data_dir: Path, only: Callable[[Path], bool] | None = None) -> bytes:
+    """Der Datenordner als tar.gz -- ohne Caches, uebergrosse Dateien und Links.
+
+    SQLite-Datenbanken gehen als stimmige Kopie mit (Backup-API), ihre -wal/-shm-Dateien nicht.
+
+    Args:
+        only: nimmt nur Dateien, fuer deren Pfad (relativ zu *data_dir*) das gilt -- der
+            Speicher-Verbund (aquaticy/vercel_verbund.py) packt so einzelne Teile.
+    """
+    import gzip
+    import tempfile
+
+    puffer = io.BytesIO()
+    # Ohne Zeitstempel und Besitzer: Gleicher Inhalt ergibt dasselbe Archiv. So erkennt der
+    # Speicher-Verbund an der Pruefsumme, dass sich nichts geaendert hat (16.1.3).
+    with tempfile.TemporaryDirectory() as tmp, \
+            gzip.GzipFile(fileobj=puffer, mode="wb", compresslevel=6, mtime=0) as gz, \
+            tarfile.open(fileobj=gz, mode="w") as archiv:
+        for datei in sorted(Path(data_dir).rglob("*")):
+            relativ = datei.relative_to(data_dir)
+            if not belongs(datei, relativ) or (only is not None and not only(relativ)):
                 continue
             kopie = Path(tmp) / "db"
             kopie.unlink(missing_ok=True)
             quelle = kopie if _sqlite_copy(datei, kopie) else datei
-            archiv.add(quelle, arcname=relativ.as_posix(), recursive=False)
+            eintrag = archiv.gettarinfo(str(quelle), arcname=relativ.as_posix())
+            eintrag.mtime, eintrag.uid, eintrag.gid = 0, 0, 0
+            eintrag.uname = eintrag.gname = ""
+            eintrag.mode = 0o600
+            with quelle.open("rb") as inhalt:
+                archiv.addfile(eintrag, inhalt)
             if puffer.tell() > MAX_ARCHIVE:
                 raise BlobError("Die Daten sind zu groß für die Sicherung (200 MB).")
     return puffer.getvalue()
@@ -155,9 +177,15 @@ def unpack(daten: bytes, data_dir: Path) -> int:
             if quelle is None:
                 continue
             pfad.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(pfad, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            # Erst daneben schreiben, dann ersetzen: Wer die alte Datei gerade offen hat, liest
+            # sie zu Ende. Alte WAL-Dateien gehoeren zur alten Datenbank und muessen weg.
+            neu = pfad.with_name(pfad.name + ".tmp")
+            fd = os.open(neu, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "wb") as aus:
                 aus.write(quelle.read(MAX_FILE + 1)[:MAX_FILE])
+            os.replace(neu, pfad)
+            for anhang in ("-wal", "-shm", "-journal"):
+                pfad.with_name(pfad.name + anhang).unlink(missing_ok=True)
             anzahl += 1
     return anzahl
 

@@ -1,4 +1,4 @@
-# Aquaticy AI 16.0.3
+# Aquaticy AI 16.1.3
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,27 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.1.3
+
+Nur in Aquaticy-Test, für Vercel.
+
+- **Speicher-Verbund:** Sind Postgres-Datenbanken mit dem Projekt verbunden (Neon, Supabase),
+  arbeiten sie zusammen und teilen sich die Aufgaben: Die erste hält die Konten, die dritte
+  ist der Cache, alle anderen halten die Profile der Konten. Jeder Teil liegt zusätzlich als
+  Spiegel auf einer zweiten Datenbank.
+- **Nur Geändertes wird gespeichert.** Bisher ging nach jeder Änderung der ganze Datenordner
+  als ein Paket in den Blob-Speicher. Jetzt geht nur der Teil hoch, der sich geändert hat.
+- **Weniger Arbeitsspeicher je Instanz:** Ein Profil wird erst geladen, wenn sein Konto eine
+  Anfrage stellt.
+- **Mehrere Instanzen:** Vor jeder Anfrage holt eine Instanz, was eine andere geändert hat.
+- **Gemeinsamer Cache:** Bilder der Vorschau und die Abrufe von Aquaticy Standard (Wetter,
+  Orte, Wikipedia, Kurse, Nachrichten) liegen eine Zeit lang im Cache. Die nächste Antwort
+  kommt dann schneller.
+- **Übernahme:** Beim ersten Start holt Aquaticy den Stand einmal aus dem Blob-Speicher und
+  verteilt ihn auf die Datenbanken. Alles bleibt verschlüsselt.
+
+Einrichtung und Grenzen stehen unter [Vercel](#vercel).
 
 ## Neu in 16.0.3
 
@@ -186,7 +207,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.0.3
+aquaticy --version            # 16.1.3
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup
@@ -362,13 +383,37 @@ Zwei Dinge musst du dafür beachten:
 - Lass den Blob-Speicher mit dem Projekt verbunden. Ohne ihn speichert Aquaticy nichts, und
   beim nächsten Kaltstart ist alles weg.
 
+**Speicher-Verbund mit Neon und Supabase (seit 16.1.3).** Verbindest du Postgres-Datenbanken
+mit dem Projekt (*Storage* im Vercel-Dashboard), nutzt Aquaticy sie statt des einen Pakets im
+Blob-Speicher. Es erkennt sie an den Variablen `POSTGRES_URL`, `STORAGE_POSTGRES_URL`,
+`STORAGE2_POSTGRES_URL` und so weiter. Die Reihenfolge legt die Aufgaben fest:
+
+| Datenbank | Aufgabe |
+|---|---|
+| 1. (ohne Präfix) | Konten, Anmeldungen, Einstellungen |
+| 2. und alle ab der 4. | Profile: Chats, Gedächtnis und Dateien je Konto |
+| 3. | Cache mit Ablaufzeit: Bilder, Wetter, Wikipedia |
+
+- Mit einer Datenbank macht sie alles. Mit zweien hält die zweite Profile und Cache.
+- Jeder Teil liegt zusätzlich als Spiegel auf einer zweiten Datenbank. Fällt eine aus, liest
+  Aquaticy vom Spiegel.
+- Alles ist mit `AQUATICY_VERCEL_SECRET` verschlüsselt. Die Tabellen liegen im Schema
+  `aquaticy`. Die Daten-API von Supabase zeigt dieses Schema nicht.
+- Beim ersten Start übernimmt Aquaticy den Stand aus dem Blob-Speicher. Danach schreibt es
+  nicht mehr dorthin. Der Blob-Speicher bleibt als alter Stand liegen.
+- `AQUATICY_VERBUND=0` schaltet den Verbund ab. Aquaticy nimmt dann wieder den Stand aus dem
+  Blob-Speicher. Was seit der Übernahme dazukam, fehlt dort.
+- Grenze: Die Konten-Datenbank ist eine Einheit. Schreiben zwei Instanzen sie in derselben
+  Sekunde, gewinnt die spätere.
+- Die Datenbanken speichern nur. Ein Sprachmodell läuft dort nicht.
+
 **Was auf Vercel fehlt.** Lokale Modelle. Das braucht einen Rechner mit Ollama. Virtual
 machine, WhatsApp und Signal, Server-Verbund, Auto-Upgrading, Coworker und Zuhause & Netz gibt
 es in Aquaticy-Test gar nicht mehr (seit 16.0.0 und 16.0.1). Puffert
 Vercel die Antwort, kommt sie erst am Stück. Eine Antwort darf höchstens so lange dauern, wie
-Vercel eine Funktion laufen lässt. Laufen mehrere Instanzen gleichzeitig, gewinnt die zuletzt
-gespeicherte Sicherung. Die Datenbanken von Vercel (Postgres, Supabase) und die Edge Config
-braucht Aquaticy dafür nicht.
+Vercel eine Funktion laufen lässt. Ohne verbundene Datenbank gilt: Laufen mehrere Instanzen
+gleichzeitig, gewinnt die zuletzt gespeicherte Sicherung. Global Config (früher Edge Config)
+nutzt Aquaticy nicht: Die App kann dort nicht schreiben.
 
 Den Cloudflare-Worker (`worker/`, `wrangler.toml`) gibt es weiterhin, siehe
 [worker/README.md](worker/README.md).
