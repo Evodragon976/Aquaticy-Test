@@ -68,8 +68,10 @@ Datenbanken und Sicherungen, gegen andere Konten und gegen das Hineinsehen in Da
 den Server selbst kontrolliert, könnte sie mit dem Schlüssel öffnen.</p>
 <h2>Externe Dienste</h2>
 <p>Eine Frage kann an den ausgewählten Modellanbieter gehen. Suchbegriffe können an das
-gewählte Suchsystem gehen; Ortsanfragen nutzen OpenStreetMap-Dienste. Google, Home Assistant,
-LAN-Suche, Lager und die virtual machine laufen nur, wenn der Betreiber oder Nutzer sie einschaltet.
+gewählte Suchsystem gehen; Ortsanfragen nutzen OpenStreetMap-Dienste. Gmail und Google
+Kalender laufen nur, wenn der Nutzer sie einschaltet und verbindet.
+Aquaticy Standard (ohne Sprachmodell) fragt nur feste öffentliche Dienste: Open-Meteo (Ort für
+Wetter und Uhrzeit), Frankfurter (Währungen), Tagesschau und Wikipedia (Suchbegriff).
 Installierte Add-ons ohne Anmeldung (Wetter, Tagesschau, Wikipedia, Währungsrechner, Feiertage)
 schicken nur das Nötige an den jeweiligen Dienst: den Ort, den Suchbegriff, die Währung oder
 Land und Jahr.

@@ -486,7 +486,7 @@ class Settings:
 
     user_agent: str = field(
         default_factory=lambda: (
-            f"aquaticy/{__version__} (+https://github.com/jonasenriklaumen-a11y/Aquaticy-Ai; "
+            f"aquaticy/{__version__} (+https://github.com/Evodragon976/Aquaticy-Test; "
             "research agent; contact via repository issues)"
         )
     )

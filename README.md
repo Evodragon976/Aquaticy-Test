@@ -1,4 +1,4 @@
-# Aquaticy AI 16.0.2
+# Aquaticy AI 16.0.3
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,26 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.0.3
+
+Fehler behoben und Aquaticy Standard ausgebaut, nur in Aquaticy-Test.
+
+- **Wetter versteht mehr:** „Wie wird das Wochenende?“ geht jetzt auch ohne das Wort „Wetter“.
+  Mehrere Orte auf einmal gehen auch: „Wetter in Erkelenz und in Köln“. „Bei mir“ und „hier“
+  meinen deinen Wohnort.
+- **Orte richtig geschrieben:** „Frankfurt am Main“ und „München“ gehen so an den Wetterdienst,
+  wie du sie schreibst. Antwortet der Dienst nicht, sagt Aquaticy das – und nicht mehr „Ort
+  nicht gefunden“.
+- **Rückfrage nach dem Ort:** „Keine Ahnung“ oder „egal“ gilt nicht mehr als Ortsname.
+- **Wenn es dir nicht gut geht:** „Mir geht es nicht gut“ und ähnliche Sätze bekommen Zuspruch
+  und die Nummer der Telefonseelsorge.
+- **Neu:** Wurzeln, „Ist morgen ein Feiertag?“, Muttertag, Advent, Halloween und
+  Zeitumstellung, Primzahlen, Schaltjahre, römische Zahlen, Binär und Hex, Durchschnitt,
+  Sternzeichen, Buchstaben zählen, rückwärts schreiben, buchstabieren, „Pizza oder Pasta?“,
+  Ideen zum Kochen, Zitate, Rätsel und Zungenbrecher.
+- **Aufgeräumt:** Die README, der Datenschutztext und die Oberfläche nennen keine entfernten
+  Teile mehr. Die Links zum Installieren und die Updateprüfung zeigen jetzt auf Aquaticy-Test.
 
 ## Neu in 16.0.2
 
@@ -123,7 +143,6 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
   Pro-Modus bis zu 50 gleichzeitig.
 - **Gegenprüfen:** sucht Ergebnisse auf anderen Seiten nach.
 - **Bilder:** Foto anhängen – Aquaticy erkennt, was darauf ist, und sucht danach.
-- **Webcams und Satellitenbilder** auf Wunsch.
 - Geht auch ohne Websuche. Dann antwortet Aquaticy aus eigenem Wissen und sagt, wo es veraltet
   sein kann.
 - „Hallo“, „Danke“ oder „Wer bist du?“ beantwortet Aquaticy sofort, ohne Modell.
@@ -164,10 +183,10 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 # 1. Installieren
-git clone --branch Aquaticy-ai --single-branch https://github.com/jonasenriklaumen-a11y/Aquaticy-Ai.git
-cd Aquaticy-Ai
+git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
+cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.0.2
+aquaticy --version            # 16.0.3
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup
@@ -216,7 +235,7 @@ aquaticy "welche Bahnstrecken in NRW sind gerade gesperrt?"
 **Aktualisieren** (im Repo-Ordner):
 
 ```bash
-cd ~/Aquaticy-Ai
+cd ~/Aquaticy-Test
 git switch Aquaticy-ai
 git pull --ff-only origin Aquaticy-ai
 uv tool install --force --reinstall .
@@ -224,7 +243,7 @@ aquaticy --version
 ```
 
 `git pull` allein reicht nicht. Erst der `uv`-Befehl installiert die neue Fassung. Mit dem
-[ZIP-Download](https://github.com/jonasenriklaumen-a11y/Aquaticy-Ai/archive/refs/heads/Aquaticy-ai.zip)
+[ZIP-Download](https://github.com/Evodragon976/Aquaticy-Test/archive/refs/heads/Aquaticy-ai.zip)
 lädst du das ZIP neu und führst `uv tool install --force --reinstall .` im entpackten Ordner aus.
 
 ---
@@ -247,8 +266,8 @@ uv run aquaticy
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 git clone --branch Aquaticy-ai `
-  https://github.com/jonasenriklaumen-a11y/Aquaticy-Ai.git
-cd Aquaticy-Ai
+  https://github.com/Evodragon976/Aquaticy-Test.git
+cd Aquaticy-Test
 uv tool install --force --reinstall .
 uv tool update-shell        # danach PowerShell neu öffnen
 
@@ -499,8 +518,7 @@ die Frage noch einmal.
   sowie die eigene Modelladresse ein. Anbieter-Schlüssel bleiben im jeweiligen Add-on.
 - **⚡ Aufwand:** Denktiefe Low, Medium oder High und die Zahl der Helfer (Normal und Code
   1–12, Pro 1–50).
-- **⚙ Weitere Einstellungen:** Websuche, Webcams und Satellitenbilder, Denken, Strukturieren,
-  Gegenprüfen.
+- **⚙ Weitere Einstellungen:** Websuche, Denken, Strukturieren, Gegenprüfen.
 
 **Einstellungen** speichern sich selbst. Schalter sofort, Textfelder beim Verlassen. Was nur
 Ultra darf, trägt ein 🔒.
@@ -974,8 +992,8 @@ aquaticy remove "name"         # Konto samt Daten löschen
 ## Entwicklung
 
 ```bash
-git clone --branch Aquaticy-ai --single-branch https://github.com/jonasenriklaumen-a11y/Aquaticy-Ai.git
-cd Aquaticy-Ai
+git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
+cd Aquaticy-Test
 uv venv && uv pip install -c constraints.txt -e ".[browser,dev]"
 
 uv run python tools/pruefung.py            # alles: ruff, mypy, bandit, JavaScript, Tests

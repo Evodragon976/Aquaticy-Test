@@ -1,4 +1,4 @@
-"""Aquaticy Standard: antwortet ohne Sprachmodell (16.0.0, Aquaticy-Test).
+"""Aquaticy Standard: antwortet ohne Sprachmodell (seit 16.0.0, Aquaticy-Test).
 
 Wer noch keinen API-Schluessel hat, bekommt trotzdem Antworten -- aus festen Regeln und
 freien, oeffentlichen Quellen. Die Idee stammt aus dem Antwortsystem des Cloudflare-Workers
@@ -14,6 +14,9 @@ freien, oeffentlichen Quellen. Die Idee stammt aus dem Antwortsystem des Cloudfl
 * **Gespraechsspeicher**: "Fuer welchen Ort?" -> "Erkelenz" reicht; der zuletzt genannte Ort
   gilt weiter ("und morgen?", "was soll ich anziehen?").
 * **Zufall und Spass**: Wuerfel, Muenze, Zufallszahl, "A oder B?", Witze.
+* **Zahlen und Texte** (16.0.3): Wurzeln, Primzahlen, Schaltjahre, roemische Zahlen, Binaer,
+  Durchschnitt, Sternzeichen; Buchstaben zaehlen, rueckwaerts schreiben, buchstabieren.
+* **Besondere Tage** (16.0.3): Muttertag, Advent, Halloween, Zeitumstellung und mehr.
 * **Secure Pro**: Antworten aus dem festen Sicherheitswissen (aquaticy/secure_knowledge.py).
 * **Deine Daten**: Was du ihm sagst ("ich wohne in Bremen"), merkt sich Aquaticy wie sonst im
   Gedaechtnis (aquaticy/memory_auto.py, feste Muster, ohne Modell). Aquaticy Standard bestaetigt
@@ -133,15 +136,23 @@ def rechnen(text: str) -> str:
     kern = RECHEN_VORN.sub("", falten(text)).rstrip("= ")
     for wort, zeichen in WOERTER:
         kern = re.sub(rf"(?<=[\d\s)]){re.escape(wort)}(?=[\s\d(])", f" {zeichen} ", kern)
-    kern = kern.replace("wurzel aus", "sqrt").replace("wurzel", "sqrt")
-    if not re.fullmatch(r"[\d\s.,+\-*/()%sqrt]+", kern) or not re.search(r"\d", kern):
+    kern = re.sub(r"(?:quadrat)?wurzel\s+(?:aus|von)\s+(\d[\d.,]*|\([^()]*\))",
+                  r"(\1 ** 0.5)", kern)
+    if not re.fullmatch(r"[\d\s.,+\-*/()%]+", kern) or not re.search(r"\d", kern):
         return ""
-    if not re.search(r"[+\-*/%]|sqrt", kern):
+    if not re.search(r"[+\-*/%]", kern):
         return ""
     try:
         ergebnis = calculate(kern)
-    except Exception:
+    except Exception as fehler:
+        grund = str(fehler).lower()
+        if "null" in grund:
+            return "Durch null kann man nicht teilen – das Ergebnis ist nicht definiert."
+        if "gross" in grund:
+            return "Das wird mir zu groß – so hohe Potenzen rechne ich nicht aus."
         return ""
+    if isinstance(ergebnis, complex) or math.isinf(ergebnis) or math.isnan(ergebnis):
+        return "Dafür gibt es keine reelle Zahl als Ergebnis."
     return f"**{schoen(ergebnis, 6)}**"
 
 
@@ -331,6 +342,72 @@ def zeit(text: str, jetzt: datetime | None = None) -> str:
     return ""
 
 
+def _sonntag_am_oder_vor(tag: date) -> date:
+    from datetime import timedelta
+
+    return tag - timedelta(days=(tag.weekday() + 1) % 7)
+
+
+def anlaesse(jahr: int) -> dict[str, tuple[str, date]]:
+    """Besondere Tage eines Jahres: Suchwort -> (Name, Datum)."""
+    from datetime import timedelta
+
+    o = ostern(jahr)
+    vierter_advent = _sonntag_am_oder_vor(date(jahr, 12, 24))
+    erster_mai = date(jahr, 5, 1)
+    muttertag = erster_mai + timedelta(days=(6 - erster_mai.weekday()) % 7 + 7)
+    erster_nov = date(jahr, 11, 1)
+    vierter_do = erster_nov + timedelta(days=(3 - erster_nov.weekday()) % 7 + 21)
+    return {
+        "valentinstag": ("Valentinstag", date(jahr, 2, 14)),
+        "frauentag": ("Der Frauentag", date(jahr, 3, 8)),
+        "rosenmontag": ("Rosenmontag", o - timedelta(days=48)),
+        "karneval": ("Rosenmontag", o - timedelta(days=48)),
+        "fasching": ("Rosenmontag", o - timedelta(days=48)),
+        "aschermittwoch": ("Aschermittwoch", o - timedelta(days=46)),
+        "pfingsten": ("Pfingstsonntag", o + timedelta(days=49)),
+        "muttertag": ("Muttertag", muttertag),
+        "fruehlingsanfang": ("Der Frühlingsanfang", date(jahr, 3, 20)),
+        "sommeranfang": ("Der Sommeranfang", date(jahr, 6, 21)),
+        "herbstanfang": ("Der Herbstanfang", date(jahr, 9, 23)),
+        "winteranfang": ("Der Winteranfang", date(jahr, 12, 21)),
+        "halloween": ("Halloween", date(jahr, 10, 31)),
+        "black friday": ("Black Friday", vierter_do + timedelta(days=1)),
+        "nikolaus": ("Nikolaus", date(jahr, 12, 6)),
+        "1. advent": ("Der 1. Advent", vierter_advent - timedelta(days=21)),
+        "erste advent": ("Der 1. Advent", vierter_advent - timedelta(days=21)),
+        "ersten advent": ("Der 1. Advent", vierter_advent - timedelta(days=21)),
+        "erster advent": ("Der 1. Advent", vierter_advent - timedelta(days=21)),
+        "4. advent": ("Der 4. Advent", vierter_advent),
+    }
+
+
+def anlass(text: str, heute: date) -> str:
+    """"Wann ist Muttertag?", "Wie viele Tage bis Halloween?", "Wann ist die Zeitumstellung?"."""
+    kern = falten(text)
+    if re.search(r"\b(zeitumstellung|sommerzeit|winterzeit|uhr(?:en)?\s+umstell\w*|"
+                 r"uhr\s+(?:vor|zurueck)\w*)\b", kern):
+        for jahr in (heute.year, heute.year + 1):
+            for monat, satz in ((3, "Die Uhr springt von 2 auf 3 Uhr vor – ab dann gilt die "
+                                    "Sommerzeit."),
+                                (10, "Die Uhr geht von 3 auf 2 Uhr zurück – ab dann gilt die "
+                                     "Winterzeit. Du kannst eine Stunde länger schlafen.")):
+                tag = _sonntag_am_oder_vor(date(jahr, monat, 31))
+                if tag >= heute:
+                    return (f"Die nächste Zeitumstellung ist am **Sonntag, {tag:%d.%m.%Y}** – in "
+                            f"{(tag - heute).days} Tagen. {satz}")
+    if not re.search(r"\b(wann|wie\s*(?:viele|lange)|tage\s+bis|bis\s+zum?)\b", kern):
+        return ""
+    for jahr in (heute.year, heute.year + 1):
+        for wort, (name, tag) in anlaesse(jahr).items():
+            if wort in kern and tag >= heute:
+                if tag == heute:
+                    return f"{name} ist **heute**!"
+                return (f"{name} ist am **{WOCHENTAGE[tag.weekday()]}, {tag:%d.%m.%Y}** – in "
+                        f"{(tag - heute).days} Tagen.")
+    return ""
+
+
 # -- Zufall und Spass ---------------------------------------------------------------------------
 
 WITZE = (
@@ -341,6 +418,12 @@ WITZE = (
     "Was ist orange und läuft durch den Wald? Eine Wanderine.",
     "Treffen sich zwei Kerzen. Fragt die eine: „Ist Wachs gefährlich?“",
 )
+
+
+NICHT_WAHL = re.compile(
+    r"\b(was|wie|wer|wann|wo|warum|wieso|welche[rsmn]?|ist|sind|war|wird|werden|hat|haben|kann|"
+    r"kannst|gibt|regnet|schneit|scheint|wetter|heute|morgen|uebermorgen|wochenende|kopf|zahl|"
+    r"brauche|braucht|muss|darf|soll|sollte)\b|\d")
 
 
 def zufall(text: str, wuerfel: random.Random | None = None) -> str:
@@ -361,6 +444,12 @@ def zufall(text: str, wuerfel: random.Random | None = None) -> str:
                        str(text).strip(), re.I)
     if treffer:
         return f"Ich würde sagen: **{rnd.choice((treffer.group(1), treffer.group(2)))}**."
+    treffer = re.match(r"^((?:\S+\s+){0,2}\S+)\s+oder\s+((?:\S+\s+){0,2}[^\s?!.]+)[?!. ]*$",
+                       str(text).strip(), re.I)
+    if treffer and not NICHT_WAHL.search(kern):
+        if falten(treffer.group(1)) == "ja" and falten(treffer.group(2)) == "nein":
+            return f"Meine Antwort: **{rnd.choice(('Ja', 'Nein'))}**."
+        return f"Ich würde sagen: **{rnd.choice((treffer.group(1), treffer.group(2)))}**."
     if re.search(r"\b(witz|erzaehl\s+(mir\s+)?was\s+lustiges)\b", kern):
         return rnd.choice(WITZE)
     return ""
@@ -379,7 +468,11 @@ WETTERCODES = {0: "klar ☀️", 1: "überwiegend klar 🌤️", 2: "teils bewö
                99: "schweres Gewitter mit Hagel ⛈️"}
 WETTER_WORT = re.compile(r"\b(wetter|regnet|regnen|regen|sonne|sonnig|temperatur|grad\s+warm|"
                          r"wie\s+warm|wie\s+kalt|schnee|schneit|schneien|gewitter|vorhersage|"
-                         r"wind|windig|sturm|frost|glatt|glatteis)\b")
+                         r"wind|windig|sturm|frost|glatt|glatteis|draussen)\b|"
+                         r"\bwie\s+wird\s+(?:es|das\s+wochenende|der\s+tag|der\s+\w+tag|"
+                         r"die\s+(?:naechste\s+|kommende\s+)?woche|heute|morgen|uebermorgen)\b|"
+                         r"\bwird\s+es\s+(?:heute|morgen|uebermorgen|am\s+\w+)?\s*"
+                         r"(?:warm|kalt|nass|schoen|heiss|trocken)\b")
 ANZIEHEN_WORT = re.compile(r"\b(anziehen|anzieh|kleidung|klamotten|jacke|mantel|pulli|pullover|"
                            r"kurze\s+hose|kurzer?\s+hose|muetze|handschuhe|t-?shirt|outfit|"
                            r"what\s+(?:should\s+i|to)\s+wear)\b")
@@ -390,10 +483,32 @@ ORT_NACH = re.compile(r"\b(?:in|fuer|bei|um|im)\s+([a-z][a-z\s.\-]{1,40}?)"
                       r"(?:\s+(?:heute|morgen|uebermorgen|am\s+wochenende|diese\s+woche|"
                       r"die\s+naechsten\s+tage|am\s+\w+tag|am\s+mittwoch|am\s+samstag|"
                       r"am\s+sonntag|an|aus|anziehen|mitnehmen))?$")
-FUELLWORTE = (r"\b(heute|morgen|uebermorgen|wetter|das|die|der|den|regnen|regnet|schneien|"
-              r"schneit|sonnig|warm|kalt|werden|wird|es|sein|geben|wochenende|woche|naechsten|"
-              r"tage|diese|am|anziehen|mitnehmen|soll|ich|einen|schirm|regenschirm|jacke|"
-              r"brauche|draussen|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)\b")
+ZEIT_WORTE = (r"\b(?:am\s+)?(?:wochenende|montag|dienstag|mittwoch|donnerstag|freitag|samstag|"
+              r"sonntag)\b|\b(?:heute|morgen|uebermorgen)(?:\s+(?:frueh|abend|nacht|mittag))?\b|"
+              r"\b(?:die\s+)?(?:naechsten|kommenden)\s+tage\b|"
+              r"\b(?:diese|naechste|kommende|ganze|die)\s+woche\b")
+#: Fuellwoerter im Ortsteil einer Frage -- ohne "am", damit "Frankfurt am Main" ganz bleibt.
+ORT_FUELL = (r"\b(wetter|das|die|der|den|regnen|regnet|schneien|schneit|sonnig|warm|kalt|werden|"
+             r"wird|es|sein|geben|anziehen|mitnehmen|soll|ich|einen|schirm|regenschirm|jacke|"
+             r"brauche|draussen|gerade|jetzt|aktuell|bitte|denn|eigentlich|so)\b")
+#: Nach "in/im/für/bei" steht nicht immer ein Ort.
+NICHT_ORT = frozenset({
+    "mir", "uns", "dir", "mich", "hier", "hause", "zuhause", "moment", "augenblick", "urlaub",
+    "arbeit", "schule", "buero", "uni", "party", "hochzeit", "sport", "spaziergang", "wandern",
+    "date", "feier", "konzert", "festival", "freien", "garten", "sommer", "winter", "fruehling",
+    "herbst", "nacht", "abend", "morgen", "allgemeinen", "prinzip", "kuerze", "ordnung", "ruhe",
+    "naehe", "gegend", "region", "umgebung", "stadt", "dorf", "land", "ausland", "norden",
+    "sueden", "osten", "westen", "regen", "schnee", "sonne", "wind", "sturm", "januar",
+    "februar", "maerz", "april", "mai", "juni", "juli", "august", "september", "oktober",
+    "november", "dezember"})
+DAHEIM = re.compile(r"\b(bei\s+(?:mir|uns)|hier|zu\s*hause|daheim|vor\s+der\s+tuer)\b")
+KEIN_ORT = re.compile(r"^(keine\s+ahnung|k\.?\s?a\.?|weiss\s+(?:ich\s+)?(?:es\s+)?nicht|"
+                      r"ich\s+weiss\s+(?:es\s+)?nicht|egal|nichts|nirgends|nirgendwo|"
+                      r"vergiss\s+es|abbrechen|abbruch|lass\s+(?:mal|es)|schon\s+gut|"
+                      r"hat\s+sich\s+erledigt|spaeter|nicht\s+so\s+wichtig|doch\s+nicht|"
+                      r"stop|stopp)\b")
+NICHT_ERREICHBAR = ("Der Wetterdienst antwortet gerade nicht. Versuch es gleich noch einmal – "
+                    "am Ort liegt es nicht.")
 QUELLE_WETTER = "\n\nQuelle: [Open-Meteo](https://open-meteo.com)"
 ORT_FRAGE = "Für welchen Ort soll ich nachsehen?"
 ORT_BEISPIEL = " Schreib einfach den Namen, zum Beispiel „Berlin“."
@@ -434,12 +549,46 @@ def tag_aus(kern: str) -> int:
     return 0
 
 
-def ort_aus(kern: str) -> str:
-    treffer = ORT_NACH.search(kern)
+def original(frage: str, gefaltet: str) -> str:
+    """Die Schreibweise aus der Frage (mit Umlauten) fuer einen gefalteten Ausschnitt.
+
+    Der Wetterdienst findet "München" sicher, "muenchen" nicht immer.
+    """
+    worte = re.findall(r"[^\s,;:?!]+", frage)
+    gesucht = [w.strip(".") for w in gefaltet.split()]
+    gefaltete = [falten(w).strip(".") for w in worte]
+    for i in range(len(worte) - len(gesucht) + 1):
+        if gesucht and gefaltete[i:i + len(gesucht)] == gesucht:
+            teile = worte[i:i + len(gesucht)]
+            teile[-1] = teile[-1].rstrip(".")
+            return " ".join(teile)
+    return gefaltet
+
+
+def orte_aus(frage: str) -> list[str]:
+    """Die Orte einer Frage: "in Erkelenz und in Köln" -> ["Erkelenz", "Köln"] (hoechstens 3)."""
+    kern = re.sub(r"\b(?:im\s+moment|im\s+augenblick|zur\s+zeit|zurzeit|momentan)\b", " ",
+                  falten(frage))
+    treffer = ORT_NACH.search(re.sub(r"\s+", " ", kern).strip())
     if not treffer:
-        return ""
-    ort = re.sub(FUELLWORTE, "", treffer.group(1))
-    return re.sub(r"\s+", " ", ort).strip(" .-")
+        return []
+    rest = re.sub(ZEIT_WORTE, " ", treffer.group(1))
+    orte: list[str] = []
+    for teil in re.split(r"\s+(?:und|oder|sowie)\s+|\s*,\s*", rest):
+        teil = re.sub(r"^\s*(?:in|im|fuer|bei|um)\s+", "", teil)
+        teil = re.sub(r"\s+", " ", re.sub(ORT_FUELL, " ", teil)).strip(" .-")
+        teil = re.sub(r"^(?:am|und|in)\s+|\s+(?:am|und|in)$", "", teil).strip(" .-")
+        if not teil or teil in NICHT_ORT or teil.split()[-1] in NICHT_ORT:
+            continue
+        ort = original(frage, teil)
+        if ort not in orte:
+            orte.append(ort)
+    return orte[:3]
+
+
+def ort_aus(frage: str) -> str:
+    orte = orte_aus(frage)
+    return orte[0] if orte else ""
 
 
 def _liste(werte: Any, n: int) -> list[Any]:
@@ -451,7 +600,9 @@ def wetterdaten(ort: str, holen: Holen, heute: date | None = None) -> dict[str, 
     """Vorhersage fuer sieben Tage. Returns: die Daten -- oder einen Satz, warum nicht."""
     geo = holen("https://geocoding-api.open-meteo.com/v1/search?count=1&language=de&name="
                 + quote(ort))
-    treffer = (geo or {}).get("results") or []
+    if not isinstance(geo, dict):
+        return NICHT_ERREICHBAR
+    treffer = geo.get("results") or []
     if not treffer:
         return (f"Hm, einen Ort namens „{ort}“ finde ich nicht. Magst du ihn anders schreiben, "
                 "vielleicht mit dem Land dazu?")
@@ -463,8 +614,8 @@ def wetterdaten(ort: str, holen: Holen, heute: date | None = None) -> dict[str, 
                   "uv_index_max,sunrise,sunset&current=temperature_2m,apparent_temperature,"
                   "weather_code,wind_speed_10m&timezone=auto&forecast_days=7"
                   .format(stelle.get("latitude"), stelle.get("longitude")))
-    if not daten or "daily" not in daten:
-        return "Das Wetter lässt sich gerade nicht abrufen. Versuch es gleich noch einmal."
+    if not isinstance(daten, dict) or "daily" not in daten:
+        return NICHT_ERREICHBAR
     t = daten["daily"]
     n = len(t.get("weather_code") or []) or 1
     spalten = {k: _liste(t.get(k), n) for k in (
@@ -533,6 +684,49 @@ def _einschaetzung(t: dict[str, Any]) -> str:
     return "Ein ziemlich normaler Tag, nichts Besonderes zu beachten."
 
 
+def _tageszeile(d: dict[str, Any], i: int) -> str:
+    """"**Heute in Erkelenz:** leichter Regen, -1 bis 7 °C, Regenrisiko 39 %. Gerade ..."."""
+    t = d["tage"][i]
+    zeile = (f"**{_tagesname(i, t['datum'])} in {d['name']}:** "
+             f"{WETTERCODES.get(int(t['code'] or 0), 'wechselhaft')}, "
+             f"{_grad(t['tief'])} bis {_grad(t['hoch'])} °C")
+    if t.get("regen") is not None:
+        zeile += f", Regenrisiko {t['regen']} %"
+    zeile += "."
+    jetzt = d["jetzt"]
+    if i == 0 and jetzt.get("temperature_2m") is not None:
+        zeile += f" Gerade sind es {_grad(jetzt['temperature_2m'])} °C"
+        gefuehlt = jetzt.get("apparent_temperature")
+        if gefuehlt is not None and abs(float(gefuehlt) - float(jetzt["temperature_2m"])) >= 2:
+            zeile += f", gefühlt eher {_grad(gefuehlt)} °C"
+        zeile += "."
+    return zeile
+
+
+def wetter_mehrere(orte: list[str], kern: str, holen: Holen, heute: date) -> str:
+    """Mehrere Orte nebeneinander: "Wetter in Erkelenz und in Köln"."""
+    tag = tage_aus(kern, heute)[0]
+    zeilen: list[str] = []
+    waermster: tuple[float, str] | None = None
+    for ort in orte:
+        daten = wetterdaten(ort, holen, heute)
+        if isinstance(daten, str):
+            if daten == NICHT_ERREICHBAR:
+                return daten
+            zeilen.append(f"- {daten}")
+            continue
+        if tag >= len(daten["tage"]):
+            return "So weit kann ich leider nicht vorausschauen – nur sieben Tage."
+        zeilen.append("- " + _tageszeile(daten, tag))
+        hoch = daten["tage"][tag].get("hoch")
+        if hoch is not None and (waermster is None or float(hoch) > waermster[0]):
+            waermster = (float(hoch), str(daten["name"]))
+    schluss = ""
+    if waermster and sum(1 for z in zeilen if z.startswith("- **")) > 1:
+        schluss = f"\n\nAm wärmsten wird es in **{waermster[1]}**."
+    return "Gern, hier ist der Vergleich:\n\n" + "\n".join(zeilen) + schluss + QUELLE_WETTER
+
+
 def wetter_text(d: dict[str, Any], tage: list[int], frage: str = "") -> str:
     name = d["name"]
     verfuegbar = [i for i in tage if i < len(d["tage"])]
@@ -541,19 +735,7 @@ def wetter_text(d: dict[str, Any], tage: list[int], frage: str = "") -> str:
     if len(verfuegbar) == 1:
         i = verfuegbar[0]
         t = d["tage"][i]
-        zeile = (f"**{_tagesname(i, t['datum'])} in {name}:** "
-                 f"{WETTERCODES.get(int(t['code'] or 0), 'wechselhaft')}, "
-                 f"{_grad(t['tief'])} bis {_grad(t['hoch'])} °C")
-        if t.get("regen") is not None:
-            zeile += f", Regenrisiko {t['regen']} %"
-        zeile += "."
-        jetzt = d["jetzt"]
-        if i == 0 and jetzt.get("temperature_2m") is not None:
-            zeile += f" Gerade sind es {_grad(jetzt['temperature_2m'])} °C"
-            gefuehlt = jetzt.get("apparent_temperature")
-            if gefuehlt is not None and abs(float(gefuehlt) - float(jetzt["temperature_2m"])) >= 2:
-                zeile += f", gefühlt eher {_grad(gefuehlt)} °C"
-            zeile += "."
+        zeile = _tageszeile(d, i)
         tipp = _einschaetzung(t)
         ideen = ["Willst du wissen, was du am besten anziehst?"]
         ideen.append("Soll ich auch nach morgen schauen?" if i == 0 else
@@ -776,7 +958,9 @@ def uhrzeit_in(ort: str, holen: Holen, jetzt: datetime | None = None) -> str:
 
     geo = holen("https://geocoding-api.open-meteo.com/v1/search?count=1&language=de&name="
                 + quote(ort))
-    treffer = (geo or {}).get("results") or []
+    if not isinstance(geo, dict):
+        return "Die Ortssuche antwortet gerade nicht. Versuch es gleich noch einmal."
+    treffer = geo.get("results") or []
     zone = str((treffer[0] if treffer else {}).get("timezone") or "")
     if not zone:
         return f"Für „{ort}“ finde ich keine Zeitzone. Schreib die Stadt vielleicht etwas genauer?"
@@ -815,7 +999,7 @@ def feiertage(jahr: int) -> list[tuple[date, str]]:
 
 FEIERTAG_NAMEN = {"karfreitag": "Karfreitag", "ostermontag": "Ostermontag",
                   "himmelfahrt": "Christi Himmelfahrt", "vatertag": "Christi Himmelfahrt",
-                  "pfingst": "Pfingstmontag", "tag der arbeit": "Tag der Arbeit",
+                  "pfingstmontag": "Pfingstmontag", "tag der arbeit": "Tag der Arbeit",
                   "einheit": "Tag der Deutschen Einheit"}
 
 
@@ -829,12 +1013,29 @@ def feiertag(text: str, heute: date) -> str:
             tag = next(t for t, n in alle if n == name and t >= heute)
             return (f"{name} ist dieses Mal am **{WOCHENTAGE[tag.weekday()]}, {tag:%d.%m.%Y}** – "
                     f"in {(tag - heute).days} Tagen.")
-    if re.search(r"\b(ist\s+heute|heute\s+ein)\b", kern):
-        heutig = [n for t, n in alle if t == heute]
-        if heutig:
-            return f"Ja, heute ist **{heutig[0]}** – genieß den freien Tag!"
-        return ("Nein, heute ist kein bundesweiter Feiertag. In manchen Bundesländern kann es "
-                "anders sein.")
+    from datetime import timedelta
+
+    gefragt: tuple[str, date] | None = None
+    for wort, name, versatz in (("uebermorgen", "übermorgen", 2), ("morgen", "morgen", 1),
+                                ("heute", "heute", 0)):
+        if re.search(rf"\b{wort}\b", kern):
+            gefragt = (name, heute + timedelta(days=versatz))
+            break
+    if gefragt is None:
+        genannt = datum_aus(kern, heute)
+        if genannt:
+            gefragt = (f"der {genannt:%d.%m.%Y}", genannt)
+    if gefragt:
+        wann, stichtag = gefragt
+        namen = [n for t, n in feiertage(stichtag.year) if t == stichtag]
+        if namen:
+            schluss = " – genieß den freien Tag!" if stichtag == heute else "."
+            return f"Ja, {wann} ist **{namen[0]}**{schluss}"
+        kommt = next(((t, n) for t, n in alle if t >= max(stichtag, heute)), None)
+        mehr = (f" Der nächste ist **{kommt[1]}** am {WOCHENTAGE[kommt[0].weekday()]}, "
+                f"{kommt[0]:%d.%m.%Y}." if kommt else "")
+        return (f"Nein, {wann} ist kein bundesweiter Feiertag. In manchen Bundesländern kann es "
+                f"anders sein.{mehr}")
     naechste = [(t, n) for t, n in alle if t >= heute][:3]
     zeilen = [f"- **{n}:** {WOCHENTAGE[t.weekday()]}, {t:%d.%m.%Y}" for t, n in naechste]
     return ("Die nächsten bundesweiten Feiertage:\n" + "\n".join(zeilen)
@@ -962,6 +1163,140 @@ def passwort(text: str) -> str:
             "Passwort-Manager ab.")
 
 
+# -- Zahlen und Texte ---------------------------------------------------------------------------
+
+ROEMISCH = ((1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"),
+            (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"))
+STERNZEICHEN = (((1, 20), "Steinbock ♑"), ((2, 19), "Wassermann ♒"), ((3, 20), "Fische ♓"),
+                ((4, 20), "Widder ♈"), ((5, 20), "Stier ♉"), ((6, 21), "Zwillinge ♊"),
+                ((7, 22), "Krebs ♋"), ((8, 23), "Löwe ♌"), ((9, 23), "Jungfrau ♍"),
+                ((10, 23), "Waage ♎"), ((11, 22), "Skorpion ♏"), ((12, 21), "Schütze ♐"),
+                ((12, 31), "Steinbock ♑"))
+
+
+def roemisch(wert: int) -> str:
+    teile = []
+    for zahl_, zeichen in ROEMISCH:
+        while wert >= zahl_:
+            teile.append(zeichen)
+            wert -= zahl_
+    return "".join(teile)
+
+
+def zahlenkram(text: str, heute: date) -> str:
+    """Primzahl, Schaltjahr, roemische Zahlen, Binaer/Hex, Durchschnitt, Sternzeichen."""
+    kern = falten(text)
+    treffer = re.search(r"\b(?:ist|war)\s+(?:die\s+)?(\d{1,12})\s+(?:eine\s+)?primzahl\b", kern)
+    if treffer:
+        n = int(treffer.group(1))
+        teiler = next((t for t in range(2, int(n ** 0.5) + 1) if n % t == 0), 0)
+        if n < 2:
+            return f"Nein, {n} ist keine Primzahl. Primzahlen beginnen bei 2."
+        if teiler:
+            return (f"Nein, {schoen(n)} ist keine Primzahl: Sie lässt sich durch {schoen(teiler)} "
+                    f"teilen ({schoen(teiler)} × {schoen(n // teiler)}).")
+        return f"Ja, **{schoen(n)}** ist eine Primzahl."
+    treffer = re.search(r"\b(?:ist|war|wird)\s+(\d{4})\s+ein\s+schaltjahr\b|"
+                        r"\bschaltjahr\b.*?\b(\d{4})\b", kern)
+    if treffer or re.search(r"\bschaltjahr\b", kern):
+        jahr = int(treffer.group(1) or treffer.group(2)) if treffer else heute.year
+        ist = jahr % 4 == 0 and (jahr % 100 != 0 or jahr % 400 == 0)
+        naechstes = next(j for j in range(jahr + 1, jahr + 9)
+                         if j % 4 == 0 and (j % 100 != 0 or j % 400 == 0))
+        if ist:
+            return f"Ja, **{jahr}** ist ein Schaltjahr – der Februar hat 29 Tage."
+        return f"Nein, {jahr} ist kein Schaltjahr. Das nächste ist **{naechstes}**."
+    treffer = re.search(r"\b(\d{1,4})\s+(?:in|als)\s+roemisch\w*", kern)
+    if treffer:
+        n = int(treffer.group(1))
+        if 1 <= n <= 3999:
+            return f"{n} schreibt man römisch **{roemisch(n)}**."
+        return "Römische Zahlen kann ich von 1 bis 3999 schreiben."
+    treffer = re.search(r"\b([mdclxvi]{1,15})\b\s+(?:in|als)\s+(?:arabisch\w*|zahl\w*|dezimal\w*|"
+                        r"ziffern)|\broemische\s+zahl\s+([mdclxvi]{1,15})\b", kern)
+    if treffer:
+        zeichen = (treffer.group(1) or treffer.group(2)).upper()
+        werte = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+        summe = 0
+        for i, z in enumerate(zeichen):
+            wert = werte[z]
+            summe += -wert if i + 1 < len(zeichen) and werte[zeichen[i + 1]] > wert else wert
+        if 1 <= summe <= 3999 and roemisch(summe) == zeichen:
+            return f"Die römische Zahl {zeichen} ist **{summe}**."
+        return f"„{zeichen}“ ist keine gültige römische Zahl."
+    treffer = re.search(r"\b(\d{1,15})\s+(?:in|als)\s+(binaer\w*|dual\w*|hex\w*|oktal\w*)", kern)
+    if treffer:
+        n, art = int(treffer.group(1)), treffer.group(2)
+        if art.startswith(("binaer", "dual")):
+            return f"{schoen(n)} ist binär **{n:b}**."
+        if art.startswith("hex"):
+            return f"{schoen(n)} ist hexadezimal **{n:X}**."
+        return f"{schoen(n)} ist oktal **{n:o}**."
+    treffer = re.search(r"\b(durchschnitt|mittelwert|summe)\s+(?:von|aus)\s+([\d.,\s]+(?:und\s+"
+                        r"[\d.,]+)?)", kern)
+    if treffer:
+        stuecke = re.split(r"\s+und\s+|\s*;\s*|,\s+|\s+", treffer.group(2).strip(" ,."))
+        try:
+            werte_ = [zahl(st.strip(",")) for st in stuecke if st.strip(",")]
+        except ValueError:
+            werte_ = []
+        if len(werte_) >= 2:
+            if treffer.group(1) == "summe":
+                return f"Die Summe ist **{schoen(sum(werte_), 4)}**."
+            return (f"Der Durchschnitt von {len(werte_)} Zahlen ist "
+                    f"**{schoen(sum(werte_) / len(werte_), 4)}**.")
+    if "sternzeichen" in kern:
+        tag = datum_aus(kern, heute)
+        if tag:
+            name = next(n for (monat, bis), n in STERNZEICHEN
+                        if (tag.month, tag.day) <= (monat, bis))
+            return f"Wer am {tag:%d.%m.} Geburtstag hat, ist **{name}**."
+        return ("Sag mir das Datum dazu, zum Beispiel: „Welches Sternzeichen ist der 3. Mai?“")
+    return ""
+
+
+def textkram(text: str) -> str:
+    """Buchstaben und Woerter zaehlen, rueckwaerts schreiben, buchstabieren."""
+    roh = re.sub(r"\s+", " ", str(text)).strip()
+
+    def inhalt(stueck: str) -> str:
+        return stueck.strip().strip("?!.").strip().strip("\"'„“”‚‘»«:").strip()
+
+    treffer = re.search(r"wie\s*viele\s+(buchstaben|zeichen|w(?:ö|oe)rter)\s+"
+                        r"(?:hat|haben|sind\s+in|stecken\s+in|enth(?:ä|ae)lt)\s+"
+                        r"(das\s+wort\s+|der\s+satz\s+|der\s+text\s+|der\s+name\s+)?(.+)",
+                        roh, re.I)
+    if treffer:
+        was, stueck = treffer.group(1).lower(), inhalt(treffer.group(3))
+        # "Wie viele Zeichen hat ein Tweet?" ist eine Wissensfrage, kein Zaehlauftrag.
+        gemeint = bool(treffer.group(2)) or treffer.group(3).strip()[:1] in "\"'„“‚»" or (
+            was == "buchstaben" and len(stueck.split()) == 1)
+        if stueck and gemeint:
+            if was == "buchstaben":
+                return f"„{stueck}“ hat **{sum(1 for c in stueck if c.isalpha())} Buchstaben**."
+            if was == "zeichen":
+                return f"„{stueck}“ hat **{len(stueck)} Zeichen** (mit Leerzeichen)."
+            anzahl = len(stueck.split())
+            if anzahl == 1:
+                return "Das ist **1 Wort**."
+            return f"Das sind **{anzahl} Wörter**."
+    treffer = re.search(r"(?:schreib\w*|dreh\w*|sag\w*)\s+(.+?)\s+r(?:ü|ue)ckw(?:ä|ae)rts",
+                        roh, re.I)
+    if treffer and inhalt(treffer.group(1)):
+        stueck = inhalt(treffer.group(1))
+        return f"„{stueck}“ rückwärts ist **{stueck[::-1]}**."
+    treffer = re.search(r"buchstabier\w*\s+(?:mir\s+)?(?:das\s+wort\s+)?(.+)", roh, re.I)
+    if treffer and inhalt(treffer.group(1)):
+        stueck = inhalt(treffer.group(1))[:40]
+        return " – ".join(c.upper() for c in stueck if not c.isspace())
+    treffer = re.search(r"(?:schreib\w*\s+)?(.+?)\s+in\s+(gro(?:ß|ss)buchstaben|kleinbuchstaben)",
+                        roh, re.I)
+    if treffer and inhalt(treffer.group(1)):
+        stueck = inhalt(treffer.group(1))
+        return stueck.upper() if treffer.group(2).lower().startswith("gro") else stueck.lower()
+    return ""
+
+
 # -- Ein bisschen Gespraech ---------------------------------------------------------------------
 
 LANGEWEILE = ("Wie wär's mit einem kurzen Spaziergang? Frische Luft wirkt Wunder.",
@@ -976,6 +1311,10 @@ MUT = ("Du schaffst das. Ein Schritt nach dem anderen reicht völlig.",
        "Denk daran, wie viel du schon geschafft hast. Das hier schaffst du auch.",
        "Es ist okay, eine Pause zu machen. Danach geht es mit frischer Kraft weiter.",
        "Kleine Fortschritte sind auch Fortschritte. Sei stolz darauf.")
+TROST = ("Schlechte Tage gehören dazu – und sie gehen vorbei.",
+         "Du musst heute nichts leisten. Sei einfach freundlich zu dir.",
+         "Es ist okay, wenn gerade nicht alles gut ist.",
+         "Du bist damit nicht allein, auch wenn es sich gerade so anfühlt.")
 FAKTEN = ("Honig verdirbt praktisch nie – in ägyptischen Gräbern fand man essbaren Honig.",
           "Ein Tag auf der Venus dauert länger als ein Jahr auf der Venus.",
           "Oktopusse haben drei Herzen und blaues Blut.",
@@ -985,18 +1324,81 @@ FAKTEN = ("Honig verdirbt praktisch nie – in ägyptischen Gräbern fand man es
           "Auf der Erde gibt es mehr Bäume als Sterne in der Milchstraße.")
 
 
+ESSEN = ("Nudeln mit Tomatensoße und frischem Basilikum – geht schnell und schmeckt immer.",
+         "Ofengemüse mit Feta: alles klein schneiden, Öl drüber, 25 Minuten in den Ofen.",
+         "Pfannkuchen – süß mit Apfelmus oder herzhaft mit Käse.",
+         "Eine große Gemüsepfanne mit Reis und Sojasoße.",
+         "Kartoffeln mit Kräuterquark – einfach, günstig, lecker.",
+         "Ein Wrap mit allem, was der Kühlschrank hergibt.",
+         "Linsensuppe: wärmt und hält lange satt.",
+         "Rührei mit Brot und einem kleinen Salat dazu.")
+ZITATE = ("„Auch aus Steinen, die einem in den Weg gelegt werden, kann man Schönes bauen.“ "
+          "(Johann Wolfgang von Goethe zugeschrieben)",
+          "„Es ist nicht wenig Zeit, die wir haben, sondern es ist viel Zeit, die wir nicht "
+          "nutzen.“ (Seneca)",
+          "„Der Weg ist das Ziel.“ (Konfuzius zugeschrieben)",
+          "„Wer immer tut, was er schon kann, bleibt immer das, was er schon ist.“ "
+          "(Henry Ford zugeschrieben)",
+          "„Phantasie ist wichtiger als Wissen, denn Wissen ist begrenzt.“ (Albert Einstein)")
+KOMPLIMENTE = ("Du stellst gute Fragen – das zeigt, dass du neugierig bist.",
+               "Mit dir zu schreiben macht richtig Spaß.",
+               "Du gibst nicht so schnell auf. Das ist eine echte Stärke.",
+               "Ich finde es klasse, dass du Dinge genau wissen willst.")
+RAETSEL = (("Was hat Zähne, aber beißt nicht?", "Ein Kamm."),
+           ("Was wird nass, während es trocknet?", "Ein Handtuch."),
+           ("Was hat ein Bett, schläft aber nie?", "Ein Fluss."),
+           ("Was geht die Treppe hoch und runter und bewegt sich nicht?", "Der Teppich."),
+           ("Je mehr du davon wegnimmst, desto größer wird es. Was ist das?", "Ein Loch."))
+ZUNGENBRECHER = ("Fischers Fritze fischt frische Fische, frische Fische fischt Fischers Fritze.",
+                 "Blaukraut bleibt Blaukraut und Brautkleid bleibt Brautkleid.",
+                 "Zehn zahme Ziegen zogen zehn Zentner Zucker zum Zoo.",
+                 "Wenn Fliegen hinter Fliegen fliegen, fliegen Fliegen Fliegen nach.")
+SCHLECHT = re.compile(
+    r"\b(motivier\w*|mut\s+machen|muntere?\s+mich\s+auf|aufmuntern|hab\w?\s+keine\s+lust|"
+    r"schaffe?\s+(?:das|es)\s+nicht|(?:mir\s+)?geht\s*'?(?:es|s)\s+(?:mir\s+)?(?:heute\s+)?"
+    r"(?:gar\s+|echt\s+|wirklich\s+|gerade\s+)?(?:nicht\s+(?:so\s+)?gut|schlecht|mies|"
+    r"beschissen|dreckig)|bin\s+(?:so\s+|sehr\s+|total\s+|gerade\s+|echt\s+)?(?:traurig|down|"
+    r"niedergeschlagen|einsam|allein|verzweifelt|ungluecklich|deprimiert|gestresst|"
+    r"ueberfordert|erschoepft|fertig|am\s+ende)|fuehle\s+mich\s+(?:so\s+|sehr\s+|total\s+)?"
+    r"(?:schlecht|einsam|allein|leer|mies|traurig|ueberfordert)|mir\s+ist\s+zum\s+heulen|"
+    r"hab\w?\s+(?:so\s+|grosse\s+|viel\s+)?(?:angst|sorgen|stress|kummer|liebeskummer)|"
+    r"alles\s+(?:ist\s+)?(?:zu\s+viel|sinnlos|doof|bloed)|kann\s+nicht\s+mehr)\b")
+
+
 def gespraech(text: str, rnd: random.Random) -> str:
     kern = falten(text)
+    treffer = SCHLECHT.search(kern)
+    if treffer and re.match(r"motivier|mut|munter|aufmunter|hab\w?\s+keine|schaff",
+                            treffer.group(1)):
+        return (rnd.choice(MUT) + "\n\nWenn es dir länger schlecht geht, rede mit jemandem, dem du "
+                "vertraust. Bei der Telefonseelsorge erreichst du rund um die Uhr jemanden: "
+                "0800 111 0 111 (kostenlos).")
+    if treffer:
+        return ("Das tut mir leid zu hören. " + rnd.choice(TROST)
+                + "\n\nManchmal hilft schon eine Kleinigkeit: kurz an die frische Luft, ein Glas "
+                "Wasser, jemandem schreiben. Wenn es dir länger schlecht geht, rede mit jemandem, "
+                "dem du vertraust. Bei der Telefonseelsorge erreichst du rund um die Uhr jemanden: "
+                "0800 111 0 111 (kostenlos).")
+    if re.search(r"\bwas\s+(?:soll|kann|koennte)\s+ich\s+(?:heute\s+|morgen\s+)?(?:abend\s+)?"
+                 r"(?:kochen|essen)\b|\b(?:hab\w?\s+hunger|rezeptidee|idee\s+(?:zum|fuers)\s+"
+                 r"(?:kochen|essen|abendessen|mittagessen))\b", kern):
+        ideen = rnd.sample(ESSEN, 3)
+        return ("Da fällt mir etwas ein:\n" + "\n".join(f"- {i}" for i in ideen)
+                + "\n\nGuten Appetit!")
+    if re.search(r"\b(zitat|spruch|weisheit|lebensweisheit)\b", kern):
+        return rnd.choice(ZITATE)
+    if re.search(r"\b(kompliment|sag\s+(?:mir\s+)?(?:was|etwas)\s+nettes)\b", kern):
+        return rnd.choice(KOMPLIMENTE)
+    if re.search(r"\b(raetsel|scherzfrage)\b", kern):
+        frage, loesung = rnd.choice(RAETSEL)
+        return f"{frage}\n\n*Lösung: {loesung}*"
+    if re.search(r"\bzungenbrecher\b", kern):
+        return "Versuch den mal dreimal schnell hintereinander:\n\n" + rnd.choice(ZUNGENBRECHER)
     if re.search(r"\b(langweilig|langeweile|bored|was\s+(?:soll|kann)\s+ich\s+(?:heute\s+)?"
                  r"(?:machen|tun|unternehmen))\b", kern):
         ideen = rnd.sample(LANGEWEILE, 3)
         return ("Ich hab ein paar Ideen für dich:\n" + "\n".join(f"- {i}" for i in ideen)
                 + "\n\nUnd wenn das Wetter mitspielt: Frag mich einfach, wie es draußen wird.")
-    if re.search(r"\b(motivier|mut\s+machen|muntere\s+mich\s+auf|aufmuntern|bin\s+traurig|"
-                 r"geht\s+es\s+mir\s+schlecht|hab\s+keine\s+lust|schaffe\s+das\s+nicht)\b", kern):
-        return (rnd.choice(MUT) + "\n\nWenn es dir länger schlecht geht, rede mit jemandem, dem du "
-                "vertraust. Bei der Telefonseelsorge erreichst du rund um die Uhr jemanden: "
-                "0800 111 0 111 (kostenlos).")
     if re.search(r"\b(fun\s*fact|erzaehl\s+(?:mir\s+)?(?:was|etwas)\s+(?:interessantes|spannendes)|"
                  r"wusstest\s+du|interessante\s+tatsache)\b", kern):
         return "Wusstest du schon? " + rnd.choice(FAKTEN)
@@ -1007,14 +1409,18 @@ def gespraech(text: str, rnd: random.Random) -> str:
 
 
 HILFE = ("Ich bin Aquaticy Standard und komme ganz ohne Sprachmodell aus. Das kann ich:\n"
-         "- **Wetter:** heute, morgen, am Wochenende oder die ganze Woche – auch was du anziehen "
-         "sollst, ob du einen Schirm brauchst und wann die Sonne aufgeht\n"
-         "- **Rechnen:** Aufgaben, Prozente, Mehrwertsteuer, Trinkgeld, BMI und Einheiten\n"
-         "- **Zeit:** Uhrzeit (auch in anderen Städten), Datum, Feiertage, Mondphase, "
-         "Countdowns und dein Alter\n"
+         "- **Wetter:** heute, morgen, am Wochenende oder die ganze Woche, auch für mehrere Orte "
+         "auf einmal – dazu was du anziehen sollst, ob du einen Schirm brauchst und wann die "
+         "Sonne aufgeht\n"
+         "- **Rechnen:** Aufgaben, Wurzeln, Prozente, Mehrwertsteuer, Trinkgeld, BMI, Einheiten, "
+         "Durchschnitt, Primzahlen, römische Zahlen, Binär und Hex\n"
+         "- **Zeit:** Uhrzeit (auch in anderen Städten), Datum, Feiertage, Muttertag, Advent, "
+         "Zeitumstellung, Mondphase, Sternzeichen, Countdowns und dein Alter\n"
          "- **Wissen:** Nachrichten, Wechselkurse und kurze Antworten aus Wikipedia\n"
-         "- **Kleinigkeiten:** Würfeln, Münzwurf, Witze, Fun Facts, Ideen gegen Langeweile und "
-         "sichere Passwörter\n\n"
+         "- **Texte:** Buchstaben und Wörter zählen, rückwärts schreiben, buchstabieren\n"
+         "- **Kleinigkeiten:** Würfeln, Münzwurf, „Pizza oder Pasta?“, Witze, Rätsel, "
+         "Zungenbrecher, Zitate, Fun Facts, Ideen zum Kochen und gegen Langeweile, sichere "
+         "Passwörter\n\n"
          "Ich merke mir auch, was du mir erzählst – zum Beispiel, wo du wohnst.")
 
 
@@ -1096,16 +1502,28 @@ def letzter_ort(verlauf: list[dict[str, Any]]) -> str:
     return ""
 
 
+TAG_IM_TEXT = re.compile(r"\*\*(Heute|Morgen|Übermorgen) in [^:*]+:\*\*|"
+                         r"\bFür (heute|morgen|übermorgen) in \*\*|"
+                         r"\b(Heute|Morgen|Übermorgen) geht die Sonne in \*\*")
+
+
 def letzte_wetterfrage(verlauf: list[dict[str, Any]]) -> tuple[str, int] | None:
-    """Ort und Tag der letzten Wetterantwort -- fuer "und morgen?"."""
+    """Ort und Tag der letzten Antwort mit Ort -- fuer "und morgen?" und "und in Köln?".
+
+    Es zaehlt die juengste Antwort: Ging es zuletzt um heute (auch beim Schirm oder beim
+    Anziehen), gilt eine Folgefrage ohne Tag fuer heute.
+    """
     for eintrag in reversed(verlauf[-6:]):
         if eintrag.get("role") != "assistant":
             continue
-        treffer = re.search(r"\*\*(Heute|Morgen|Übermorgen) in ([^:*]+):\*\*",
-                            str(eintrag.get("content") or ""))
-        if treffer:
-            return treffer.group(2).strip(), ("Heute", "Morgen", "Übermorgen").index(
-                treffer.group(1))
+        text = str(eintrag.get("content") or "")
+        ort = ORT_IM_TEXT.search(text)
+        if not ort:
+            continue
+        tag = TAG_IM_TEXT.search(text)
+        wort = next((g for g in tag.groups() if g), "heute").lower() if tag else "heute"
+        return ((ort.group(1) or ort.group(2)).strip(),
+                ("heute", "morgen", "übermorgen").index(wort))
     return None
 
 
@@ -1141,9 +1559,12 @@ def sieht_aus_wie_ort(text: str) -> bool:
     if not kern or len(kern) > 40 or len(kern.split()) > 4:
         return False
     if re.search(r"\b(was|wie|wer|wann|warum|wieso|weshalb|welche[rsmn]?|kannst|bitte|nein|ja|"
-                 r"danke|ok|okay)\b|\d", kern):
+                 r"danke|ok|okay|brauche|brauch|soll|sollte|kann|ist|sind|wird|habe|hab|bin|mach|"
+                 r"gib|zeig|sag|erzaehl|weiss|hilfe|hallo)\b|\d", kern):
         return False
-    return bool(re.fullmatch(r"(?:in\s+|fuer\s+|nach\s+)?[a-z][a-z .\-]{1,38}", kern))
+    if absicht(kern) or KEIN_ORT.search(kern) or kern in NICHT_ORT:
+        return False
+    return bool(re.fullmatch(r"(?:in\s+|fuer\s+|nach\s+|bei\s+)?[a-z][a-z .\-]{1,38}", kern))
 
 
 def mit_ort(art: str, ort: str, kern: str, holen: Holen, heute: date) -> str:
@@ -1203,23 +1624,34 @@ def antwort(frage: str, verlauf: list[dict[str, Any]] | None = None, *, secure: 
 
     # 1. Antwort auf die eigene Rueckfrage: "Fuer welchen Ort?" -> "Erkelenz"
     vorher_gefragt = offene_ortsfrage(verlauf)
-    if vorher_gefragt and sieht_aus_wie_ort(frage):
-        ort = re.sub(r"^(?:in|fuer|nach)\s+", "", frage.strip(" ?!.,"), flags=re.I)
+    if vorher_gefragt:
         vorher_kern = falten(vorher_gefragt)
         art = absicht(vorher_kern) or "wetter"
-        return mit_ort(art, ort, vorher_kern, holen, heute)
+        if KEIN_ORT.search(kern):
+            return ("Kein Problem. Wenn du magst, nenn mir später einfach einen Ort. Oder sag mir, "
+                    "wo du wohnst – dann merke ich es mir und frage nicht mehr.")
+        if DAHEIM.fullmatch(kern) or kern in ("bei mir zu hause", "wo ich wohne", "wo ich bin"):
+            if str(wohnort or "").strip():
+                return mit_ort(art, str(wohnort).strip(), vorher_kern, holen, heute)
+            return ("Ich weiß leider nicht, wo du gerade bist. " + ORT_FRAGE + ORT_BEISPIEL)
+        if sieht_aus_wie_ort(frage):
+            ort = re.sub(r"^(?:in|für|fuer|nach|bei)\s+", "", frage.strip(" ?!.,"), flags=re.I)
+            return mit_ort(art, ort, vorher_kern, holen, heute)
 
     for teil in (lambda: passwort(frage), lambda: gespraech(frage, rnd),
+                 lambda: textkram(frage), lambda: zahlenkram(frage, heute),
                  lambda: zufall(frage, wuerfel), lambda: feiertag(frage, heute),
+                 lambda: anlass(frage, heute),
                  lambda: mond(frage, heute), lambda: alter(frage, heute)):
         text = teil()
         if text:
             return text
     treffer = UHRZEIT_IN.search(kern)
     if treffer:
-        ort = re.sub(FUELLWORTE, "", treffer.group(1)).strip(" .-")
-        if ort:
-            return uhrzeit_in(ort, holen, jetzt)
+        ort = re.sub(r"\s+", " ", re.sub(r"\b(gerade|jetzt|aktuell|denn|eigentlich)\b", " ",
+                                         treffer.group(1))).strip(" .-")
+        if ort and ort not in NICHT_ORT:
+            return uhrzeit_in(original(frage, ort), holen, jetzt)
     for teil in (lambda: zeit(frage, jetzt), lambda: trinkgeld(frage), lambda: bmi(frage),
                  lambda: prozente(frage), lambda: einheiten(frage), lambda: rechnen(frage)):
         text = teil()
@@ -1233,19 +1665,25 @@ def antwort(frage: str, verlauf: list[dict[str, Any]] | None = None, *, secure: 
             return text
 
     # 2. Folgefragen: "und morgen?", "und in Köln?", "und am Wochenende?"
-    folge = re.fullmatch(r"(?:und\s+)?(heute|morgen|uebermorgen|am\s+wochenende|"
-                         r"die\s+naechsten\s+tage|am\s+\w+)|und\s+(?:in|fuer)\s+(.+)", kern)
-    vorher = letzte_wetterfrage(verlauf) or ((letzter_ort(verlauf), 0)
-                                             if letzter_ort(verlauf) else None)
-    if folge and vorher:
-        ort = folge.group(2) or vorher[0]
-        return mit_ort("wetter", ort, folge.group(1) or ("morgen" if vorher[1] == 1 else ""),
-                       holen, heute)
+    folge = re.fullmatch(r"(?:und\s+)?(?:wie\s+(?:wird|ist)\s+es\s+)?(heute|morgen|uebermorgen|"
+                         r"am\s+wochenende|die\s+naechsten\s+tage|diese\s+woche|"
+                         r"naechste\s+woche|am\s+\w+)|und\s+(?:in|fuer)\s+(.+)", kern)
+    letzter = letzter_ort(verlauf)
+    daheim = str(wohnort or "").strip()
+    vorher = letzte_wetterfrage(verlauf)
+    if folge and vorher and (folge.group(2) or letzter or daheim):
+        ort = original(frage, folge.group(2)) if folge.group(2) else (letzter or daheim)
+        tagwort = ("heute", "morgen", "uebermorgen")[vorher[1]]
+        return mit_ort("wetter", ort, folge.group(1) or tagwort, holen, heute)
 
     # 3. Alles, was einen Ort braucht: Wetter, Anziehen, Schirm, Sonne
     art = absicht(kern)
     if art:
-        ort = ort_aus(kern) or letzter_ort(verlauf) or str(wohnort or "").strip()
+        orte = orte_aus(frage)
+        if len(orte) > 1 and art == "wetter":
+            return wetter_mehrere(orte, kern, holen, heute)
+        ort = (orte[0] if orte else "") or (
+            (daheim or letzter) if DAHEIM.search(kern) else (letzter or daheim))
         if not ort:
             return ort_fragen(art)
         return mit_ort(art, ort, kern, holen, heute)

@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-REPOSITORY = "https://github.com/Evodragon976/Aquaticy-Ai.git"
+REPOSITORY = "https://github.com/Evodragon976/Aquaticy-Test.git"
 BRANCH = "Aquaticy-ai"
 
 

@@ -2311,7 +2311,14 @@ class Agent:
         """Antwortet gerade Aquaticy Standard -- ohne Sprachmodell (16.0.0, Aquaticy-Test)?"""
         from aquaticy.config import STANDARD_MODEL_ID
 
-        return str(getattr(self.settings, "model", "") or "").strip() == STANDARD_MODEL_ID
+        if str(getattr(self.settings, "model", "") or "").strip() != STANDARD_MODEL_ID:
+            return False
+        if clean_mode(self.mode) in ("code", "pro"):
+            # Pro und Code nehmen das staerkste erreichbare Modell. Nur wenn es keines gibt,
+            # antwortet auch dort Aquaticy Standard -- statt eines Fehlers.
+            staerkstes = self._strongest_model()
+            return not staerkstes or staerkstes == STANDARD_MODEL_ID
+        return True
 
     def _standard_answer(self, question: str) -> str:
         """Die Antwort von Aquaticy Standard -- mit dem, was das Gedaechtnis weiss."""

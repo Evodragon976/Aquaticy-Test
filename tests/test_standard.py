@@ -266,3 +266,163 @@ def test_a_new_home_town_wins_over_the_last_place() -> None:
                {"role": "user", "content": "Ich wohne in Bremen."},
                {"role": "assistant", "content": "Alles klar, das merke ich mir."}]
     assert "in Bremen:**" in frag("Wie wird das Wetter morgen?", verlauf=verlauf, wohnort="Bremen")
+
+
+# -- 16.0.3: gefundene Fehler und neue Antworten ------------------------------------------------
+
+def test_the_weekend_works_without_the_word_weather() -> None:
+    """16.0.2 sagte bei "Wie wird das Wochenende?" nur "kann ich nicht"."""
+    def sieben_tage(url: str) -> Any:
+        if "forecast" in url:
+            return {"daily": {"weather_code": [61, 0, 3, 1, 2, 0, 63],
+                              "temperature_2m_max": [9, 11, 8, 10, 12, 14, 7],
+                              "temperature_2m_min": [3, 4, 2, 3, 5, 6, 2],
+                              "precipitation_probability_max": [70, 10, 20, 5, 10, 0, 80]}}
+        return holen(url)
+
+    verlauf = [{"role": "user", "content": "Wetter in Berlin"},
+               {"role": "assistant", "content": frag("Wetter in Berlin")}]
+    antwort = frag("Wie wird das Wochenende?", verlauf=verlauf, holen=sieben_tage)
+    assert "**Das Wochenende in Berlin:**" in antwort
+
+
+@pytest.mark.parametrize("satz", ["Mir geht es nicht gut", "mir gehts schlecht",
+                                  "Ich bin so traurig", "ich fühle mich einsam"])
+def test_feeling_bad_gets_comfort_and_the_helpline(satz: str) -> None:
+    antwort = frag(satz)
+    assert "Das tut mir leid" in antwort and "0800 111 0 111" in antwort
+
+
+@pytest.mark.parametrize("ausweichen", ["keine Ahnung", "weiß nicht", "egal", "vergiss es"])
+def test_a_non_place_is_not_looked_up_as_a_place(ausweichen: str) -> None:
+    gesehen: list[str] = []
+
+    def zaehlen(url: str) -> Any:
+        gesehen.append(url)
+        return holen(url)
+
+    verlauf = [{"role": "user", "content": "Wie wird das Wetter?"},
+               {"role": "assistant", "content": frag("Wie wird das Wetter?")}]
+    antwort = frag(ausweichen, verlauf=verlauf, holen=zaehlen)
+    assert "Kein Problem" in antwort and not gesehen
+
+
+def test_a_question_is_not_taken_for_a_place_after_the_place_question() -> None:
+    verlauf = [{"role": "user", "content": "Wie wird das Wetter?"},
+               {"role": "assistant", "content": frag("Wie wird das Wetter?")}]
+    assert standard.ORT_FRAGE in frag("brauche ich einen Schirm", verlauf=verlauf)
+
+
+def test_at_my_place_means_the_home_town_not_a_place_called_mir() -> None:
+    assert standard.ORT_FRAGE in frag("Wetter bei mir")
+    assert "in Bremen" in frag("Wie ist das Wetter bei mir?", wohnort="Bremen")
+    verlauf = [{"role": "user", "content": "Wetter"},
+               {"role": "assistant", "content": frag("Wetter")}]
+    assert "weiß leider nicht, wo du gerade bist" in frag("hier", verlauf=verlauf)
+
+
+@pytest.mark.parametrize(("frage", "gesucht"), [
+    ("Wie wird das Wetter in Frankfurt am Main morgen?", "Frankfurt%20am%20Main"),
+    ("Regnet es heute in München?", "M%C3%BCnchen"),
+    ("Wie ist das Wetter im Moment in Bad Honnef?", "Bad%20Honnef"),
+    ("Wie spät ist es in Köln?", "K%C3%B6ln"),
+])
+def test_places_keep_their_spelling_for_the_lookup(frage: str, gesucht: str) -> None:
+    """16.0.2 suchte "frankfurt main" und "muenchen"."""
+    gesehen: list[str] = []
+
+    def merken(url: str) -> Any:
+        gesehen.append(url)
+        if "geocoding" in url:
+            return {"results": [{"name": "X", "latitude": 1, "longitude": 1,
+                                 "timezone": "Europe/Berlin"}]}
+        return holen(url)
+
+    frag(frage, holen=merken)
+    assert any(url.endswith("name=" + gesucht) for url in gesehen), gesehen
+
+
+def test_an_unreachable_service_is_not_reported_as_an_unknown_place() -> None:
+    antwort = frag("Wetter in Berlin", holen=lambda url: None)
+    assert antwort == standard.NICHT_ERREICHBAR and "finde ich nicht" not in antwort
+    unbekannt = frag("Wetter in Xyzqw", holen=lambda url: {"generationtime_ms": 1})
+    assert "einen Ort namens „Xyzqw“ finde ich nicht" in unbekannt
+
+
+def test_and_in_another_place_keeps_the_day_of_the_latest_answer() -> None:
+    """Nach Fragen zu heute (auch zum Schirm) gilt "und in Bremen?" fuer heute."""
+    antworten = gespraech("Wetter in Berlin", "und morgen?", "brauche ich einen Schirm?",
+                          "und in Bremen?")
+    assert "**Morgen in Berlin:**" in antworten[1]
+    assert "Für heute in **Berlin**" in antworten[2]
+    assert "**Heute in Bremen:**" in antworten[3]
+
+
+def test_several_places_are_compared() -> None:
+    antwort = frag("Wie ist das Wetter in Berlin und in Bremen?")
+    assert "**Heute in Berlin:**" in antwort and "**Heute in Bremen:**" in antwort
+    assert antwort.count("Open-Meteo") == 1
+
+
+@pytest.mark.parametrize(("frage", "teil"), [
+    ("Wurzel aus 144", "**12**"),
+    ("1/0", "Durch null kann man nicht teilen"),
+    ("2^1000", "zu groß"),
+    ("Ist morgen ein Feiertag?", "Nein, morgen ist kein bundesweiter Feiertag"),
+    ("Ist der 25.12. ein Feiertag?", "Ja, der 25.12.2026 ist **1. Weihnachtstag**"),
+    ("Wann ist Muttertag?", "**Sonntag, 09.05.2027**"),
+    ("Wie viele Tage bis Halloween?", "31.10.2027"),
+    ("Wann ist der 1. Advent?", "**Sonntag, 29.11.2026**"),
+    ("Wann ist die Zeitumstellung?", "**Sonntag, 28.03.2027**"),
+    ("Wann ist Pfingsten?", "16.05.2027"),
+    ("Ist 97 eine Primzahl?", "Ja, **97** ist eine Primzahl"),
+    ("Ist 91 eine Primzahl?", "7 × 13"),
+    ("Ist 2028 ein Schaltjahr?", "Ja, **2028**"),
+    ("2024 in römischen Zahlen", "**MMXXIV**"),
+    ("MMXXIV als Zahl", "**2024**"),
+    ("255 in binär", "**11111111**"),
+    ("255 in hex", "**FF**"),
+    ("Durchschnitt von 3, 5 und 10", "**6**"),
+    ("Welches Sternzeichen ist der 3. Mai?", "Stier"),
+    ("Wie viele Buchstaben hat Donaudampfschiff?", "**16 Buchstaben**"),
+    ("Schreib Lagerregal rückwärts", "lagerregaL"),
+    ("Buchstabiere Mut", "M – U – T"),
+    ("Was soll ich heute kochen?", "Guten Appetit"),
+    ("Erzähl mir ein Rätsel", "Lösung"),
+    ("Sag mir einen Zungenbrecher", "dreimal schnell"),
+])
+def test_answers_new_in_1603(frage: str, teil: str) -> None:
+    assert teil in frag(frage)
+
+
+def test_a_or_b_without_soll_ich() -> None:
+    assert frag("Pizza oder Pasta?") in ("Ich würde sagen: **Pizza**.",
+                                         "Ich würde sagen: **Pasta**.")
+    assert "Meine Antwort: **" in frag("Ja oder nein?")
+    # Eine Wetterfrage mit "oder" bleibt eine Wetterfrage.
+    assert standard.ORT_FRAGE in frag("Regnet es heute oder morgen?")
+
+
+def test_a_knowledge_question_is_not_counted_as_text() -> None:
+    assert "Zeichen**" not in frag("Wie viele Zeichen hat ein Tweet?")
+
+
+def test_pro_and_code_use_the_strong_model_when_there_is_one(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Aquaticy Standard ist das Modell fuer Normal. Pro und Code nehmen ein starkes Modell,
+    wenn es eines gibt -- sonst antwortet auch dort Aquaticy Standard statt eines Fehlers."""
+    from aquaticy.agent import Agent
+    from aquaticy.cache import Cache
+
+    settings = Settings(model=STANDARD_MODEL_ID, data_dir=tmp_path / "d", memory_enabled=False,
+                        enable_playwright=False, subagents_auto=False,
+                        request_delay_seconds=0.0)
+    agent = Agent(settings, cache=Cache(settings.db_path))
+    agent.mode = "code"
+    monkeypatch.setattr(agent, "_strongest_model", lambda purpose="": "mistral/codestral-latest")
+    assert not agent._standard_model()
+    monkeypatch.setattr(agent, "_strongest_model", lambda purpose="": "")
+    assert agent._standard_model()
+    agent.mode = "normal"
+    monkeypatch.setattr(agent, "_strongest_model", lambda purpose="": "mistral/codestral-latest")
+    assert agent._standard_model()

@@ -1532,8 +1532,7 @@ html.vv,html.vv body{height:var(--app-h)}
       <button type="button" class="picker-act" id="btn-aufwand">
         <span><b>Aufwand</b></span><span class="why">Denktiefe und Zahl der Agenten</span></button>
       <button type="button" class="picker-act" id="btn-weitere">
-        <span><b>Weitere Einstellungen</b></span><span class="why">virtual machine, Suche, Strukturieren
-          und mehr</span></button>
+        <span><b>Weitere Einstellungen</b></span><span class="why">Suche, Denken, Strukturieren und mehr</span></button>
     </div>
     <div class="picker-foot">Eigene Modelle und Anbieter richtest du hier ein:
       <button class="linkish" id="picker-settings">Modelle und Verbindungen</button>.</div>
@@ -2121,10 +2120,7 @@ html.vv,html.vv body{height:var(--app-h)}
         </div>
         <details class="note" id="legal-rules"><summary>Welche Regeln gelten?</summary>
           <ul id="legal-rule-list"></ul></details>
-        <div class="note">Gilt nur für die Rechts-Leitplanken und dein Konto. Immer bleibt: keine
-          Bezahlschranken, Logins oder Captchas umgehen, robots.txt beachten, nur ins eigene Netz
-          schauen, im Haus erst nach Rückfrage schalten, bei Google nie senden oder löschen, keine
-          Schadsoftware in der virtual machine, keine Bilder, die echte Menschen bloßstellen.</div>
+        <div class="note">Gilt nur für die Rechts-Leitplanken und dein Konto. Immer bleibt: keine Bezahlschranken, Logins oder Captchas umgehen, robots.txt beachten, bei Google nie senden oder löschen, keine Schadsoftware, keine Bilder, die echte Menschen bloßstellen.</div>
         <div class="check">
           <input type="checkbox" role="switch" class="schalter" id="automodel"
                  name="AQUATICY_AUTO_MODEL">
@@ -2199,7 +2195,7 @@ const thread = $("#thread"), main = $("#main"), input = $("#input"), send = $("#
 let busy = false;
 let currentChat = "";
 let secureChat = false;
-const aquaticyVersion = window.__AQUATICY_VERSION__ || "16.0.2";
+const aquaticyVersion = window.__AQUATICY_VERSION__ || "16.0.3";
 $("#version").textContent = "v" + aquaticyVersion;
 // Laeuft noch die alte Version, obwohl eine neue installiert ist? (15.0.0)
 const aquaticyInstalliert = window.__AQUATICY_INSTALLED__ || "";
@@ -4716,6 +4712,8 @@ try {
 
 
 const EN = {
+"Gilt nur für die Rechts-Leitplanken und dein Konto. Immer bleibt: keine Bezahlschranken, Logins oder Captchas umgehen, robots.txt beachten, bei Google nie senden oder löschen, keine Schadsoftware, keine Bilder, die echte Menschen bloßstellen.": "Applies only to the legal guardrails and your account. Always in place: no bypassing paywalls, logins or captchas, respect robots.txt, never send or delete at Google, no malware, no images that expose real people.",
+"Suche, Denken, Strukturieren und mehr": "Search, thinking, structuring and more",
 "Was mit deinen Daten passiert, steht im": "What happens to your data? See",
 "Gerade antwortet dir Aquaticy Standard, ganz ohne Sprachmodell. Mit deinem eigenen API-Schlüssel kann ich dir zu allem frei antworten.": "Right now Aquaticy Standard is answering you, without a language model. With your own API key I can answer anything freely.",
 "Kein Problem. Ohne diese Angaben kann Aquaticy dein Konto aber nicht schützen. Du kannst das Fenster einfach schließen. Oder du gehst zurück und stimmst doch noch zu.": "No problem. Without this, though, Aquaticy can't protect your account. You can simply close the window. Or go back and agree after all.",
@@ -5031,7 +5029,6 @@ const EN = {
 "API-Schlüssel hinzufügen": "Add API key",
 "Hinweis schließen": "Close notice",
 "Ohne Sprachmodell und ohne Schlüssel": "Without a language model and without a key",
-"Mitlesen": "Read along",
 "KI-Schlüssel für NVIDIA NIM und Mistral, GitHub, Wetter, RSS-Feeds und mehr.": "AI keys for NVIDIA NIM and Mistral, GitHub, weather, RSS feeds and more.",
 "in der Modellauswahl.": "in the model picker.",
 "Wie viel du fragen kannst, zählt in zwei Zeiträumen: einer": "How much you can ask is counted in two periods: a",
@@ -5109,8 +5106,6 @@ const EN = {
 "Standard-Ort": "Default place",
 "Sprache / Land": "Language / country",
 "Gleichzeitig": "At the same time",
-"Anfragen pro Minute": "Requests per minute",
-"Gleichzeitige Anfragen": "Simultaneous requests",
 "Seiten mit echtem Browser laden": "Load pages with a real browser",
 "Für Seiten, die ihren Inhalt erst später nachladen. Dafür muss einmal": "For pages that only load their content later. For this, run once",
 "ausgeführt werden.": ".",
@@ -5119,7 +5114,6 @@ const EN = {
 "Modell automatisch wählen": "Choose model automatically",
 "Aquaticy nimmt für jede Nachricht das passende Modell: das Code-Modell fürs Programmieren, ein Modell, das malen kann, für Bilder, das schnelle für ein „Hallo“. Kostet nichts extra. Im Verlauf siehst du, welches Modell geantwortet hat.": "Aquaticy uses the right model for each message: the code model for programming, one that can paint for images, the fast one for a “Hello”. No extra cost. The history shows which model answered.",
 "Welche Regeln gelten?": "Which rules apply?",
-"Gilt nur für die Rechts-Leitplanken und dein Konto. Immer bleibt: keine Bezahlschranken, Logins oder Captchas umgehen, robots.txt beachten, nur ins eigene Netz schauen, im Haus erst nach Rückfrage schalten, bei Google nie senden oder löschen, keine Schadsoftware in der virtual machine, keine Bilder, die echte Menschen bloßstellen.": "Only applies to the legal guardrails and your account. Always on: no getting around paywalls, logins or captchas, robots.txt respected, only your own network, home devices only after asking, never sending or deleting at Google, no malware in the virtual machine, no images that expose real people.",
 "Speichern": "Save",
 "Ai-guard liest mit, um Missbrauch zu verhindern. Die Daten dienen nur dazu. Mehr in den": "Ai-guard reads along to prevent misuse. The data is used only for that. More in the",
 "Frag etwas Größeres …": "Ask something bigger …",
@@ -5257,7 +5251,6 @@ const EN = {
 "Aufwand": "Effort",
 "Denktiefe und Zahl der Agenten": "Thinking depth and number of agents",
 "Weitere Einstellungen": "More settings",
-"virtual machine, Suche, Strukturieren und mehr": "virtual machine, search, structuring and more",
 "Dateien anhängen": "Attach files",
 "Keine Verbindung — Aquaticy macht von selbst weiter, sobald das Netz wieder da ist.": "No connection — Aquaticy carries on by itself as soon as the network is back.",
 "Fehler": "Error",

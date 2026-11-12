@@ -360,7 +360,7 @@ class AddOnError(ValueError):
 def user_agent() -> str:
     from aquaticy import __version__
 
-    return f"aquaticy/{__version__} (+https://github.com/jonasenriklaumen-a11y/Aquaticy-Ai)"
+    return f"aquaticy/{__version__} (+https://github.com/Evodragon976/Aquaticy-Test)"
 
 
 def _data_dir(settings: Any) -> Path:
