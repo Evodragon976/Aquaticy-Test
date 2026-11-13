@@ -40,9 +40,9 @@ class NachbauDatenbank:
             return [self.teile[werte[0]]] if werte[0] in self.teile else []
         if sql.startswith("SELECT version, ''::bytea"):
             return [(self.teile[werte[0]][0], b"")] if werte[0] in self.teile else []
-        if "VALUES (%s, 1, %s)" in sql:
-            name, daten = werte
-            fassung = self.teile.get(name, (0, b""))[0] + 1
+        if "GREATEST(" in sql:
+            name, mindestens, daten = werte
+            fassung = max(self.teile.get(name, (0, b""))[0] + 1, int(mindestens))
             self.teile[name] = (fassung, bytes(daten))
             self.geschrieben.append(name)
             return [(fassung,)]
@@ -509,6 +509,89 @@ def test_saving_goes_on_in_the_blob_store_when_the_databases_are_down(
     assert lies(chat_db(tmp_path / "drei", A)) == ["chat-a1", "chat-a2"]
 
 
+def test_versions_never_fall_behind_after_an_outage(schluessel: bytes, tmp_path: Path) -> None:
+    """16.1.5: Nach einem Ausfall ist der Blob den Datenbanken voraus. Die naechste Fassung
+
+    muss hoeher sein als alles, was andere Instanzen schon geladen haben.
+    """
+    dbs, blob = vier(), NachbauBlob()
+    eins = mit_blob(dbs, blob, schluessel, tmp_path / "eins")
+    stand_aus_dem_blob(tmp_path / "eins")
+    eins.alles_bekannt()
+    eins.sichern()
+    for db in dbs:
+        db.kaputt = True
+    schreibe(chat_db(tmp_path / "eins", A), "chat-a2")
+    assert eins.sichern() == 1 and blob.teile[f"konto/{A}"][0] == 2
+    zwei = mit_blob(dbs, blob, schluessel, tmp_path / "zwei")
+    zwei.start_laden()
+    zwei.konto_laden(A)
+    for db in dbs:
+        db.kaputt = False
+    schreibe(chat_db(tmp_path / "eins", A), "chat-a3")
+    assert eins.sichern() == 1
+    assert blob.teile[f"konto/{A}"][0] == 3, "weiter gezaehlt, nicht noch einmal Fassung 2"
+    assert eins.orte(f"konto/{A}")[0].teile[f"konto/{A}"][0] == 3  # type: ignore[attr-defined]
+    assert zwei.auffrischen(jetzt=1000.0) == 1
+    assert lies(chat_db(tmp_path / "zwei", A)) == ["chat-a1", "chat-a2", "chat-a3"]
+
+
+def test_a_missing_row_is_not_a_deletion(schluessel: bytes, tmp_path: Path) -> None:
+    """16.1.5: Wird eine Datenbank neu aufgesetzt, fehlen dort die Zeilen. Geloescht ist
+
+    damit nichts -- geloescht ist nur, was eine leere Fassung traegt.
+    """
+    dbs, blob = vier(), NachbauBlob()
+    eins = mit_blob(dbs, blob, schluessel, tmp_path / "eins")
+    stand_aus_dem_blob(tmp_path / "eins")
+    eins.alles_bekannt()
+    eins.sichern()
+    for db in dbs:
+        db.teile.clear()
+    assert eins.auffrischen(jetzt=1000.0) == 0
+    assert lies(chat_db(tmp_path / "eins", A)) == ["chat-a1"]
+    assert lies(chat_db(tmp_path / "eins", B)) == ["chat-b1"]
+    # Auch ohne Blob: Der Spiegel hat den Teil noch.
+    dbs2 = vier()
+    drei = vv.Verbund(dbs2, schluessel, tmp_path / "drei")  # type: ignore[arg-type]
+    stand_aus_dem_blob(tmp_path / "drei")
+    drei.alles_bekannt()
+    drei.sichern()
+    drei.orte(f"konto/{A}")[0].teile.clear()  # type: ignore[attr-defined]
+    assert drei.auffrischen(jetzt=1000.0) == 0
+    assert lies(chat_db(tmp_path / "drei", A)) == ["chat-a1"]
+
+
+def test_one_unreachable_profile_does_not_stop_the_others(
+        schluessel: bytes, tmp_path: Path) -> None:
+    """16.1.5: Ein Profil, das sich gerade nicht pruefen laesst, wartet. Der Rest wird
+
+    gespeichert, und das Profil wird nie ungeprueft ueberschrieben.
+    """
+    dbs, blob = vier(), NachbauBlob()
+    eins = mit_blob(dbs, blob, schluessel, tmp_path / "eins")
+    stand_aus_dem_blob(tmp_path / "eins")
+    eins.alles_bekannt()
+    eins.sichern()
+    zwei = mit_blob(dbs, blob, schluessel, tmp_path / "zwei")
+    zwei.start_laden()
+    zwei.konto_laden(A)
+    schreibe(chat_db(tmp_path / "zwei", A), "chat-a2")
+    schreibe(chat_db(tmp_path / "zwei", B), "fremd")  # B ist hier noch nicht geladen
+
+    echt = zwei._holen
+
+    def holen(teil: str) -> tuple[int, bytes] | None:
+        if teil == f"konto/{B}":
+            raise vv.VerbundFehler("B antwortet nicht (Test).")
+        return echt(teil)
+
+    zwei._holen = holen  # type: ignore[method-assign]
+    assert zwei.sichern() == 1
+    assert blob.teile[f"konto/{A}"][0] == 2
+    assert blob.teile[f"konto/{B}"][0] == 1, "B bleibt unberuehrt"
+
+
 def test_nothing_is_guessed_when_blob_and_databases_are_both_silent(
         schluessel: bytes, tmp_path: Path) -> None:
     dbs, blob = vier(), NachbauBlob()
@@ -683,6 +766,26 @@ def test_an_unreachable_verbund_stops_the_start_instead_of_starting_empty(
     status, _, inhalt = call(vercel.app, "/")
     assert status.startswith("503")
     assert "Sicherung ließ sich nicht laden" in inhalt.decode("utf-8")
+
+
+def test_a_failed_start_is_tried_again_after_a_pause(
+        verbund_app, monkeypatch: pytest.MonkeyPatch) -> None:
+    """16.1.5: Ein kurzer Ausfall beim Kaltstart legt die Instanz nicht fuer immer lahm."""
+    vercel, dbs = verbund_app
+    for db in dbs:
+        db.kaputt = True
+    assert call(vercel.app, "/")[0].startswith("503")
+    for db in dbs:
+        db.kaputt = False
+    geladen: list[int] = []
+    echt = vv.Verbund.start_laden
+    monkeypatch.setattr(vv.Verbund, "start_laden",
+                        lambda self: geladen.append(1) or echt(self))
+    # Innerhalb der Pause fragt die Instanz den Speicher nicht bei jeder Anfrage neu.
+    assert call(vercel.app, "/")[0].startswith("503") and not geladen
+    vercel._STATE["error_bis"] = 0.0
+    assert call(vercel.app, "/")[0].startswith("200") and geladen == [1]
+    assert vercel._STATE["error"] == ""
 
 
 def test_without_databases_the_blob_backup_works_as_before(vercel_app) -> None:  # noqa: F811

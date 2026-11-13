@@ -1,4 +1,4 @@
-# Aquaticy AI 16.1.4
+# Aquaticy AI 16.1.5
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,25 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.1.5
+
+Nur in Aquaticy-Test. Diese Fassung behebt Fehler.
+
+- **Aquaticy Standard stürzt nicht mehr ab**, wenn du am 29. Februar Geburtstag hast.
+- **Hilfe zuerst:** Schreibt jemand „Ich will nicht mehr leben“, nennt Aquaticy Standard sofort
+  die Telefonseelsorge (0800 111 0 111), die Nummer gegen Kummer (116 111) und den Notruf 112.
+- **Datum am Satzende:** „Wie viele Tage bis zum 24.12.?“ und „Welcher Tag ist der
+  29.02.2028?“ bekommen jetzt die richtige Antwort.
+- **Rechnen mit Tausenderpunkten:** „1.000.000 * 3“ ergibt 3.000.000. „Passwort mit 16
+  Zeichen“ reicht für ein neues Passwort.
+- **Speicher nach einem Ausfall:** Waren die Datenbanken kurz weg, zählt Aquaticy die
+  Fassungen danach richtig weiter. So sieht jede Instanz die neueste Änderung.
+- **Nichts geht verloren, wenn eine Datenbank neu aufgesetzt wird.** Fehlt dort eine Zeile,
+  gilt das nicht mehr als „gelöscht“.
+- **Ein Profil, das gerade nicht erreichbar ist,** hält das Speichern der anderen nicht mehr auf.
+- **Start nach einem Ausfall:** Lässt sich der Speicher beim Start nicht laden, versucht es
+  Aquaticy nach 30 Sekunden wieder. Vorher blieb die Fehlerseite stehen.
 
 ## Neu in 16.1.4
 
@@ -221,7 +240,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.1.4
+aquaticy --version            # 16.1.5
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup

@@ -406,12 +406,15 @@ class Verbund:
         Antwortet die Datenbank nicht, zaehlt diese Instanz selbst weiter und schreibt in den
         Blob -- gelesen wird immer die hoehere Fassung.
         """
+        # 16.1.5: nie unter den eigenen Stand zaehlen. Schrieb diese Instanz waehrend eines
+        # Ausfalls nur in den Blob, ist ihr Stand der Datenbank voraus.
+        naechste = self.stand.get(teil, (0, (), ""))[0] + 1
         if self.blob is None:
-            return self._db_schreiben(teil, daten)
+            return self._db_schreiben(teil, daten, naechste)
         try:
-            fassung = self._db_schreiben(teil, daten)
+            fassung = self._db_schreiben(teil, daten, naechste)
         except VerbundFehler as fehler:
-            fassung = self.stand.get(teil, (0, (), ""))[0] + 1
+            fassung = naechste
             melde(f"{fehler} Ich speichere nur im Blob-Speicher.")
             self._blob_schreiben(teil, fassung, daten)
             return fassung
@@ -421,12 +424,14 @@ class Verbund:
             melde(f"{fehler} Der Spiegel in den Datenbanken hat die Fassung.")
         return fassung
 
-    def _db_schreiben(self, teil: str, daten: bytes) -> int:
+    def _db_schreiben(self, teil: str, daten: bytes, mindestens: int = 1) -> int:
         orte = self.orte(teil)
         zeilen = orte[0].ausfuehren(
-            f"INSERT INTO {SCHEMA}.teile (name, version, daten) VALUES (%s, 1, %s) "
-            f"ON CONFLICT (name) DO UPDATE SET version = {SCHEMA}.teile.version + 1, "
-            "daten = EXCLUDED.daten, geaendert = now() RETURNING version", (teil, daten))
+            f"INSERT INTO {SCHEMA}.teile (name, version, daten) VALUES (%s, %s, %s) "
+            "ON CONFLICT (name) DO UPDATE SET version = "
+            f"GREATEST({SCHEMA}.teile.version + 1, EXCLUDED.version), "
+            "daten = EXCLUDED.daten, geaendert = now() RETURNING version",
+            (teil, max(1, int(mindestens)), daten))
         fassung = int(zeilen[0][0])
         for spiegel in orte[1:]:
             try:
@@ -503,9 +508,16 @@ class Verbund:
             for teil in list(self.fingerabdruecke()):
                 if teil not in self.bekannt and teil != KERN:
                     # Erst holen, was es schon gibt -- nie ein leeres Profil drueberschreiben.
-                    self.konto_laden(teil[len(KONTO):])
+                    # 16.1.5: Laesst es sich gerade nicht holen, wartet nur dieser Teil.
+                    try:
+                        self.konto_laden(teil[len(KONTO):])
+                    except VerbundFehler as fehler:
+                        self.letzter_fehler = str(fehler)
+                        melde(f"Nicht gespeichert: {fehler}")
             abdruecke = self.fingerabdruecke()
             for teil, abdruck in abdruecke.items():
+                if teil not in self.bekannt and teil != KERN:
+                    continue
                 alt = self.stand.get(teil, (0, None, ""))
                 if alt[1] == abdruck and teil not in self.offen:
                     continue
@@ -581,10 +593,18 @@ class Verbund:
                             self.letzter_fehler = str(fehler)
                             continue
                         geladen += 1
-                    elif teil not in dort and hier > 0 and teil != KERN:
-                        # Anderswo geloescht (Konto oder alle Daten): hier auch.
-                        shutil.rmtree(self._ordner(teil), ignore_errors=True)
-                        self.stand[teil] = (0, (), "")
+                    elif teil not in dort and hier > 0:
+                        # 16.1.5: Die Zeile fehlt in dieser Datenbank (etwa neu aufgesetzt).
+                        # Das heisst nicht "geloescht" -- dafuer gibt es die leere Fassung.
+                        # Nur wenn Blob oder Spiegel etwas Neueres haben, kommt es hierher.
+                        try:
+                            zeile = self._holen(teil)
+                            if zeile is None or zeile[0] <= hier:
+                                continue
+                            self._uebernehmen(teil, zeile)
+                        except VerbundFehler as fehler:
+                            self.letzter_fehler = str(fehler)
+                            continue
                         geladen += 1
         return geladen
 

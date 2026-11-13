@@ -38,6 +38,7 @@ import os
 import socket
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
@@ -60,8 +61,13 @@ PRIVATE_HEADERS = {"x-vercel-oidc-token"}
 
 def new_state() -> dict[str, Any]:
     """Der Zustand einer frischen Instanz (auch fuer Tests)."""
-    return {"error": "", "web": None, "handler": None, "stand": None, "verbund": None,
-            "aktiv": 0}
+    return {"error": "", "error_bis": 0.0, "web": None, "handler": None, "stand": None,
+            "verbund": None, "aktiv": 0}
+
+
+#: 16.1.5: Scheitert das Laden beim Start, versucht es die Instanz nach so vielen Sekunden
+#: wieder. Vorher blieb sie bis zu ihrem Ende bei der Fehlermeldung.
+START_PAUSE = 30.0
 
 
 _STATE: dict[str, Any] = new_state()
@@ -109,8 +115,11 @@ def _fingerprint() -> tuple[tuple[str, int, int], ...]:
 def start() -> str:
     """Einmal je Kaltstart: Sicherung holen, Konten laden. Returns: "" oder der Fehler."""
     with _START_LOCK:
-        if _STATE["handler"] is not None or _STATE["error"]:
+        if _STATE["handler"] is not None:
+            return ""
+        if _STATE["error"] and time.monotonic() < _STATE["error_bis"]:
             return str(_STATE["error"])
+        _STATE["error"] = ""
         _prepare_env()
         from aquaticy import vercel_blob, vercel_verbund
 
@@ -125,6 +134,7 @@ def start() -> str:
         except Exception as exc:
             # Nie mit leeren Daten weitermachen: die naechste Sicherung loeschte sonst alles.
             _STATE["error"] = f"Die Sicherung ließ sich nicht laden: {exc}"
+            _STATE["error_bis"] = time.monotonic() + START_PAUSE
             return str(_STATE["error"])
         _STATE["verbund"] = verbund
         modell = preset_model()
