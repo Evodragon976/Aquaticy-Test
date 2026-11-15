@@ -58,6 +58,10 @@ HOP_BY_HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", 
               "proxy-connection", "expect"}
 #: Nur fuer den Blob-Speicher -- geht nicht an web.Handler weiter.
 PRIVATE_HEADERS = {"x-vercel-oidc-token"}
+#: 16.1.6: Diese GET-Adressen schreiben Daten (der Rueckweg von Google speichert die
+#: Zugangsdaten). Danach wird gesichert wie nach POST und DELETE -- sonst waeren sie beim
+#: naechsten Kaltstart weg.
+SAVE_AFTER_GET = frozenset({"/google"})
 
 def new_state() -> dict[str, Any]:
     """Der Zustand einer frischen Instanz (auch fuer Tests)."""
@@ -78,6 +82,12 @@ _AKTIV_LOCK = threading.Lock()
 
 def _prepare_env() -> None:
     """Pfade nach /tmp, bevor ein Modul von Aquaticy sie liest."""
+    import logging
+
+    # 16.1.6: Vercel schreibt INFO ins Protokoll. httpx meldet dort jede Adresse, die Aquaticy
+    # abruft -- mit Suchanfragen und Seiten der Nutzer im Klartext. Nur Warnungen bleiben.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     HOME.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.environ["HOME"] = str(HOME)
     os.environ["AQUATICY_DATA_DIR"] = str(HOME / ".aquaticy")
@@ -369,9 +379,16 @@ def visitor_ip(environ: dict[str, Any]) -> str:
 
 def _raw_request(environ: dict[str, Any], body: bytes) -> bytes:
     """Die Anfrage so, wie sie ueber eine Verbindung kaeme -- fuer web.Handler."""
-    pfad = str(environ.get("PATH_INFO") or "/")
-    abfrage = str(environ.get("QUERY_STRING") or "")
-    ziel = pfad + (f"?{abfrage}" if abfrage else "")
+    from urllib.parse import quote
+
+    # 16.1.6: Vercel reicht den Pfad entschluesselt weiter (%0d%0a -> Zeilenumbruch). Was in der
+    # Anfragezeile nichts zu suchen hat (Steuerzeichen, Leerzeichen, Nicht-ASCII), geht wieder
+    # verschluesselt hinein. "%" bleibt, damit nichts doppelt verschluesselt wird.
+    pfad = quote(str(environ.get("PATH_INFO") or "/").encode("latin-1", "replace"),
+                 safe="/%!$&'()*+,;=:@-._~")
+    abfrage = quote(str(environ.get("QUERY_STRING") or "").encode("latin-1", "replace"),
+                    safe="/%!$&'()*+,;=:@-._~?[]")
+    ziel = (pfad if pfad.startswith("/") else "/" + pfad) + (f"?{abfrage}" if abfrage else "")
     methode = str(environ.get("REQUEST_METHOD") or "GET").upper()
     zeilen = [f"{methode} {ziel} HTTP/1.1"]
     for key, value in environ.items():
@@ -450,23 +467,25 @@ def app(environ: dict[str, Any],
         # Nur wenn gerade keine andere Anfrage laeuft: holen, was andere Instanzen aenderten.
         with contextlib.suppress(Exception), _SAVE_LOCK:
             verbund.auffrischen()
-    return _relay(_raw_request(environ, body), ip, methode, start_response)
+    speichern = methode in ("POST", "DELETE") or (
+        methode == "GET" and str(environ.get("PATH_INFO") or "") in SAVE_AFTER_GET)
+    return _relay(_raw_request(environ, body), ip, speichern, start_response)
 
 
-def _relay(roh: bytes, ip: str, methode: str,
+def _relay(roh: bytes, ip: str, speichern: bool,
            start_response: Callable[..., Any]) -> Iterator[bytes]:
     """Laesst web.Handler die Anfrage ueber ein Socket-Paar beantworten."""
     handler = _STATE["handler"]
     with _AKTIV_LOCK:
         _STATE["aktiv"] += 1
     try:
-        yield from _weiterreichen(handler, roh, ip, methode, start_response)
+        yield from _weiterreichen(handler, roh, ip, speichern, start_response)
     finally:
         with _AKTIV_LOCK:
             _STATE["aktiv"] -= 1
 
 
-def _weiterreichen(handler: Any, roh: bytes, ip: str, methode: str,
+def _weiterreichen(handler: Any, roh: bytes, ip: str, speichern: bool,
                    start_response: Callable[..., Any]) -> Iterator[bytes]:
     innen, aussen = socket.socketpair()
 
@@ -514,7 +533,7 @@ def _weiterreichen(handler: Any, roh: bytes, ip: str, methode: str,
         datei.close()
         aussen.close()
         faden.join(timeout=5)
-        if methode in ("POST", "DELETE") and int(teile[1]) < 500:
+        if speichern and int(teile[1]) < 500:
             save_if_changed()
 
 

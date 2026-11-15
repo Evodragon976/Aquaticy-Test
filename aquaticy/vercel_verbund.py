@@ -98,8 +98,13 @@ def saubere_adresse(adresse: str) -> str:
         return ""
     angaben = [(k, v) for k, v in parse_qsl(teile.query) if k in URL_PARAMETER]
     lokal = teile.hostname in ("127.0.0.1", "localhost", "::1")
-    if not lokal and not any(k == "sslmode" for k, _ in angaben):
-        angaben.append(("sslmode", "require"))
+    if not lokal:
+        # 16.1.6: Ausserhalb des eigenen Rechners immer TLS. "disable", "allow" und "prefer"
+        # liessen eine unverschluesselte Verbindung zu -- dann wird daraus "require".
+        angaben = [(k, v) for k, v in angaben
+                   if k != "sslmode" or v in ("require", "verify-ca", "verify-full")]
+        if not any(k == "sslmode" for k, _ in angaben):
+            angaben.append(("sslmode", "require"))
     return urlunsplit(("postgresql", teile.netloc, teile.path, urlencode(angaben), ""))
 
 

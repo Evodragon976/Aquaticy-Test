@@ -1,4 +1,4 @@
-# Aquaticy AI 16.1.5
+# Aquaticy AI 16.1.6
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,27 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.1.6
+
+Nur in Aquaticy-Test. Diese Fassung behebt Fehler und Sicherheitslücken.
+
+- **Sicherheit:** Eine präparierte Adresse konnte eigene Kopfzeilen in die Anfrage
+  schmuggeln. Das geht nicht mehr.
+- **Gmail bleibt verbunden:** Nach der Anmeldung bei Google wird jetzt sofort gesichert. Vorher
+  war die Verbindung beim nächsten Neustart der Seite wieder weg.
+- **Datenbanken immer verschlüsselt:** Neon und Supabase werden nur noch über TLS erreicht, auch
+  wenn in der Adresse etwas anderes steht.
+- **Weniger im Protokoll:** Die Adressen, die Aquaticy abruft (etwa Suchanfragen), stehen nicht
+  mehr im Protokoll von Vercel.
+- **Aquaticy Standard stürzt nicht mehr ab**, wenn der Dienst für Wechselkurse oder
+  Nachrichten etwas Unerwartetes schickt. Geht doch einmal etwas schief, kommt eine freundliche
+  Meldung statt eines Fehlers.
+- **Hilfe auch auf Englisch:** Auf „I want to kill myself“ und ähnliche Sätze nennt Aquaticy
+  Standard sofort Hilfe-Nummern. Normale Sätze wie „I hurt myself playing football“ zählen nicht
+  dazu.
+- **Zweistellige Jahre:** „geboren am 05.05.90“ heißt jetzt 1990, nicht 2090.
+- **Große Zahlen:** „1.000.000 plus 0,5 %“ wird richtig gerechnet.
 
 ## Neu in 16.1.5
 
@@ -240,7 +261,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.1.5
+aquaticy --version            # 16.1.6
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup
