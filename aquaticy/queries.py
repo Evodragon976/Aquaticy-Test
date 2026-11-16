@@ -93,19 +93,6 @@ def keywords(query: str, keep: int = 6) -> str:
     return " ".join(words[:keep])
 
 
-def quoted_phrase(query: str) -> str:
-    """Frueher: einen Eigennamen automatisch in Anfuehrungszeichen setzen.
-
-    Das funktioniert im Englischen, im Deutschen nicht: hier werden *alle*
-    Substantive grossgeschrieben, ein grossgeschriebenes Wortpaar ist also
-    kein Hinweis auf einen Namen. Aus "beste Kaffeemuehle unter 200 Euro Test"
-    wurde so das sinnlose Zitat `"Euro Test"`, das die Suche verengt statt sie
-    zu verbessern. Deshalb raet aquaticy nicht mehr -- Anfuehrungszeichen setzt,
-    wer sie meint: das Modell oder der Mensch. Geschriebene bleiben erhalten.
-    """
-    return ""
-
-
 def place_of(location: str) -> str:
     """Der Ortsname allein -- ohne Land, Postleitzahl und Beiwerk.
 

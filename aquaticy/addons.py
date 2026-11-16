@@ -585,11 +585,6 @@ def mark_installed(settings: Any, addon_id: str) -> None:
                 message="", installed_at=int(time.time()))
 
 
-def active_or_installed(settings: Any) -> list[str]:
-    state = load_state(settings)
-    return [key for key in CATALOG if (state.get(key) or {}).get("installed")]
-
-
 def _env_target(settings: Any) -> Path:
     from aquaticy.config import DEFAULT_ENV_PATH, find_env_file
 

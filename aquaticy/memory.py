@@ -341,14 +341,6 @@ class Memory:
 
         return used_bytes(self.data_dir, fresh=True)
 
-    def _sidecars(self) -> tuple[Path, ...]:
-        """SQLite legt neben der Datei noch Journal und Write-Ahead-Log an."""
-        return (
-            self.db_path.with_name(self.db_path.name + "-wal"),
-            self.db_path.with_name(self.db_path.name + "-shm"),
-            self.db_path.with_name(self.db_path.name + "-journal"),
-        )
-
     def usage(self) -> dict[str, object]:
         """Belegung in Zahlen, die sich anzeigen lassen."""
         used = self.used_bytes()

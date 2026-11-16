@@ -44,10 +44,6 @@ PALETTE_IDS: dict[str, str] = {
 }
 
 
-class NotChangeable(ValueError):
-    """Diese Einstellung wird nicht aus dem Gespraech heraus geaendert."""
-
-
 class BadValue(ValueError):
     """Der Wert passt nicht zu dieser Einstellung."""
 

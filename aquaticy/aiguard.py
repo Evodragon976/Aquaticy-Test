@@ -2238,12 +2238,6 @@ class AiGuard:
             ).fetchone()
         return int(anzahl)
 
-    def pattern_count(self, user_id: str) -> int:
-        """Anhaltspunkte der Muster-Arten (angriff/rechtsbruch/jailbreak, 9.5.24) --
-        seit 9.6.0 genau die, die auch zaehlen (letzte PATTERN_WINDOW Tage)."""
-        with self._connect() as conn:
-            return _muster_anzahl(conn, str(user_id), time.time())
-
     def ban_user(self, user_id: str, reason: str = "", by: str = "terminal",
                  until: float = 0.0) -> None:
         self._ban(f"user:{user_id!s}", reason or "Von Hand gesperrt", by, until)
@@ -2304,17 +2298,6 @@ class AiGuard:
                 (str(user_id), _chat_key(chat)),
             ).fetchone()
         return str(row["reason"] or "unangemessene Sprache") if row else ""
-
-    def unlock_chat(self, user_id: str, chat: str = "") -> int:
-        """Hebt eine Chatsperre auf (leerer Chat: alle des Kontos)."""
-        with self._lock, self._connect() as conn:
-            if chat:
-                weg = conn.execute("DELETE FROM aiguard_chat_locks WHERE user_id=? AND chat=?",
-                                   (str(user_id), _chat_key(chat))).rowcount
-            else:
-                weg = conn.execute("DELETE FROM aiguard_chat_locks WHERE user_id=?",
-                                   (str(user_id),)).rowcount
-        return int(weg)
 
     def unban_user(self, user_id: str) -> bool:
         """Gibt ein Konto frei -- samt Anhaltspunkten und Chatsperren, sonst

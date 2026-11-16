@@ -344,12 +344,6 @@ class Plan(tuple):
         return plan
 
 
-def _parse_question(raw: str) -> tuple[str, list[str]]:
-    """Die Rueckfrage des Planers -- kurz, eine Zeile, ohne Klammern."""
-    frage, optionen, _ = _parse_questions(raw)
-    return frage, optionen
-
-
 def _parse_questions(raw: str) -> tuple[str, list[str], list[tuple[str, list[str]]]]:
     """Die Rueckfragen des Planers: die erste mit Optionen, dazu bis zu zwei weitere."""
     start, end = (raw or "").find("{"), (raw or "").rfind("}")

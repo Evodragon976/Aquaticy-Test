@@ -173,7 +173,8 @@ def start() -> str:
         web.TOKEN = ""
         _STATE["web"] = web
         _STATE["handler"] = _handler_class(web)
-        _STATE["stand"] = _fingerprint()
+        # Den Stand des ganzen Ordners braucht nur die Sicherung als ein Archiv (ohne Verbund).
+        _STATE["stand"] = _fingerprint() if verbund is None else None
         if verbund is not None:
             _cache_einbinden(web, verbund)
             if uebernahme:

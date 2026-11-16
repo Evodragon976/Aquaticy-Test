@@ -1019,13 +1019,6 @@ class AuthStore:
                     row = conn.execute("SELECT * FROM users WHERE id=?", (row["id"],)).fetchone()
         return self._account(row)
 
-    def verify_password(self, account: Account, password: str) -> bool:
-        """Stimmt das Passwort dieses Kontos? (Fuer "Konto loeschen", 9.5.32.)"""
-        if not isinstance(password, str) or not password or len(password) > 128:
-            return False
-        gefunden = self.authenticate(account.email, password) if account.email else None
-        return gefunden is not None and gefunden.id == account.id
-
     def create_session(self, account: Account, device: str, ip: str) -> str:
         token = secrets.token_urlsafe(32)
         now = time.time()

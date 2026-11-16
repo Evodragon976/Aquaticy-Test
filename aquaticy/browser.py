@@ -529,15 +529,6 @@ def guard_context(context: Any) -> None:
         web_socket("**/*", _socket)
 
 
-def playwright_available() -> bool:
-    """Ist Playwright installiert?"""
-    try:
-        import playwright  # noqa: F401
-    except ImportError:
-        return False
-    return True
-
-
 def render_page(
     url: str,
     user_agent: str,

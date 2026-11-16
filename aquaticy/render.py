@@ -120,14 +120,6 @@ class ChatRenderer:
             )
         )
 
-    def _on_vm_net(self, payload: dict[str, Any]) -> None:
-        self._flush_reading()
-        self.console.print(
-            Text.assemble(
-                ("  [virtual machine] ", "bold cyan"), ("Internet an, Heimnetz gesperrt", "white")
-            )
-        )
-
     def _on_model_auto(self, payload: dict[str, Any]) -> None:
         """Automatische Modellwahl (Dev settings): welches Modell, warum."""
         self._flush_reading()
@@ -170,15 +162,6 @@ class ChatRenderer:
             Text.assemble(
                 ("  [Stelle um] ", "bold magenta"),
                 (f"{payload.get('label', '')}: {payload.get('value', '')}", "white"),
-            )
-        )
-
-    def _on_storage(self, payload: dict[str, Any]) -> None:
-        self._flush_reading()
-        self.console.print(
-            Text.assemble(
-                ("  [Lager] ", "bold cyan"),
-                (f"{payload.get('action', '')} {payload.get('detail', '')}".strip(), "white"),
             )
         )
 
@@ -336,41 +319,6 @@ class ChatRenderer:
         self.console.print(
             Text.assemble(
                 ("  [Speicher] ", "bold cyan"), (str(payload.get("query", "")), "white")
-            )
-        )
-
-    def _on_lan_scan(self, payload: dict[str, Any]) -> None:
-        self._flush_reading()
-        self.console.print(
-            Text.assemble(("  [Netz]  ", "bold cyan"), (f"{payload.get('subnet', '')} ...", "dim"))
-        )
-
-    def _on_lan_done(self, payload: dict[str, Any]) -> None:
-        count = int(payload.get("found", 0) or 0)
-        word = "Geraet" if count == 1 else "Geraete"
-        self.console.print(
-            Text.assemble(("  [Netz]  ", "bold cyan"), (f"{count} {word} erreichbar", "white"))
-        )
-
-    def _on_lan_check(self, payload: dict[str, Any]) -> None:
-        self._flush_reading()
-        self.console.print(
-            Text.assemble(("  [Netz]  ", "bold cyan"), (str(payload.get("host", "")), "white"))
-        )
-
-    def _on_ha_read(self, payload: dict[str, Any]) -> None:
-        self._flush_reading()
-        self.console.print(
-            Text.assemble(("  [Haus]  ", "bold cyan"), (str(payload.get("search", "")), "white"))
-        )
-
-    def _on_ha_call(self, payload: dict[str, Any]) -> None:
-        self._flush_reading()
-        target = payload.get("entity_id") or payload.get("domain", "")
-        self.console.print(
-            Text.assemble(
-                ("  [Haus]  ", "bold yellow"),
-                (f"{payload.get('domain')}.{payload.get('service')} -> {target}", "white"),
             )
         )
 

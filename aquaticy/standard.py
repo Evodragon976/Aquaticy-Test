@@ -570,14 +570,6 @@ def tage_aus(kern: str, heute: date) -> list[int]:
     return [0]
 
 
-def tag_aus(kern: str) -> int:
-    if "uebermorgen" in kern:
-        return 2
-    if re.search(r"\bmorgen\b", kern):
-        return 1
-    return 0
-
-
 def original(frage: str, gefaltet: str) -> str:
     """Die Schreibweise aus der Frage (mit Umlauten) fuer einen gefalteten Ausschnitt.
 
@@ -613,11 +605,6 @@ def orte_aus(frage: str) -> list[str]:
         if ort not in orte:
             orte.append(ort)
     return orte[:3]
-
-
-def ort_aus(frage: str) -> str:
-    orte = orte_aus(frage)
-    return orte[0] if orte else ""
 
 
 def _liste(werte: Any, n: int) -> list[Any]:

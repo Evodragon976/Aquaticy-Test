@@ -195,6 +195,40 @@ def _headers(wert: str, speicher: str) -> dict[str, str]:
             "x-vercel-blob-store-id": speicher}
 
 
+def _abrufen(pfad: str, zugang: tuple[str, str], client: Any = None, sekunden: int = 30) -> Any:
+    """GET auf eine Datei im privaten Speicher -- fuer die Sicherung und fuer einzelne Teile."""
+    import httpx
+
+    wert, speicher = zugang
+    eigener = client is None
+    client = client or httpx.Client(timeout=sekunden, follow_redirects=False)
+    try:
+        return client.get(f"https://{speicher}.private.blob.vercel-storage.com/{pfad}",
+                          params={"cache": "0"}, headers={"authorization": f"Bearer {wert}"})
+    finally:
+        if eigener:
+            client.close()
+
+
+def _ablegen(pfad: str, inhalt: bytes, zugang: tuple[str, str], client: Any = None,
+             sekunden: int = 60) -> Any:
+    """PUT einer privaten Datei unter festem Namen (ueberschreibt die vorige)."""
+    import httpx
+
+    wert, speicher = zugang
+    eigener = client is None
+    client = client or httpx.Client(timeout=sekunden, follow_redirects=False)
+    try:
+        return client.put(
+            f"{API_URL}/", params={"pathname": pfad}, content=inhalt,
+            headers={**_headers(wert, speicher), "x-vercel-blob-access": "private",
+                     "x-add-random-suffix": "0", "x-allow-overwrite": "1",
+                     "x-content-type": "application/octet-stream"})
+    finally:
+        if eigener:
+            client.close()
+
+
 def restore(data_dir: Path, client: Any = None) -> int:
     """Holt die letzte Sicherung zurueck. Returns: Zahl der Dateien (0: keine Sicherung)."""
     from cryptography.fernet import Fernet, InvalidToken
@@ -202,18 +236,7 @@ def restore(data_dir: Path, client: Any = None) -> int:
     schluessel, zugang = secret_key(), credentials()
     if not schluessel or not zugang:
         return 0
-    import httpx
-
-    wert, speicher = zugang
-    eigener = client is None
-    client = client or httpx.Client(timeout=30, follow_redirects=False)
-    try:
-        antwort = client.get(
-            f"https://{speicher}.private.blob.vercel-storage.com/{PATHNAME}",
-            params={"cache": "0"}, headers={"authorization": f"Bearer {wert}"})
-    finally:
-        if eigener:
-            client.close()
+    antwort = _abrufen(PATHNAME, zugang, client)
     if antwort.status_code == 404:
         return 0
     if antwort.status_code != 200:
@@ -232,22 +255,9 @@ def save(data_dir: Path, client: Any = None) -> bool:
     schluessel, zugang = secret_key(), credentials()
     if not schluessel or not zugang:
         return False
-    import httpx
-
-    wert, speicher = zugang
     with _LOCK:
         daten = Fernet(schluessel).encrypt(pack(data_dir))
-        eigener = client is None
-        client = client or httpx.Client(timeout=60, follow_redirects=False)
-        try:
-            antwort = client.put(
-                f"{API_URL}/", params={"pathname": PATHNAME}, content=daten,
-                headers={**_headers(wert, speicher), "x-vercel-blob-access": "private",
-                         "x-add-random-suffix": "0", "x-allow-overwrite": "1",
-                         "x-content-type": "application/octet-stream"})
-        finally:
-            if eigener:
-                client.close()
+        antwort = _ablegen(PATHNAME, daten, zugang, client)
     if antwort.status_code not in (200, 201):
         raise BlobError(f"Die Sicherung ließ sich nicht speichern (HTTP {antwort.status_code}).")
     return True
@@ -278,20 +288,9 @@ class BlobTeile:
             raise BlobError("Der Blob-Speicher ist nicht verbunden.")
         return zugang
 
-    def _mit_client(self, tun: Callable[[Any], Any], sekunden: int) -> Any:
-        import httpx
-
-        if self._client is not None:
-            return tun(self._client)
-        with httpx.Client(timeout=sekunden, follow_redirects=False) as client:
-            return tun(client)
-
     def holen(self, teil: str) -> tuple[int, bytes] | None:
         """Fassung und Inhalt eines Teils -- None, wenn es ihn hier nicht gibt."""
-        wert, speicher = self._zugang()
-        antwort = self._mit_client(lambda client: client.get(
-            f"https://{speicher}.private.blob.vercel-storage.com/{self.pfad(teil)}",
-            params={"cache": "0"}, headers={"authorization": f"Bearer {wert}"}), 30)
+        antwort = _abrufen(self.pfad(teil), self._zugang(), self._client)
         if antwort.status_code == 404:
             return None
         if antwort.status_code != 200:
@@ -302,12 +301,7 @@ class BlobTeile:
         return int(kopf[len(TEIL_KOPF):]), inhalt
 
     def schreiben(self, teil: str, fassung: int, daten: bytes) -> None:
-        wert, speicher = self._zugang()
         inhalt = TEIL_KOPF + str(int(fassung)).encode("ascii") + b"\n" + bytes(daten)
-        antwort = self._mit_client(lambda client: client.put(
-            f"{API_URL}/", params={"pathname": self.pfad(teil)}, content=inhalt,
-            headers={**_headers(wert, speicher), "x-vercel-blob-access": "private",
-                     "x-add-random-suffix": "0", "x-allow-overwrite": "1",
-                     "x-content-type": "application/octet-stream"}), 60)
+        antwort = _ablegen(self.pfad(teil), inhalt, self._zugang(), self._client)
         if antwort.status_code not in (200, 201):
             raise BlobError(f"Der Blob-Speicher nimmt nicht an (HTTP {antwort.status_code}).")

@@ -225,28 +225,6 @@ def provider_of(model: str) -> str:
     return model.split("/", 1)[0].lower() if "/" in model else model.split("-", 1)[0].lower()
 
 
-VISION_MODEL_MARKERS = (
-    "gemma3", "gemma4", "qwen2-vl", "qwen2.5-vl", "qwen3-vl", "llava",
-    "minicpm-v", "moondream", "pixtral", "vision", "gemini", "claude",
-    "gpt-4o", "gpt-4.1", "gpt-5",
-)
-
-
-def selected_vision_model(settings: Settings) -> str:
-    """Gibt das gewählte Bildmodell zurück, ohne ein Textmodell dafür auszugeben.
-
-    Ein Eintrag im eigenen Vision-Feld ist eine ausdrückliche Auswahl. Bleibt
-    es leer, darf das Hauptmodell übernehmen, sofern seine Modell-ID eine
-    bekannte bildfähige Familie bezeichnet.
-    """
-    explicit = settings.vision_model.strip()
-    if explicit:
-        return explicit
-    main = settings.model.strip()
-    lowered = main.lower()
-    return main if any(marker in lowered for marker in VISION_MODEL_MARKERS) else ""
-
-
 NO_KEY = "kein-schluessel"
 
 
@@ -420,8 +398,6 @@ class Settings:
     max_subagents: int = 12
 
     subagents_auto: bool = True
-
-    triage_timeout: float = 5.0
 
     planner_timeout: float = 20.0
 
@@ -856,7 +832,6 @@ def get_settings() -> Settings:
         keep_full_results=_env_int("AQUATICY_KEEP_FULL_RESULTS", 4),
         max_subagents=_env_int("AQUATICY_MAX_SUBAGENTS", 12),
         subagents_auto=_env_bool("AQUATICY_SUBAGENTS_AUTO", True),
-        triage_timeout=float(_env_int("AQUATICY_TRIAGE_TIMEOUT", 5)),
         planner_timeout=float(_env_int("AQUATICY_PLANNER_TIMEOUT", 20)),
         context_tokens=_env_int("AQUATICY_CONTEXT_TOKENS", 16384),
         subagent_model=_env_str("AQUATICY_SUBAGENT_MODEL"),

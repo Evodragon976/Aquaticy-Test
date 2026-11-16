@@ -1331,18 +1331,6 @@ class Agent:
                 and clean_mode(self.mode) != "code" and needs_place(question)
                 and not self._place_known())
 
-    def _ask_for_place(self, question: str) -> bool:
-        """Mit "Strukturiert": fehlt der Ort, erst fragen, dann planen (12.0.1 Nutshell).
-
-        Der Planer sollte das selbst tun, ein kleines Modell ohne Denk-Modus liess
-        es aber fast immer weg. Ohne "Strukturiert" fragt das Hauptmodell selbst.
-
-        Returns: True, wenn der Nutzer geantwortet hat.
-        """
-        if not self._place_missing(question):
-            return False
-        return self._ask_before_research(PLACE_QUESTION)
-
     def _ask_planned(self, frage: str, optionen: Any, weitere: Any, question: str) -> bool:
         """Die Rueckfragen des Planers -- und fehlt dazu der Ort, steht er vorn (12.1.1 Luna).
 
@@ -2404,8 +2392,7 @@ class Agent:
         Turn nicht schon selbst etwas abgelegt hat.
         """
         if (not question or self.stopped or result.error or not self._automatic_memory_allowed()
-                or getattr(self.toolbox, "memory_blocked", True)
-                or not getattr(self.settings, "memory_auto_model", True)):
+                or getattr(self.toolbox, "memory_blocked", True)):
             return
         from aquaticy import memory_auto
 
@@ -3678,10 +3665,6 @@ class Agent:
             self.messages[index]["content"] = content[:SHRUNK_LENGTH].rstrip() + " […]"
         return self._history_chars() <= budget
 
-    def _run_tool_call(self, call: dict[str, Any]) -> None:
-        """Fuehrt einen einzelnen Tool-Call aus und haengt das Ergebnis an."""
-        self.messages.append(self._tool_result(call))
-
     def _run_round(self, tool_calls: list[dict[str, Any]]) -> None:
         """Fuehrt die Werkzeuge einer Runde aus -- nebeneinander, wo es geht.
 
@@ -3843,12 +3826,6 @@ class Agent:
         self._note_usage(messages, {"role": "assistant", "content": text}, buchung, zahlen)
         self.messages.append({"role": "assistant", "content": text})
         return text
-
-    def _review_turn(self) -> bool:
-        """Laeuft gerade /code-review oder /security-review? (15.3.4)"""
-        from aquaticy.plugins import is_review_prompt
-
-        return is_review_prompt(getattr(self, "_plugin_turn", ""))
 
 
     def _should_force_ask(self, answer: str, used: int) -> bool:

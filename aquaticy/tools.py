@@ -23,7 +23,6 @@ from typing import Any
 from aquaticy import metering
 from aquaticy.cache import Cache, cache_key
 from aquaticy.config import Settings
-from aquaticy.extract import extract_product, has_spec_heading
 from aquaticy.fetch import Fetcher, load_rules
 from aquaticy.guardrails import SENSITIVE_TOOLS, Guard, event_payload, tool_refusal
 from aquaticy.models import PageResult, Product, SearchResult, domain_of
@@ -895,16 +894,10 @@ class ToolStats:
 
     questions: int = 0
     memories: int = 0
-    lan_scans: int = 0
-    ha_reads: int = 0
-    ha_calls: int = 0
     google_reads: int = 0
     google_writes: int = 0
-    storage_reads: int = 0
-    storage_writes: int = 0
     settings_changed: int = 0
 
-    vm_calls: int = 0
     addon_calls: int = 0
 
     @property
@@ -917,15 +910,9 @@ class ToolStats:
             + self.calculations
             + self.notes_saved
             + self.memories
-            + self.lan_scans
-            + self.ha_reads
-            + self.ha_calls
             + self.google_reads
             + self.google_writes
-            + self.storage_reads
-            + self.storage_writes
             + self.settings_changed
-            + self.vm_calls
             + self.addon_calls
         )
 
@@ -941,15 +928,9 @@ class ToolStats:
         self.notes_saved = 0
         self.questions = 0
         self.memories = 0
-        self.lan_scans = 0
-        self.ha_reads = 0
-        self.ha_calls = 0
         self.google_reads = 0
         self.google_writes = 0
-        self.storage_reads = 0
-        self.storage_writes = 0
         self.settings_changed = 0
-        self.vm_calls = 0
         self.addon_calls = 0
 
 
@@ -1798,13 +1779,10 @@ class Toolbox:
             return injection.clean(payload)
         markiert, arten = injection.mark(name, payload)
 
-        eigenes_haus = (name == "ha_states" and getattr(self.settings, "ha_direct", False)
-                        and getattr(self.settings, "ha_control", False))
-
         eigener_kalender = (name == "calendar_events"
                             and getattr(self.settings, "google_direct", False)
                             and getattr(self.settings, "google_write", False))
-        if arten or not (eigenes_haus or eigener_kalender):
+        if arten or not eigener_kalender:
             self.untrusted_seen = True
         elif eigener_kalender:
             self._untrusted_soft = True
@@ -2601,12 +2579,3 @@ class Toolbox:
             return {"error": "Keine Teilfragen angegeben."}
         results = self.subagent_runner(clean)
         return {"results": results}
-
-
-def looks_like_product_page(html: str, url: str) -> bool:
-    """Kleine Hilfe fuer Tests und den LLM-Fallback."""
-    from selectolax.parser import HTMLParser
-
-    if extract_product(html, url) is not None:
-        return True
-    return has_spec_heading(HTMLParser(html))

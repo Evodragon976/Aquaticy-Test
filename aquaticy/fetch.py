@@ -831,11 +831,6 @@ class Fetcher:
             current = selected
         return None, "Die Bildquelle leitet zu oft weiter."
 
-    def find_public_visual(self, url: str) -> tuple[str, str]:
-        """Kompatible Kurzform: gibt nur die aufgelöste Bildadresse zurück."""
-        visual, error = self.load_public_visual(url)
-        return (visual.url if visual else ""), error
-
     def _finish_pdf(self, result: PageResult, data: bytes) -> PageResult:
         """Text aus einem PDF ziehen -- Datenblaetter, Speisekarten, Preislisten."""
         if len(data) > MAX_PDF_BYTES:
