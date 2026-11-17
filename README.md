@@ -1,4 +1,4 @@
-# Aquaticy AI 16.2.0
+# Aquaticy AI 16.3.0
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,27 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.3.0
+
+Nur in Aquaticy-Test. Diese Fassung prüft alle Funktionen und senkt die Fehlerrate.
+
+- **Alle Funktionen geprüft.** Jede Schnittstelle der Web-App bekam echte und kaputte
+  Eingaben (falsche Typen, leere und riesige Werte, fremde Pfade) — rund 120.000 Anfragen. Kein einziger
+  Absturz, keine Fehlermeldung aus dem Programm. Der Rundgang im Browser klickt alle Knöpfe
+  durch, ohne Fehler in der Konsole.
+- **Aquaticy Standard lässt weniger Fragen fallen.** Von 122 typischen Fragen ließ es
+  bisher rund jede fünfte fallen. Jetzt beantwortet es alle. Neu sind unter anderem: „ein
+  Drittel von 90“, „Um wie viel Prozent ist 120 größer als 100?“, „10 % Rabatt auf 59,99 €“,
+  „Wie viele Minuten haben 3 Stunden?“, „Welcher Wochentag ist heute?“, „Wie viele Tage hat
+  der Februar?“, „Wechselkurs Euro Pfund“, „Wie hoch ist der Mount Everest?“, „Wetter
+  Hamburg“, „Kann ich heute joggen gehen?“ und Fragen auf Englisch („what is 45 times 12“).
+- **Ehrlich bei „Was kannst du?“:** Mit Aquaticy Standard nennt Aquaticy jetzt, was Standard
+  wirklich kann. Vorher versprach es Websuche und Code.
+- **Smalltalk versteht mehr:** „Vielen Dank für deine Hilfe“, „Gute Nacht und danke“ und
+  englische Sätze wie „Good morning“ oder „What can you do?“.
+- **Sicherheit:** Die Bildvorschau lässt sich nicht auf interne Adressen umlenken (auch nicht
+  mit Tricks wie `0x7f000001` oder IPv6). Exporte und Links bleiben geschützt.
 
 ## Neu in 16.2.0
 
@@ -275,7 +296,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.2.0
+aquaticy --version            # 16.3.0
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup

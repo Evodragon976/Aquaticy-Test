@@ -223,7 +223,7 @@ export const DATEN = {
     "Mein Name ist Aquaticy. Ich bin eine KI und freue mich auf deine Frage.",
     "Ich bin Aquaticy, dein KI-Begleiter. Was möchtest du als Erstes erledigen?"
    ],
-   "muster": "(?:(?:wer|was)\\s+bist\\s+(?:du|ihr)(?:\\s+(?:eigentlich|denn|genau))?|wie\\s+hei(?:ss|ß)t\\s+du(?:\\s+(?:eigentlich|denn))?|wie\\s+ist\\s+dein\\s+name|was\\s+ist\\s+dein\\s+name|hast\\s+du\\s+einen\\s+namen|stell\\s+dich\\s+(?:mal\\s+|bitte\\s+)?vor|was\\s+ist\\s+aquaticy|wer\\s+ist\\s+aquaticy|mit\\s+wem\\s+(?:spreche|schreibe|rede)\\s+ich(?:\\s+hier)?)",
+   "muster": "(?:(?:wer|was)\\s+bist\\s+(?:du|ihr)(?:\\s+(?:eigentlich|denn|genau))?|wie\\s+hei(?:ss|ß)t\\s+du(?:\\s+(?:eigentlich|denn))?|wie\\s+ist\\s+dein\\s+name|was\\s+ist\\s+dein\\s+name|hast\\s+du\\s+einen\\s+namen|stell\\s+dich\\s+(?:mal\\s+|bitte\\s+)?vor|was\\s+ist\\s+aquaticy|wer\\s+ist\\s+aquaticy|mit\\s+wem\\s+(?:spreche|schreibe|rede)\\s+ich(?:\\s+hier)?|who\\s+are\\s+you|what(?:'s|\\s+is)\\s+your\\s+name)",
    "name": "identitaet",
    "nicht_bei_offener_frage": false
   },
@@ -274,7 +274,7 @@ export const DATEN = {
     "Ich beantworte Fragen, suche aktuelle Infos im Web und helfe beim Schreiben und Programmieren. Wo drückt der Schuh?",
     "Ich finde heraus, was du wissen willst — schnell oder gründlich. Texte und Code schreibe ich auch."
    ],
-   "muster": "(?:was\\s+kannst\\s+du(?:\\s+(?:alles|so|eigentlich|denn|machen|mir\\s+bieten))?|wobei\\s+kannst\\s+du\\s+(?:mir\\s+)?helfen|wie\\s+kannst\\s+du\\s+(?:mir\\s+)?helfen|was\\s+machst\\s+du(?:\\s+(?:so|eigentlich|genau))?|wofür\\s+bist\\s+du\\s+(?:da|gut)|wofuer\\s+bist\\s+du\\s+(?:da|gut)|was\\s+sind\\s+deine\\s+(?:fähigkeiten|faehigkeiten|funktionen|features)|hilfe|help|was\\s+geht\\s+mit\\s+dir|was\\s+kann\\s+ich\\s+(?:dich\\s+fragen|mit\\s+dir\\s+machen))",
+   "muster": "(?:was\\s+kannst\\s+du(?:\\s+(?:alles|so|eigentlich|denn|machen|mir\\s+bieten))?|what\\s+can\\s+you\\s+do|how\\s+can\\s+you\\s+help(?:\\s+me)?|wobei\\s+kannst\\s+du\\s+(?:mir\\s+)?helfen|wie\\s+kannst\\s+du\\s+(?:mir\\s+)?helfen|was\\s+machst\\s+du(?:\\s+(?:so|eigentlich|genau))?|wofür\\s+bist\\s+du\\s+(?:da|gut)|wofuer\\s+bist\\s+du\\s+(?:da|gut)|was\\s+sind\\s+deine\\s+(?:fähigkeiten|faehigkeiten|funktionen|features)|hilfe|help|was\\s+geht\\s+mit\\s+dir|was\\s+kann\\s+ich\\s+(?:dich\\s+fragen|mit\\s+dir\\s+machen))",
    "name": "faehigkeiten",
    "nicht_bei_offener_frage": false
   },
@@ -323,7 +323,7 @@ export const DATEN = {
     "Morgen! Ich hoffe, du hast gut geschlafen. Wobei kann ich helfen?",
     "Guten Morgen! Womit darf ich dir den Tag leichter machen?"
    ],
-   "muster": "(?:(?:einen\\s+)?(?:schönen\\s+|schoenen\\s+|wunderschönen\\s+)?guten\\s+morgen)",
+   "muster": "(?:(?:einen\\s+)?(?:schönen\\s+|schoenen\\s+|wunderschönen\\s+)?guten\\s+morgen|good\\s+morning)",
    "name": "morgen",
    "nicht_bei_offener_frage": false
   },
@@ -404,7 +404,7 @@ export const DATEN = {
     "Gern geschehen! Ich wünsche dir noch einen schönen Tag.",
     "Bitte sehr! Wenn noch Fragen auftauchen, bin ich da."
    ],
-   "muster": "(?:(?:(?:ok(?:ay)?|super|top|perfekt|cool|klasse|prima|alles\\s+klar)\\s*,?\\s*)?(?:danke(?:\\s*(?:schön|schoen|sehr|dir|euch|vielmals|nochmal|nochmals|für\\s+alles|fuer\\s+alles|für\\s+die\\s+hilfe|fuer\\s+die\\s+hilfe|für\\s+deine\\s+hilfe|dir\\s+vielmals))*|dankeschön|dankeschoen|vielen\\s+(?:lieben\\s+)?dank(?:e)?(?:\\s+dir)?|tausend\\s+dank|herzlichen\\s+dank|besten\\s+dank|dank\\s+dir|merci(?:\\s+beaucoup)?|thx|thanks|thank\\s+you|ty|danki|dankö))",
+   "muster": "(?:(?:(?:ok(?:ay)?|super|top|perfekt|cool|klasse|prima|alles\\s+klar)\\s*,?\\s*)?(?:danke(?:\\s*(?:schön|schoen|sehr|dir|euch|vielmals|nochmal|nochmals|für\\s+alles|fuer\\s+alles|für\\s+die\\s+hilfe|fuer\\s+die\\s+hilfe|für\\s+deine\\s+hilfe|dir\\s+vielmals))*|dankeschön|dankeschoen|vielen\\s+(?:lieben\\s+)?dank(?:e)?(?:\\s+dir)?(?:\\s+(?:für|fuer)\\s+(?:deine|die)\\s+hilfe)?|tausend\\s+dank|herzlichen\\s+dank|besten\\s+dank|dank\\s+dir|merci(?:\\s+beaucoup)?|thx|thanks(?:\\s+a\\s+lot|\\s+so\\s+much)?|thank\\s+you(?:\\s+(?:so|very)\\s+much)?|ty|danki|dankö))",
    "name": "danke",
    "nicht_bei_offener_frage": false
   },
@@ -421,7 +421,7 @@ export const DATEN = {
     "Schlaf gut und ruh dich aus!",
     "Gute Nacht! Bis morgen."
    ],
-   "muster": "(?:gute\\s+nacht|guts\\s+nächtle|gute\\s+n8|n8|schlaf\\s+gut|nacht|nachti)",
+   "muster": "(?:(?:gute\\s+nacht|guts\\s+nächtle|gute\\s+n8|n8|schlaf\\s+gut|nacht|nachti|good\\s+night)(?:\\s+und\\s+danke(?:\\s+(?:dir|für\\s+alles|fuer\\s+alles))?)?)",
    "name": "gute_nacht",
    "nicht_bei_offener_frage": false
   },
@@ -1045,8 +1045,8 @@ export const DATEN = {
    "UNKLAR": "nothing solid found"
   }
  },
- "version": "16.2.0",
- "version_label": "16.2.0",
+ "version": "16.3.0",
+ "version_label": "16.3.0",
  "wetterlage": {
   "0": "klar",
   "1": "überwiegend klar",

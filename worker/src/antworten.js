@@ -632,6 +632,8 @@ const ZUSATZ = [
   [/tschechische[rn]?\s+kronen?|czech\s+koruna/, "CZK"],
   [/(?:hong\s*kong|hongkong)[\s-]?dollar/, "HKD"],
 ];
+// 16.3.0: Waehrungsnamen sind Woerter -- die Tippfehler-Korrektur macht aus "euro" nie "eure".
+for (const name of Object.keys(WAEHRUNGEN)) WORTSCHATZ.dazu(name);
 
 export function waehrungenIn(kern) {
   const gefunden = [];
