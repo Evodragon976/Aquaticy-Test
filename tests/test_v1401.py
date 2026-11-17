@@ -91,25 +91,12 @@ def test_settings_open_secure_chat_in_real_browser(server, monkeypatch, width): 
         if width < 600:
             page.locator("#btn-side").click()
         page.locator("#btn-settings").click()
-        page.locator("#voice-setting").wait_for(state="visible")
-        page.locator("#voice-setting").check()
-        playwright.expect(page.locator("#voice-setting")).to_be_enabled()
-        assert json.loads(_req(server, "GET", "/api/features", cookie=cookie)[2])["voice"]
-        page.locator("#voice-setting").uncheck()
-        playwright.expect(page.locator("#voice-setting")).to_be_enabled()
-        page.locator("#secure-setting").check()
-        page.locator("#secure-subnet").fill("192.168.1.0/24")
-        page.locator("#secure-consent").check()
-        page.locator("#secure-apply").click()
-        playwright.expect(page.locator("#secure-note")).to_contain_text("ist an")
+        # 16.2.0 (Aquaticy-Test): Schalter fuer Sprache und das Secure-Pro-Netz gibt es hier
+        # seit 16.0.0 nicht mehr -- der Weg in den Secure-Pro-Chat bleibt.
         page.locator("#secure-open").click()
         page.locator("#secure-panel").wait_for(state="visible")
         assert page.locator("#thread").inner_text().count("Secure Pro") >= 1
         assert page.locator(".recent .art").filter(has_text="Secure Pro").count() >= 1
-        page.locator("#secure-settings-open").click()
-        page.locator("#secure-controls").wait_for(state="visible")
-        page.locator("#secure-disable").click()
-        playwright.expect(page.locator("#secure-note")).to_contain_text("ist aus")
         page.reload()
         if width < 600:
             page.locator("#btn-side").click()

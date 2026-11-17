@@ -306,7 +306,7 @@ export const DATEN = {
     "Mir geht’s gut — und ich bin neugierig, was du vorhast. Erzähl!",
     "Wunderbar, danke! Womit darf ich dir heute helfen?"
    ],
-   "muster": "(?:(?:(?:hallo|hi|hey|moin|servus|na)\\s+)?(?:wie\\s+geht(?:'?s|\\s+es)(?:\\s+(?:dir|ihnen|euch))?(?:\\s+(?:heute|so))?|wie\\s+gehts(?:\\s+dir)?|wie\\s+läuft(?:'?s)?|wie\\s+laeuft(?:'?s)?|alles\\s+(?:gut|fit|klar)\\s+bei\\s+dir|alles\\s+fit|wie\\s+stehts|wie\\s+steht'?s|na\\s+wie\\s+geht'?s|was\\s+geht\\s+ab|wie\\s+war\\s+dein\\s+tag))",
+   "muster": "(?:(?:(?:hallo|hi|hey|moin|servus|na)\\s+)?(?:wie\\s+geht(?:'?s|\\s+es)(?:\\s+(?:dir|ihnen|euch))?(?:\\s+(?:heute|so))?|wie\\s+gehts(?:\\s+dir)?|wie\\s+läuft(?:'?s)?|wie\\s+laeuft(?:'?s)?|alles\\s+(?:gut|fit|klar)\\s+bei\\s+dir|alles\\s+fit|wie\\s+stehts|wie\\s+steht'?s|na\\s+wie\\s+geht'?s|was\\s+geht\\s+ab|wie\\s+war\\s+dein\\s+tag|how\\s+are\\s+you(?:\\s+doing)?(?:\\s+today)?|how'?s\\s+it\\s+going))",
    "name": "wie_gehts",
    "nicht_bei_offener_frage": false
   },
@@ -1045,8 +1045,8 @@ export const DATEN = {
    "UNKLAR": "nothing solid found"
   }
  },
- "version": "16.1.6",
- "version_label": "16.1.6",
+ "version": "16.2.0",
+ "version_label": "16.2.0",
  "wetterlage": {
   "0": "klar",
   "1": "überwiegend klar",

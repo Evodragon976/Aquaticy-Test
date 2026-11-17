@@ -1,4 +1,4 @@
-# Aquaticy AI 16.1.6
+# Aquaticy AI 16.2.0
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,20 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.2.0
+
+Nur in Aquaticy-Test. Diese Fassung prüft die Sicherheit und behebt Fehler.
+
+- **Sicherheit geprüft.** Wir haben 15 typische Angriffe ausprobiert, auch auf der
+  Vercel-Fassung: Skript im Nutzernamen, fremde Chat-Nummer in der Adresse, `/admin`,
+  Schlüssel im Browser, Prompt-Injection, Ultra bei der Anmeldung, Preise und Zahlungen
+  fälschen, Codes mehrfach einlösen, negative Mengen, Codes erraten, falsche Bilder hochladen,
+  `.env` im Git, die KI mit Anfragen fluten und die Datenbank direkt abfragen. Keiner davon kam
+  durch. Preise, Zahlungen und Einlöse-Codes gibt es hier gar nicht.
+- **„Hallo, wie geht es dir?“** versteht Aquaticy jetzt auch mit Gruß davor, ebenso
+  „Guten Morgen, alles gut?“ und „hi, how are you?“. Vorher kam „Da muss ich passen“.
+- **Suche:** Die Ausweichsuche über DuckDuckGo schickt nur noch Regionen, die es dort gibt.
 
 ## Neu in 16.1.6
 
@@ -261,7 +275,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.1.6
+aquaticy --version            # 16.2.0
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup
