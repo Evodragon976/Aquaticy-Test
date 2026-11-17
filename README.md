@@ -47,6 +47,8 @@ Nur in Aquaticy-Test. Diese Fassung prüft alle Funktionen und senkt die Fehlerr
   „Wie viele Minuten haben 3 Stunden?“, „Welcher Wochentag ist heute?“, „Wie viele Tage hat
   der Februar?“, „Wechselkurs Euro Pfund“, „Wie hoch ist der Mount Everest?“, „Wetter
   Hamburg“, „Kann ich heute joggen gehen?“ und Fragen auf Englisch („what is 45 times 12“).
+- **Neuer Chat:** Wer gleich nach „Neuer Chat“ lostippt, verliert den Text nicht mehr. Vorher
+  löschte die späte Antwort des Servers das Eingabefeld, und „Senden“ schickte nichts.
 - **Ehrlich bei „Was kannst du?“:** Mit Aquaticy Standard nennt Aquaticy jetzt, was Standard
   wirklich kann. Vorher versprach es Websuche und Code.
 - **Smalltalk versteht mehr:** „Vielen Dank für deine Hilfe“, „Gute Nacht und danke“ und

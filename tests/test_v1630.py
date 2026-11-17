@@ -4,6 +4,8 @@ from datetime import datetime
 
 import pytest
 
+from tests.test_v965 import parallel_site as parallel_site
+
 # -- Aquaticy Standard: Fragen, die es koennen sollte, aber fallen liess ---------------------
 
 JETZT = datetime(2026, 11, 17, 10, 0)
@@ -192,3 +194,57 @@ def test_more_everyday_small_talk_is_recognised(text, art):
 
     gefunden = smalltalk.art_von(text)
     assert gefunden is not None and gefunden.name == art
+
+
+# -- Neuer Chat: schnell getippt geht nicht verloren -----------------------------------------
+
+@pytest.mark.parametrize("wann", ["vor_der_antwort", "nach_der_antwort"])
+def test_text_typed_while_a_new_chat_opens_is_sent_into_the_new_chat(
+        parallel_site, monkeypatch, wann):
+    import shutil
+    import threading
+
+    from aquaticy import web
+    from tests.anmeldung import AGENT, SPRACHE
+
+    playwright = pytest.importorskip("playwright.sync_api")
+    executable = shutil.which("chromium")
+    if not executable:
+        pytest.skip("System-Chromium fehlt")
+    client, _, _, _, _, url = parallel_site
+    tor, scharf = threading.Event(), threading.Event()
+    echt = web.ChatSession.switch_chat
+
+    def langsam(self, chat_id=""):
+        # Der Server antwortet auf "Neuer Chat" erst, wenn der Test es erlaubt.
+        if scharf.is_set() and not chat_id:
+            tor.wait(10)
+        return echt(self, chat_id)
+
+    monkeypatch.setattr(web.ChatSession, "switch_chat", langsam)
+    with playwright.sync_playwright() as pw:
+        browser = pw.chromium.launch(executable_path=executable)
+        try:
+            context = browser.new_context(viewport={"width": 1280, "height": 800},
+                                          user_agent=AGENT,
+                                          extra_http_headers={"Accept-Language": SPRACHE})
+            context.add_cookies([{"name": name, "value": value, "url": url}
+                                for name, value in client.cookies.items()])
+            page = context.new_page()
+            page.goto(url, wait_until="networkidle")
+            page.locator("#auth-gate").wait_for(state="hidden")
+            scharf.set()
+            page.click("#btn-new")
+            page.fill("#input", "Hallo Luna")
+            if wann == "vor_der_antwort":
+                page.click("#send")
+                tor.set()
+            else:
+                with page.expect_response(lambda r: r.url.endswith("/api/clear")):
+                    tor.set()
+                page.wait_for_timeout(200)
+                page.click("#send")
+            playwright.expect(page.locator("#thread")).to_contain_text("Antwort auf Hallo Luna")
+        finally:
+            tor.set()
+            browser.close()

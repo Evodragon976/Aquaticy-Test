@@ -67,11 +67,12 @@ def parallel_site(tmp_path, monkeypatch):
     monkeypatch.setattr(web, "SESSIONS", web.SessionRegistry())
     monkeypatch.setattr(web, "DEFAULT_SESSION", web.ChatSession())
     monkeypatch.setattr(web, "RUNS", web.RunBook())
-    monkeypatch.setattr(web, "CLUSTER", None)
+    # 16.3.0: Verbund und Zeitplaner gibt es in Aquaticy-Test nicht mehr.
+    monkeypatch.setattr(web, "CLUSTER", None, raising=False)
     monkeypatch.setattr(web, "AIGUARD", None)
     monkeypatch.setattr(web, "TOKEN", "")
     monkeypatch.setattr(web, "SESSION", web.SessionProxy())
-    monkeypatch.setattr(web, "start_user_scheduler", lambda account: None)
+    monkeypatch.setattr(web, "start_user_scheduler", lambda account: None, raising=False)
     store = AuthStore(tmp_path, pro_code_for(tmp_path), ultra_code_for(tmp_path))
     monkeypatch.setattr(web, "AUTH", store)
     account = store.register("parallel@example.org", "parallel-test-passwort", "normal",
