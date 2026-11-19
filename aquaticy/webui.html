@@ -2088,7 +2088,7 @@ const thread = $("#thread"), main = $("#main"), input = $("#input"), send = $("#
 let busy = false;
 let currentChat = "";
 let secureChat = false;
-const aquaticyVersion = window.__AQUATICY_VERSION__ || "16.4.2";
+const aquaticyVersion = window.__AQUATICY_VERSION__ || "16.4.4";
 $("#version").textContent = "v" + aquaticyVersion;
 // Laeuft noch die alte Version, obwohl eine neue installiert ist? (15.0.0)
 const aquaticyInstalliert = window.__AQUATICY_INSTALLED__ || "";
@@ -4612,6 +4612,37 @@ try {
 
 
 const EN = {
+"keine Chat-Kennung": "no chat ID",
+"kein Lauf": "no run",
+"nicht gefunden": "not found",
+"kein Befehl": "no command",
+"Die Anzeige ist hier gekürzt — die vollständige Antwort steht in den letzten Chats.": "This view is shortened — the full answer is in your recent chats.",
+"Dieser Chat antwortet gerade. Bitte erst stoppen, dann löschen.": "This chat is answering right now. Stop it first, then delete it.",
+"Dieser Code gehört zu keiner Anmeldung, die du hier begonnen hast (oder sie ist abgelaufen). Bitte auf „Mit Google verbinden“ klicken und neu zustimmen.": "This code doesn't belong to a sign-in you started here (or it has expired). Click “Connect with Google” and agree again.",
+"Trag erst Client-ID und Client-Secret ein. Dann klick auf „Verbinden“. Ohne beides kann Google den Code nicht einlösen.": "First enter the client ID and client secret. Then click “Connect”. Without both, Google can't redeem the code.",
+"Trag erst Client-ID und Client-Secret ein. Dann klick auf „Verbinden“. Ohne beides kann Google die Anmeldung nicht abschließen.": "First enter the client ID and client secret. Then click “Connect”. Without both, Google can't finish the sign-in.",
+"Zu viele falsche Passwörter für dieses Konto. Bitte warte eine Viertelstunde.": "Too many wrong passwords for this account. Wait a quarter of an hour.",
+"Bitte bestätige kurz, dass du ein Mensch bist.": "Quickly confirm that you're a human.",
+"Bitte bestätige zuerst den Datenschutzhinweis.": "Confirm the privacy notice first.",
+"Bitte stimme den Datenschutz- und Nutzungsbedingungen ausdrücklich zu.": "Explicitly agree to the privacy policy and terms of use.",
+"Bitte wähle einen Nutzernamen.": "Choose a username.",
+"Das Passwort stimmt nicht.": "The password is wrong.",
+"Der Speicher ist abgeschaltet.": "Memory is turned off.",
+"Der Verbrauch ließ sich nicht lesen.": "The usage couldn't be read.",
+"Die Anfrage wurde nicht rechtzeitig übertragen.": "The request didn't arrive in time.",
+"Die Herkunft der Anfrage stimmt nicht.": "The origin of the request doesn't match.",
+"Die Kontoverwaltung ist nicht gestartet.": "Account management hasn't started.",
+"Diesen Chat gibt es nicht mehr.": "This chat no longer exists.",
+"Diesen Chat gibt es nicht.": "This chat doesn't exist.",
+"Dieses Bild ist nicht mehr vorhanden.": "This image is no longer available.",
+"Im Browser reicht es, das Fenster zu schliessen.": "In the browser, closing the window is enough.",
+"Keine gültige Bildadresse.": "Not a valid image address.",
+"Keine gültige Kennung.": "Not a valid ID.",
+"Noch keine Recherchen im Verlauf.": "No research in the history yet.",
+"Noch nichts zu exportieren — stell erst eine Frage.": "Nothing to export yet — ask a question first.",
+"Nutze Status oder Prüfen im Secure-Pro-Chat.": "Use Status or Check in the Secure Pro chat.",
+"Zu viele Anmeldeversuche. Bitte warte eine Minute.": "Too many sign-in attempts. Wait a minute.",
+"Zu viele falsche Passwörter. Bitte warte eine Viertelstunde.": "Too many wrong passwords. Wait a quarter of an hour.",
 "Gilt nur für die Rechts-Leitplanken und dein Konto. Immer bleibt: keine Bezahlschranken, Logins oder Captchas umgehen, robots.txt beachten, bei Google nie senden oder löschen, keine Schadsoftware, keine Bilder, die echte Menschen bloßstellen.": "Applies only to the legal guardrails and your account. Always in place: no bypassing paywalls, logins or captchas, respect robots.txt, never send or delete at Google, no malware, no images that expose real people.",
 "Suche, Denken, Strukturieren und mehr": "Search, thinking, structuring and more",
 "Was mit deinen Daten passiert, steht im": "What happens to your data? See",

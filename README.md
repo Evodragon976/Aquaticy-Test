@@ -1,4 +1,4 @@
-# Aquaticy AI 16.4.2
+# Aquaticy AI 16.4.4
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,25 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.4.4
+
+
+- **Krisenhilfe kommt jetzt immer an.** Serbisch in lateinischer Schrift („ubijem se“) und
+  Persisch ohne Nullbreiten-Zeichen („میخواهم بمیرم“, so tippen die meisten) brachten keine
+  Hilfe. Jetzt nennt Aquaticy Standard auch dann sofort Notruf und findahelpline.com.
+- **Sprachen besser erkannt.** Ein Name in lateinischer Schrift verdeckt die Sprache nicht mehr
+  („Python是什么“, „ChatGPT क्या है“). Ohne Stichwort entscheiden typische Buchstaben (Urdu,
+  Ukrainisch, Persisch statt Arabisch oder Russisch). „Regen am Abend“ bleibt Deutsch,
+  „god morgen“ ist Dänisch, „Wie was Rembrandt?“ Niederländisch.
+- **Richtige Antworten statt Rückfall:** Ungarisch „mennyi az idő“, Kroatisch „koje je
+  vrijeme“ und Lettisch „cik ir laiks“ fragen nach der Uhrzeit, nicht nach dem Wetter.
+  Tadschikisch „субҳ ба хайр“ ist ein Gruß. Wissensfragen finden das Thema genauer
+  („co je to Paris“ sucht „Paris“).
+- **Wetter robuster:** Kaputte Antworten des Wetterdienstes bringen Aquaticy Standard nicht mehr
+  aus dem Tritt. Der Ort wird sauberer erkannt (Ungarisch, Chinesisch).
+- **Englische Oberfläche:** 86 Meldungen des Servers erschienen im englischen Modus auf Deutsch.
+  Jetzt gibt es sie auf Englisch.
 
 ## Neu in 16.4.2
 
@@ -318,7 +337,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.4.2
+aquaticy --version            # 16.4.4
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup
