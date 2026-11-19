@@ -1,4 +1,4 @@
-# Aquaticy AI 16.4.4
+# Aquaticy AI 16.4.5
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,19 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.4.5
+
+- **Gründlich nach Fehlern gesucht.** Jeder Fund wurde nachgestellt, behoben und mit einem Test
+  abgesichert. Die Liste steht unten in den Einzelheiten.
+- **Aquaticy Standard rechnet und zählt richtig:** „Wann ist Ostern 2024?“ nennt 2024, nicht das
+  nächste Ostern. „Welches Datum ist morgen?“ nennt morgen. Große Zahlen stimmen auf die letzte
+  Stelle. „Trinkgeld 10 Prozent auf 45 Euro“ rechnet mit 45 €. „1 PS in kW“ rechnet um, statt die
+  Kalenderwoche zu nennen.
+- **Englische Fragen** bekommen englische Zahlen („16.0934 km“) und englische Antworten.
+- **Links im Chat:** Ein Punkt am Satzende gehört nicht mehr zum Link. Wikipedia-Links mit Klammern
+  funktionieren. „a * b * c“ bleibt eine Rechnung und wird nicht kursiv.
+- **Werkzeuge:** Schickt das Modell eine Zahl als Text, bricht kein Werkzeug mehr ab.
 
 ## Neu in 16.4.4
 
@@ -337,7 +350,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.4.4
+aquaticy --version            # 16.4.5
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup

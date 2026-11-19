@@ -24,6 +24,13 @@ const glatt = (text) => falten(text).trim().replace(/[?!.]+$/, "").trim()
 export function prozentAntwort(text, sprache = "de") {
   const t = glatt(text);
   let m = new RegExp(`(?:wie\\s*viel(?:e)?|wieviel)\\s+prozent\\s+(?:sind|ist|macht|machen)\\s+(${ZAHL})\\s+(?:von|aus)\\s+(${ZAHL})|what\\s+percent(?:age)?\\s+(?:is|of)\\s+(${ZAHL})\\s+(?:of|from)\\s+(${ZAHL})`).exec(t);
+  // Die Zahlen vor der Frage (16.4.5): "80 von 200 sind wie viel Prozent?", "80 ist wie viel
+  // Prozent von 200?"
+  m = m || new RegExp(`(${ZAHL})\\s+(?:von|aus)\\s+(${ZAHL})\\s+(?:sind|ist|macht)\\s+(?:wie\\s*viel(?:e)?|wieviel)\\s+prozent`).exec(t)
+    || (() => {
+      const r = new RegExp(`(${ZAHL})\\s+(?:ist|sind|macht)\\s+(?:wie\\s*viel(?:e)?|wieviel)\\s+prozent\\s+(?:von|aus)\\s+(${ZAHL})`).exec(t);
+      return r;
+    })();
   if (m) {
     const teil = alsZahl(m[1] ?? m[3]), ganz = alsZahl(m[2] ?? m[4]);
     if (!ganz) return { text: sp(sprache, "Von null kann man keinen Anteil ausrechnen.", "You can't take a share of zero.") };
@@ -95,10 +102,10 @@ einheit(["t", "tonne", "tonnen", "tonnes"], "masse", 1000, "t", "t");
 einheit(["lb", "lbs", "pound", "pounds"], "masse", 0.45359237, "lb", "lb");
 einheit(["pfund"], "masse", 0.5, "Pfund", "German pounds (500 g)");
 einheit(["oz", "unze", "unzen", "ounce", "ounces"], "masse", 0.028349523125, "oz", "oz");
-einheit(["ml", "milliliter"], "volumen", 0.001, "ml", "ml");
+einheit(["ml", "milliliter", "millilitern"], "volumen", 0.001, "ml", "ml");
 einheit(["cl", "zentiliter"], "volumen", 0.01, "cl", "cl");
 einheit(["dl", "deziliter"], "volumen", 0.1, "dl", "dl");
-einheit(["l", "liter", "litre", "litres", "liters"], "volumen", 1, "l", "l");
+einheit(["l", "liter", "litern", "litre", "litres", "liters"], "volumen", 1, "l", "l");
 einheit(["kubikmeter", "m3", "m³"], "volumen", 1000, "m³", "m³");
 einheit(["gallone", "gallonen", "gallon", "gallons", "gal"], "volumen", 3.785411784, "Gallonen (US)", "US gallons");
 einheit(["pint", "pints"], "volumen", 0.473176473, "Pints (US)", "US pints");
@@ -127,6 +134,12 @@ einheit(["tb", "terabyte"], "daten", 1e12, "TB", "TB");
 einheit(["kib", "kibibyte"], "daten", 1024, "KiB", "KiB");
 einheit(["mib", "mebibyte"], "daten", 1024 ** 2, "MiB", "MiB");
 einheit(["gib", "gibibyte"], "daten", 1024 ** 3, "GiB", "GiB");
+/** Einzahl der deutschen Namen fuer "1 Stunde ist ...". */
+const EINZAHL = { Sekunden: "Sekunde", Minuten: "Minute", Stunden: "Stunde", Tage: "Tag",
+  Wochen: "Woche", Jahre: "Jahr", Meilen: "Meile", "Gallonen (US)": "Gallone (US)",
+  "Pints (US)": "Pint (US)", "Tassen (US)": "Tasse (US)", Acres: "Acre",
+  Fußballfelder: "Fußballfeld", Seemeilen: "Seemeile", Unzen: "Unze", Pfund: "Pfund",
+  Zoll: "Zoll", Fuß: "Fuß", Yards: "Yard", Knoten: "Knoten" };
 const TEMPERATUR = { celsius: "C", c: "C", "°c": "C", fahrenheit: "F", f: "F", "°f": "F",
   kelvin: "K", k: "K" };
 
@@ -162,8 +175,12 @@ export function einheitenAntwort(text, sprache = "de") {
   }
   const ergebnis = (wert * a.faktor) / b.faktor;
   const stellen = Math.abs(ergebnis) >= 100 ? 2 : Math.abs(ergebnis) >= 1 ? 3 : 6;
-  return { text: sp(sprache, `${zahl(wert, sprache)} ${a.de} sind **${zahl(ergebnis, sprache, stellen)} ${b.de}**.`,
-    `${zahl(wert, sprache)} ${a.en} is **${zahl(ergebnis, sprache, stellen)} ${b.en}**.`) };
+  // "1 Stunde ist", nicht "1 Stunden sind" (16.4.5)
+  const eins = wert === 1;
+  const vonDe = eins ? (EINZAHL[a.de] || a.de) : a.de;
+  const vonEn = eins ? a.en.replace(/(?<=[a-z])s$/, "") : a.en;
+  return { text: sp(sprache, `${zahl(wert, sprache)} ${vonDe} ${eins ? "ist" : "sind"} **${zahl(ergebnis, sprache, stellen)} ${b.de}**.`,
+    `${zahl(wert, sprache)} ${vonEn} is **${zahl(ergebnis, sprache, stellen)} ${b.en}**.`) };
 }
 
 // -- Daten und Countdowns ----------------------------------------------------------
@@ -385,10 +402,14 @@ export async function sonneAntwort(text, sprache, kontext) {
 export function zufallAntwort(text, sprache = "de", zufall = Math.random) {
   const t = glatt(text);
   const ganz = (von, bis) => von + Math.floor(zufall() * (bis - von + 1));
-  if (/^(?:bitte\s+)?(?:wuerfel|wuerfle|wuerfeln|wuerfel\s+mal|wirf\s+(?:mal\s+)?(?:einen|zwei|drei|\d+)\s+wuerfel|roll\s+(?:a\s+|the\s+|two\s+|\d+\s+)?(?:die|dice))\b/.test(t)) {
-    const anzahl = Math.min(10, Math.max(1, Number((/\b(\d+|zwei|drei|two|three)\s+wuerfel|(\d+)\s+dice/.exec(t) || [])[1]
-      ?.replace(/zwei|two/, "2").replace(/drei|three/, "3")) || 1));
-    const wuerfe = Array.from({ length: anzahl }, () => ganz(1, 6));
+  if (/^(?:bitte\s+)?(?:wuerfel|wuerfle|wuerfeln|wuerfel\s+mal|wirf\s+(?:mal\s+)?(?:einen|zwei|drei|\d+)\s+(?:wuerfel|[wd]\d+)|roll\s+(?:a\s+|the\s+|two\s+|\d+\s+)?(?:die|dice|d\d+))\b/.test(t)) {
+    const zahlwort = (x) => x?.replace(/zwei|two/, "2").replace(/drei|three/, "3");
+    const anzahlRoh = (/\b(\d+|zwei|drei|two|three)\s+(?:wuerfel|dice|[wd]\d+)/.exec(t) || [])[1];
+    const anzahl = Math.min(10, Math.max(1, Number(zahlwort(anzahlRoh)) || 1));
+    // "einen W20", "zwei W20": vorher immer sechs Seiten (16.4.5)
+    const seitenRoh = (/\b[wd](4|6|8|10|12|20|100)\b|\b(4|6|8|10|12|20|100)-?seitig/.exec(t) || []);
+    const seiten = Number(seitenRoh[1] || seitenRoh[2]) || 6;
+    const wuerfe = Array.from({ length: anzahl }, () => ganz(1, seiten));
     const summe = wuerfe.reduce((a, b) => a + b, 0);
     return { text: `🎲 ${wuerfe.map((w) => `**${w}**`).join(" + ")}${anzahl > 1 ? ` = **${summe}**` : ""}` };
   }

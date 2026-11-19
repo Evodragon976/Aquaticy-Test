@@ -392,11 +392,47 @@ export function rechne(ausdruck) {
   return ergebnis;
 }
 
+/** Nur ganze Zahlen mit + - * ^ und Klammern: exakt mit BigInt (16.4.5).
+ *  123456789 × 987654321 ergab vorher ...260 statt ...269 (Gleitkomma). */
+export function rechneGanz(s) {
+  if (!/^[\d+\-*^()]+$/.test(s)) return null;
+  let i = 0;
+  const fehler = () => { throw new Error("kein Ausdruck"); };
+  const summe = () => {
+    let wert = produkt();
+    while (s[i] === "+" || s[i] === "-") { const op = s[i++]; const r = produkt(); wert = op === "+" ? wert + r : wert - r; }
+    return wert;
+  };
+  const produkt = () => { let wert = potenz(); while (s[i] === "*") { i++; wert *= potenz(); } return wert; };
+  const potenz = () => {
+    const basis = vorzeichen();
+    if (s[i] !== "^") return basis;
+    i++;
+    const hoch = potenz();
+    if (hoch < 0n || hoch > 4096n) fehler();
+    return basis ** hoch;
+  };
+  const vorzeichen = () => { if (s[i] === "-") { i++; return -vorzeichen(); } if (s[i] === "+") { i++; return vorzeichen(); } return einzeln(); };
+  const einzeln = () => {
+    if (s[i] === "(") { i++; const w = summe(); if (s[i++] !== ")") fehler(); return w; }
+    const m = /^\d+/.exec(s.slice(i)); if (!m) fehler(); i += m[0].length; return BigInt(m[0]);
+  };
+  try {
+    const wert = summe();
+    return i === s.length ? wert : null;
+  } catch {
+    return null;
+  }
+}
+
 function rechenAntwort(text, sprache) {
   const ausdruck = rechenAusdruck(text);
   if (!ausdruck) return null;
   try {
-    const ergebnis = zahl(rechne(ausdruck), sprache, 10);
+    const ganz = rechneGanz(ausdruck);
+    const ergebnis = ganz !== null && (ganz > BigInt(Number.MAX_SAFE_INTEGER) || ganz < -BigInt(Number.MAX_SAFE_INTEGER))
+      ? ganz.toLocaleString(sprache === "en" ? "en-GB" : "de-DE")
+      : zahl(rechne(ausdruck), sprache, 10);
     const schoen = ausdruck.replace(/\./g, sprache === "en" ? "." : ",")
       .replace(/\*/g, " × ").replace(/\//g, " : ").replace(/\+/g, " + ")
       .replace(/(?<=\d|\))-/g, " − ").replace(/\^/g, " ^ ")
@@ -419,7 +455,7 @@ function rechenAntwort(text, sprache) {
 function zeitAntwort(w, kern, sprache, { jetzt, zeitzone }) {
   const fragtZeit = /wie\s*spaet|wie\s*viel\s+uhr|wieviel\s+uhr|uhrzeit|what\s+time|current\s+time/
     .test(kern) || (enthaelt(w, ["uhrzeit"]) && w.length <= 6);
-  const fragtDatum = /welche[rns]?\s+(?:tag|datum|wochentag)|welches\s+datum|den\s+wievielten|der\s+wievielte|datum\s+(?:ist\s+)?heute|heutige[sn]?\s+datum|what\s+(?:day|date)|today'?s\s+date|welches\s+jahr|what\s+year|kalenderwoche/.test(kern)
+  const fragtDatum = /welche[rns]?\s+(?:tag|datum|wochentag)|welches\s+datum|den\s+wievielten|der\s+wievielte|datum\s+(?:ist\s+)?heute|heutige[sn]?\s+datum|what\s+(?:day|date)|what(?:\s+is|'s)\s+the\s+date|was\s+fuer\s+ein\s+tag|today'?s\s+date|welches\s+jahr|what\s+year|kalenderwoche/.test(kern)
     || (enthaelt(w, ["datum", "wochentag"]) && w.length <= 6);
   if (!fragtZeit && !fragtDatum) return null;
   const zone = zeitzone || "Europe/Berlin";
@@ -433,6 +469,23 @@ function zeitAntwort(w, kern, sprache, { jetzt, zeitzone }) {
     return null;
   }
   const ort = zone.split("/").pop().replace(/_/g, " ");
+  // "Welches Datum ist morgen?" nannte vorher das Datum von heute (16.4.5).
+  const versatz = /\buebermorgen\b|day\s+after\s+tomorrow/.test(kern) ? 2
+    : /\bvorgestern\b|day\s+before\s+yesterday/.test(kern) ? -2
+    : /\bmorgen\b|\btomorrow\b/.test(kern) ? 1 : /\bgestern\b|\byesterday\b/.test(kern) ? -1 : 0;
+  if (fragtDatum && versatz && !/kalenderwoche/.test(kern)) {
+    let anderer;
+    try {
+      anderer = new Date(jetzt.getTime() + versatz * 86400000).toLocaleDateString(loc, {
+        timeZone: zone, weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    } catch {
+      return null;
+    }
+    const de = { 2: "Übermorgen ist", 1: "Morgen ist", "-1": "Gestern war", "-2": "Vorgestern war" };
+    const en = { 2: "The day after tomorrow is", 1: "Tomorrow is", "-1": "Yesterday was",
+      "-2": "The day before yesterday was" };
+    return { text: sp(sprache, `${de[versatz]} **${anderer}**.`, `${en[versatz]} **${anderer}**.`) };
+  }
   if (fragtZeit && !fragtDatum) {
     return { text: sp(sprache, `Gerade ist es **${uhr} Uhr** (Zeitzone ${ort}).`,
       `It's **${uhr}** right now (time zone ${ort}).`) };
@@ -757,8 +810,10 @@ async function feiertagAntwort(w, kern, sprache, kontext) {
     }
     if (treffer.length) {
       const f = treffer[0];
-      const kopf = sp(sprache, `**${f.name}** ist am **${datum(f.datum)}**.`,
-        `**${f.name_en}** is on **${datum(f.datum)}**.`)
+      // "Wann ist Ostern 2024?": was vorbei ist, "war" (16.4.5)
+      const vorbei = f.datum < heuteIso;
+      const kopf = sp(sprache, `**${f.name}** ${vorbei ? "war" : "ist"} am **${datum(f.datum)}**.`,
+        `**${f.name_en}** ${vorbei ? "was" : "is"} on **${datum(f.datum)}**.`)
         + (f.bundesweit ? "" : sp(sprache, " Das ist aber nicht in allen Bundesländern ein Feiertag.",
           " It's not a public holiday in every region, though."));
       const rest = treffer.slice(1).map((x) => `- ${zeile(x)}`);

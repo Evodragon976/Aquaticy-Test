@@ -878,6 +878,22 @@ SETTING_SCHEMA: dict[str, Any] = {
 TOOL_SCHEMAS.extend([NEWS_SCHEMA, PLACES_SCHEMA, PROFILE_SCHEMA, CALC_SCHEMA])
 
 
+def _ganzzahl(wert: Any) -> int:
+    """Eine Zahl vom Modell: "5", 5.0 und 5 gelten, alles andere ist 0 (16.4.5).
+
+    Vorher brach int("fuenf") oder int(["a"]) das Werkzeug mit einer Ausnahme ab.
+    """
+    if isinstance(wert, bool):
+        return int(wert)
+    try:
+        zahl = float(str(wert).strip()) if isinstance(wert, str) else float(wert or 0)
+    except (TypeError, ValueError):
+        return 0
+    if zahl != zahl or zahl in (float("inf"), float("-inf")):
+        return 0
+    return int(max(-10**9, min(10**9, zahl)))
+
+
 @dataclass
 class ToolStats:
     """Was in einem Durchlauf passiert ist -- fuer Ausgabe und Verlauf."""
@@ -2002,14 +2018,14 @@ class Toolbox:
             )
         if name == "calendar_events":
             return self.calendar_events(
-                days=int(arguments.get("days") or 0),
+                days=_ganzzahl(arguments.get("days")),
                 query=str(arguments.get("query") or ""),
-                count=int(arguments.get("count") or 0),
+                count=_ganzzahl(arguments.get("count")),
             )
         if name == "mail_search":
             return self.mail_search(
                 query=str(arguments.get("query") or ""),
-                count=int(arguments.get("count") or 0),
+                count=_ganzzahl(arguments.get("count")),
             )
         if name == "calendar_add":
             return self.calendar_add(
