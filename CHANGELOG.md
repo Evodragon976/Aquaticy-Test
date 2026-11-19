@@ -220,7 +220,7 @@ Die angefragten 200 unterschiedlichen Fehler sind damit noch nicht nachgewiesen.
 
 Die nachgestellten Ursachen F001 bis F121 stehen in den Tests
 [A](tests/test_v1524_a.py), [B](tests/test_v1524_b.py), [C](tests/test_v1524_c.py),
-[D](tests/test_v1524_d.py), [E](tests/test_v1524_e.py), [F](tests/test_v1524_f.py)
+[D](tests/test_v1524_d.py), [E](tests/test_v1524_e.py)
 und [externer Bericht](tests/test_v1524_external.py).
 [Ergänzende Tests](tests/test_v1524_followups.py) prüfen Erfolgswege, Abbruch und parallele Nutzung.
 
@@ -673,26 +673,3 @@ Starte eine bereits laufende Weboberfläche nach dem Aktivieren neu.
 `aquaticy secure-pro --disable` beendet weitere Prüfungen und Warnungen.
 Beide Funktionen sind standardmäßig ausgeschaltet.
 
-- [Was Aquaticy kann](#was-aquaticy-kann)
-- [Quickstart](#quickstart)
-- [Installation im Detail](#installation-im-detail)
-- [Benutzung im Terminal](#benutzung-im-terminal)
-- [Die Weboberfläche](#die-weboberfläche)
-- [Eigene Website mit Domain](#eigene-website-mit-domain)
-- [Konten: Normal, Pro und Ultra](#konten-normal-pro-und-ultra)
-- [Add-ons](#add-ons)
-- [Virtual machine und User mode](#virtual-machine-und-user-mode)
-- [Speicher](#speicher)
-- [Coworker](#coworker)
-- [Gmail und Kalender](#gmail-und-kalender)
-- [Zuhause: Heimnetz, Home Assistant, Lager](#zuhause-heimnetz-home-assistant-lager)
-- [Gemeinsames Lernen und Auto-Upgrading](#gemeinsames-lernen-und-auto-upgrading)
-- [Server-Verbund und Serverlast aufteilen](#server-verbund-und-serverlast-aufteilen)
-- [Sicherheit, Rechts-Leitplanken und Ai-guard](#sicherheit-rechts-leitplanken-und-ai-guard)
-- [Modelle und Anbieter](#modelle-und-anbieter)
-- [Suche](#suche)
-- [Im Container](#im-container)
-- [Konfiguration](#konfiguration)
-- [Konten verwalten (Betreiber)](#konten-verwalten-betreiber)
-- [Entwicklung](#entwicklung)
-- [Lizenz](#lizenz)
