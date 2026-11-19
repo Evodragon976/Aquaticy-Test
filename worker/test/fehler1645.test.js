@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { festeAntwort, rechneGanz } from "../src/antworten.js";
+import { betragAus, festeAntwort, rechneGanz } from "../src/antworten.js";
 import { einheitenAntwort, prozentAntwort, zufallAntwort } from "../src/mehr.js";
 
 const JETZT = new Date("2026-11-19T13:30:00Z");
@@ -50,4 +50,54 @@ test("Ein Feiertag in einem vergangenen Jahr steht in der Vergangenheit", async 
     { headers: { "content-type": "application/json" } });
   const a = await festeAntwort("Wann ist Ostern 2024?", { sprache: "de", jetzt: JETZT, holen: holenFei });
   assert.match(a.text, /\*\*Ostersonntag\*\* war am/);
+});
+
+test("Krisenhilfe auch im Worker, ohne Fehlalarm", async () => {
+  for (const satz of ["Ich will mich umbringen", "Ich will nicht mehr leben",
+    "Am liebsten wäre ich tot", "i want to kill myself"]) {
+    assert.match(await frag(satz), /0800 111 0 111/, satz);
+  }
+  for (const satz of ["Ich lache mich tot", "Ich sterbe vor Lachen", "Ich will nicht sterben"]) {
+    assert.doesNotMatch(await frag(satz), /0800 111 0 111/, satz);
+  }
+});
+
+test("Datum mit Versatz und Zufallszahl mit Grenzen", async () => {
+  assert.match(await frag("Welches Datum war vor 100 Tagen?"), /Vor 100 Tagen war \*\*Dienstag, 11\. August 2026/);
+  assert.match(await frag("Welches Datum ist in 30 Tagen?"), /In 30 Tagen ist \*\*Samstag, 19\. Dezember 2026/);
+  assert.match(await frag("What date is it in 2 weeks?", "en"), /In 2 weeks it will be \*\*Thursday, 3 December 2026/);
+  assert.doesNotMatch(await frag("Wie wird das Wetter in 3 Tagen?"), /Tagen (?:ist|war) \*\*/);
+  assert.match(await frag("Nenn mir eine Zahl zwischen 10 und 5"), /zwischen 5 und 10: \*\*(?:[5-9]|10)\*\*/);
+});
+
+test("Beträge mit Tausenderpunkt, Komma und Mio", () => {
+  assert.equal(betragAus("1.000.000 Yen in Euro"), 1000000);
+  assert.equal(betragAus("1.500,50 Euro in Dollar"), 1500.5);
+  assert.equal(betragAus("1,5 Mio Euro in Dollar"), 1500000);
+  assert.equal(betragAus("100 Dollar in Euro"), 100);
+  assert.equal(betragAus("2.5 Euro in Dollar"), 2.5);
+  assert.equal(betragAus("Euro in Dollar"), 1);
+});
+
+test("Frankfurt am Main bleibt ganz", async () => {
+  const { ortAus } = await import("../src/antworten.js");
+  assert.equal(ortAus("Wetter in Frankfurt am Main"), "Frankfurt am Main");
+  assert.equal(ortAus("Wetter in Berlin am Montag"), "Berlin");
+  assert.equal(ortAus("Wetter in Berlin am Wochenende"), "Berlin");
+});
+
+test("Englische Zahlen mit Tausender-Komma", async () => {
+  assert.match(await frag("What is 1,000 + 1?", "en"), /\*\*1,001\*\*/);
+  assert.match(await frag("What is 10% of 1,000?", "en"), /\*\*100\*\*/);
+  assert.match(await frag("Was ist 1,5 + 1?"), /\*\*2,5\*\*/);
+});
+
+test("Fuß und Zoll zusammen", () => {
+  assert.match(einheitenAntwort("3 Fuß 6 Zoll in cm").text, /^42 Zoll sind \*\*106,68 cm/);
+  assert.match(einheitenAntwort("ein Zoll in cm").text, /^1 Zoll ist \*\*2,54 cm/);
+});
+
+test("Bruch als Exponent nach hoch", async () => {
+  assert.match(await frag("Was ist 27 hoch 1/3?"), /\*\*3\*\*/);
+  assert.match(await frag("Was ist 2 hoch 1/2?"), /\*\*1,414/);
 });

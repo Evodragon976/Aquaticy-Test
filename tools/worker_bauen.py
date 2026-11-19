@@ -40,7 +40,7 @@ def _erlaubt(werte: Any) -> Any:
 
 
 def daten() -> dict[str, Any]:
-    from aquaticy import __version__, addons, guardrails, smalltalk, uistate, webview
+    from aquaticy import __version__, addons, guardrails, smalltalk, standard, uistate, webview
     from aquaticy.web import VERSION_LABEL
 
     vor, _, nach = guardrails.judge_prompt(FRAGE).partition(FRAGE)
@@ -65,6 +65,9 @@ def daten() -> dict[str, Any]:
             for art in smalltalk.ARTEN
         ],
         "anrede": smalltalk._ANREDE.pattern,
+        # 16.4.5: Worte einer Krise -- dieselben Muster und Texte wie Aquaticy Standard.
+        "krise": {"de": standard.KRISE.pattern, "en": standard.KRISE_EN.pattern,
+                  "text_de": standard.KRISE_TEXT, "text_en": standard.KRISE_TEXT_EN},
         "wetterlage": {str(code): text for code, text in addons.WMO.items()},
         "quellen": {
             "geo": addons.OPEN_METEO_GEO, "wetter": addons.OPEN_METEO,

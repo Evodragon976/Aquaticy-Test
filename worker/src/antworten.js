@@ -12,7 +12,7 @@ import { erlaubteFehler, abstand, falten, musterFalten, woerter, woerterAusMuste
 import { ABSCHLUSS, EINSTIEG, besterSatz, eine, inhaltsWoerter, kernSaetze, saetze }
   from "./stil.js";
 import { seiteAbrufen } from "./abruf.js";
-import { datumAntwort, einheitenAntwort, gespraechMehr, prozentAntwort, sonneAntwort,
+import { datumAus, datumAntwort, einheitenAntwort, gespraechMehr, prozentAntwort, sonneAntwort,
   uebersetzenAntwort, weltzeitAntwort, zufallAntwort } from "./mehr.js";
 
 // -- Feste Antworten ----------------------------------------------------------
@@ -299,6 +299,8 @@ export function rechenAusdruck(text) {
     .replace(/\b(?:ln|natuerlicher\s+logarithmus)\s*(?:von|of)?\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?/g, "ln($1)")
     .replace(/\b(?:fakultaet\s+von|factorial\s+of)\s+(\d+)|\b(\d+)\s+fakultaet\b/g, (_, a, b) => `${a || b}!`)
     .replace(/π|\bpi\b/g, "pi");
+  // 16.4.5: "27 hoch 1/3" ergab 9 -- mit "hoch" ist der ganze Bruch der Exponent.
+  t = t.replace(/\bhoch\s+(-?\d+)\s*\/\s*(\d+)/g, "hoch ($1/$2)");
   t = t
     .replace(/\bgeteilt\s+durch\b|\bdurch\b|\bdivided\s+by\b|÷|\s:\s/g, "/")
     .replace(/\bmal\b|\btimes\b|\bmultipliziert\s+mit\b|×|\bx\b/g, "*")
@@ -523,10 +525,14 @@ const ORT_STOP = new Set([...FRAGEWOERTER, ...STICH.wetter, "wie", "wird", "ist"
 export function ortAus(text) {
   const t = String(text || "").replace(/[?!.]+\s*$/, "");
   const m = /(?:^|\s)(?:in|für|fuer|bei|um|nahe|around|for|at)\s+([\p{L}][\p{L}\p{N} .'-]{1,60})$/iu
-    .exec(t.replace(/\s+(?:heute|morgen|übermorgen|uebermorgen|today|tomorrow|am\s+\p{L}+|diese\s+woche|this\s+week|next\s+week|nächste\s+woche|naechste\s+woche|am\s+wochenende|jetzt|gerade|now)\b.*$/iu, ""));
+    // 16.4.5: nur echte Tage -- "am Main" schnitt vorher "Frankfurt am Main" zu "Frankfurt".
+    .exec(t.replace(/\s+(?:heute|morgen|übermorgen|uebermorgen|today|tomorrow|am\s+(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|wochenende)|on\s+\p{L}+day|diese\s+woche|this\s+week|next\s+week|nächste\s+woche|naechste\s+woche|jetzt|gerade|now)\b.*$/iu, ""));
   if (m) {
-    const kandidat = m[1].trim().split(/\s+/)
-      .filter((w) => !ORT_STOP.has(falten(w))).join(" ");
+    // Fuellwoerter nur vorn und hinten -- "Frankfurt am Main" behaelt sein "am" (16.4.5).
+    const worte = m[1].trim().split(/\s+/);
+    while (worte.length && ORT_STOP.has(falten(worte[0]))) worte.shift();
+    while (worte.length && ORT_STOP.has(falten(worte[worte.length - 1]))) worte.pop();
+    const kandidat = worte.join(" ");
     if (kandidat) return kandidat;
   }
   // "Wetter Berlin", "Berlin Wetter morgen": was kein bekanntes Wort ist, ist der Ort
@@ -713,6 +719,18 @@ export function waehrungenIn(kern) {
   return gefunden.sort((a, b) => a.stelle - b.stelle).map((g) => g.code);
 }
 
+/** Der Betrag einer Frage: deutscher Tausenderpunkt, Dezimalkomma, Mio/Mrd/Tsd -- sonst 1. */
+export function betragAus(text) {
+  const m = /(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)(?:\s*(mio|millionen?|mrd|milliarden?|tsd|tausend)\b)?/i
+    .exec(String(text || ""));
+  if (!m) return 1;
+  const roh = /\.\d{3}(?:\.|,|$)/.test(m[1]) ? m[1].replace(/\./g, "").replace(",", ".")
+    : m[1].replace(",", ".");
+  const mal = { mio: 1e6, million: 1e6, millionen: 1e6, mrd: 1e9, milliarde: 1e9, milliarden: 1e9,
+    tsd: 1e3, tausend: 1e3 }[(m[2] || "").toLowerCase()] || 1;
+  return Number(roh) * mal;
+}
+
 async function kursAntwort(w, kern, sprache, kontext) {
   // "try" ist auch ein englisches Wort: nur als Waehrung, wenn es gross geschrieben war
   const codes = waehrungenIn(kern).filter((c, i, alle) => alle.indexOf(c) === i
@@ -724,8 +742,8 @@ async function kursAntwort(w, kern, sprache, kontext) {
   }
   let [von, nach] = codes;
   if (!nach) nach = von === "EUR" ? "USD" : "EUR";
-  const betragText = /(\d+(?:[.,]\d+)?)/.exec(kern.replace(/(\d)\.(\d{3})(?!\d)/g, "$1$2"));
-  const betrag = betragText ? Number(betragText[1].replace(",", ".")) : 1;
+  // 16.4.5: Aus "1.000.000 Yen", "1.500,50 Euro" und "1,5 Mio Euro" wurde vorher 1.
+  const betrag = betragAus(kontext.original || kern);
   if (!(betrag > 0 && betrag < 1e12)) return null;
   const schritt = { type: "search", query: `${von} → ${nach}` };
   const daten = await dienste.kurse(von, nach, kontext.holen);
@@ -791,6 +809,40 @@ async function feiertagAntwort(w, kern, sprache, kontext) {
       ? sp(sprache, `Ja! ${wann} ist ${zeile(treffer[0])}.`, `Yes! ${wann} is ${zeile(treffer[0])}.`)
       : sp(sprache, `Nein, ${wann.toLowerCase()} ist kein gesetzlicher Feiertag (${land}).`,
         `No, ${wann.toLowerCase()} isn't a public holiday (${land}).`);
+    return { schritt, text: text + QUELLE_NAGER(sprache) };
+  }
+  // 16.4.5: "Ist der 3. Oktober ein Feiertag?", "Welche Feiertage gibt es im Dezember?" --
+  // vorher kam nur die Liste der naechsten Feiertage.
+  const amTag = datumAus(falten(kontext.original || kern), jahr);
+  if (amTag && amTag.datum instanceof Date && !Number.isNaN(amTag.datum.getTime())) {
+    const iso = amTag.datum.toISOString().slice(0, 10);
+    const imJahr = amTag.datum.getUTCFullYear() === jahr ? liste
+      : await dienste.feiertage(amTag.datum.getUTCFullYear(), land, kontext.holen) || [];
+    const treffer = imJahr.filter((f) => f.datum === iso);
+    const vorbei = iso < kontext.jetzt.toISOString().slice(0, 10);
+    const tag = datum(iso);
+    const welcher = /\bwelche[rs]?\b|\bwhich\b/.test(kern);
+    const text = treffer.length
+      ? sp(sprache, `${welcher ? "" : "Ja, "}${welcher ? "D" : "d"}er ${tag} ${vorbei ? "war" : "ist"} **${treffer[0].name}**.`,
+        `${welcher ? "" : "Yes, "}${tag} ${vorbei ? "was" : "is"} **${treffer[0].name_en}**.`)
+      : sp(sprache, `Nein, der ${tag} ${vorbei ? "war" : "ist"} kein gesetzlicher Feiertag (${land}).`,
+        `No, ${tag} ${vorbei ? "wasn't" : "isn't"} a public holiday (${land}).`);
+    return { schritt, text: text + QUELLE_NAGER(sprache) };
+  }
+  const monatWort = /\b(?:im|in)\s+(januar|februar|maerz|april|mai|juni|juli|august|september|oktober|november|dezember|january|february|march|may|june|july|october|december)\b/.exec(kern);
+  if (monatWort && ["feiertag", "feiertage", "feiertagen", "holiday", "holidays"].includes(stich)) {
+    const nr = ["januar", "februar", "maerz", "april", "mai", "juni", "juli", "august", "september",
+      "oktober", "november", "dezember"].indexOf(monatWort[1]) + 1
+      || ["january", "february", "march", "april", "may", "june", "july", "august", "september",
+        "october", "november", "december"].indexOf(monatWort[1]) + 1;
+    const imMonat = liste.filter((f) => Number(f.datum.slice(5, 7)) === nr);
+    const name = new Date(Date.UTC(jahr, nr - 1, 1)).toLocaleDateString(loc, { month: "long",
+      timeZone: "UTC" });
+    const text = imMonat.length
+      ? sp(sprache, `Feiertage im ${name} ${jahr}:\n`, `Public holidays in ${name} ${jahr}:\n`)
+        + imMonat.map((f) => `- ${zeile(f)}`).join("\n")
+      : sp(sprache, `Im ${name} ${jahr} gibt es keinen gesetzlichen Feiertag (${land}).`,
+        `There's no public holiday in ${name} ${jahr} (${land}).`);
     return { schritt, text: text + QUELLE_NAGER(sprache) };
   }
   // Ein bestimmter Feiertag? ("wann ist ostern")
@@ -1101,17 +1153,39 @@ export function nichtsGefunden(sprache) {
  * Antwort aus festen Regeln und Live-Diensten -- ohne Wikipedia und ohne Modell.
  * `null` heisst: das ist eine Wissensfrage (oder etwas fuer ein Sprachmodell).
  */
+/**
+ * Worte einer Krise -- vor allem anderen und in beiden Sprachen (16.4.5). Vorher suchte der
+ * Worker ohne Schluessel bei "Ich will mich umbringen" in Wikipedia.
+ */
+const KRISE_DE = new RegExp(DATEN.krise.de);
+const KRISE_EN = new RegExp(DATEN.krise.en);
+
+export function kriseAntwort(text) {
+  // Wie standard.falten: klein, Umlaute als ae/oe/ue, ohne Akzente.
+  const kern = String(text || "").toLowerCase().replace(/ß/g, "ss").replace(/ä/g, "ae")
+    .replace(/ö/g, "oe").replace(/ü/g, "ue").normalize("NFKD").replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ").trim();
+  if (KRISE_DE.test(kern)) return DATEN.krise.text_de;
+  return KRISE_EN.test(kern) ? DATEN.krise.text_en : "";
+}
+
 export async function festeAntwort(text, kontext) {
+  const hilfe = kriseAntwort(text);
+  if (hilfe) return { text: hilfe, art: "krise" };
   const sprache = kontext.sprache === "en" ? "en" : "de";
   const k = { holen: fetch, jetzt: new Date(), ...kontext, sprache, original: String(text || "") };
   const kurz = plauderei(text, { sprache, frageOffen: k.frageOffen, zufall: k.zufall });
   if (kurz) return { text: kurz, art: "plauderei" };
   const kern = normalisieren(WORTSCHATZ.verbessern(text));
   const w = woerter(kern);
+  // 16.4.5: "What is 1,000 + 1?" ergab 2 -- im Englischen trennt das Komma Tausender.
+  const zahlen = sprache === "en"
+    ? String(text).replace(/(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\d,])/g, (z) => z.replace(/,/g, ""))
+    : text;
   for (const [art, antwort] of [
-    ["prozent", () => prozentAntwort(text, sprache)],
-    ["einheiten", () => einheitenAntwort(text, sprache)],
-    ["rechnen", () => rechenAntwort(text, sprache)],
+    ["prozent", () => prozentAntwort(zahlen, sprache)],
+    ["einheiten", () => einheitenAntwort(zahlen, sprache)],
+    ["rechnen", () => rechenAntwort(zahlen, sprache)],
     ["datum", () => datumAntwort(text, sprache, k.jetzt)],
     ["zufall", () => zufallAntwort(text, sprache, k.zufall)],
   ]) {

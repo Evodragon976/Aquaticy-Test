@@ -151,7 +151,11 @@ function tempUmrechnen(wert, von, nach) {
 const EINHEIT = String.raw`(?:grad\s+)?[a-z°µ²³/]+(?:\s+(?:celsius|fahrenheit))?`;
 
 export function einheitenAntwort(text, sprache = "de") {
-  const t = glatt(text).replace(/\bpro\s+stunde\b/g, "/h").replace(/km\s*\/\s*h/g, "km/h");
+  // 16.4.5: "3 Fuß 6 Zoll in cm" rechnete vorher nur die 6 Zoll; "ein Zoll in cm" ging nicht.
+  const t = glatt(text).replace(/\bpro\s+stunde\b/g, "/h").replace(/km\s*\/\s*h/g, "km/h")
+    .replace(/(\d+(?:[.,]\d+)?)\s*(?:fuss|ft|')\s*(\d+(?:[.,]\d+)?)\s*(?:zoll|inch|inches|")/g,
+      (_, a, b) => String(Number(a.replace(",", ".")) * 12 + Number(b.replace(",", "."))).replace(".", ",") + " zoll")
+    .replace(/^(?:wie\s*viel\s+(?:ist|sind)\s+)?ein(?:e|en|em)?\s+(?=\S+\s+(?:in|nach|zu|to)\s)/, "1 ");
   const m = new RegExp(`(${ZAHL})\\s*(${EINHEIT})\\s+(?:in|nach|zu|to|into|als|=|sind\\s+wie\\s*viel(?:e)?)\\s+(${EINHEIT})$`).exec(t);
   if (!m) return null;
   const wert = alsZahl(m[1]);
@@ -254,6 +258,19 @@ export function datumAntwort(text, sprache = "de", jetzt = new Date()) {
   const zeig = (d) => d.toLocaleDateString(loc, { weekday: "long", day: "numeric", month: "long",
     year: "numeric", timeZone: "UTC" });
   const heute = new Date(Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth(), jetzt.getUTCDate()));
+  // 16.4.5: "Welches Datum war vor 100 Tagen?" nannte vorher das Datum von heute.
+  const v = /\b(in|vor)\s+(\d{1,4})\s+(tag|tagen|woche|wochen|days?|weeks?)\b|\b(\d{1,4})\s+(days?|weeks?)\s+ago\b/
+    .exec(t);
+  if (v && /\b(?:datum|tag|wochentag|date|day)\b/.test(t.replace(v[0], " "))) {
+    const n = Number(v[2] || v[4]);
+    const einheit = v[3] || v[5];
+    const zurueck = v[1] === "vor" || v[4] !== undefined;
+    const tage = n * (/^w/.test(einheit) ? 7 : 1) * (zurueck ? -1 : 1);
+    const d = new Date(heute.getTime() + tage * 86400000);
+    const deWort = { tag: "Tag", tagen: "Tagen", woche: "Woche", wochen: "Wochen" }[einheit] || einheit;
+    return { text: sp(sprache, `${zurueck ? "Vor" : "In"} ${n} ${deWort} ${zurueck ? "war" : "ist"} **${zeig(d)}**.`,
+      zurueck ? `${n} ${einheit} ago it was **${zeig(d)}**.` : `In ${n} ${einheit} it will be **${zeig(d)}**.`) };
+  }
   // Countdown: "wie viele Tage bis Weihnachten", "wie lange noch bis zum 1. mai"
   let m = /(?:wie\s*(?:viele|lange)\s+(?:tage\s+)?(?:(?:ist\s+es\s+|sind\s+es\s+|dauert\s+es\s+)?noch\s+)?bis|how\s+(?:many\s+days|long)\s+(?:is\s+it\s+)?(?:until|till|to)|countdown\s+(?:bis|to)|tage\s+bis)\s+(?:zu[mr]?\s+|zu\s+)?(.+)$/.exec(t);
   if (m) {
@@ -417,7 +434,8 @@ export function zufallAntwort(text, sprache = "de", zufall = Math.random) {
     const seite = zufall() < 0.5;
     return { text: sp(sprache, `🪙 **${seite ? "Kopf" : "Zahl"}**!`, `🪙 **${seite ? "Heads" : "Tails"}**!`) };
   }
-  let m = /(?:zufallszahl|zufaellige\s+zahl|random\s+number|zahl\s+zwischen)(?:\s+(?:zwischen|von|between|from)\s+(-?\d+)\s+(?:und|bis|and|to)\s+(-?\d+))?/.exec(t);
+  // 16.4.5: "zahl zwischen" verbrauchte das "zwischen" -- die Grenzen galten dann nicht.
+  let m = /(?:zufallszahl|zufaellige\s+zahl|random\s+number|zahl(?=\s+zwischen))(?:\s+(?:zwischen|von|between|from)\s+(-?\d+)\s+(?:und|bis|and|to)\s+(-?\d+))?/.exec(t);
   if (m) {
     let a = m[1] !== undefined ? Number(m[1]) : 1, b = m[2] !== undefined ? Number(m[2]) : 100;
     if (a > b) [a, b] = [b, a];
