@@ -1,4 +1,4 @@
-# Aquaticy AI 16.4.5
+# Aquaticy AI 16.4.6
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,20 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.4.6
+
+- **Sicherheitsupdate:** soupsieve, ein Baustein zum Lesen von Webseiten, hatte eine bekannte
+  Lücke (CVE-2026-126190). Aquaticy nutzt jetzt Version 4.0.1. Die Sicherheitsprüfung
+  (pip-audit) läuft wieder durch.
+- **Code-Review mit weniger Fehlalarmen:** Vorlagen wie `f"Bearer {token}"`, Namen von
+  Umgebungsvariablen und normaler Text gelten nicht mehr als eingetragenes Passwort. Ein Import
+  von `xml.etree` gilt nicht mehr als unsicher. Geheimnisse verdeckt Aquaticy so streng wie
+  bisher.
+- **Feiertage:** „Welcher Wochentag ist Pfingstmontag?“ nennt den Wochentag. Vorher kam eine
+  Liste der nächsten Feiertage.
+  Auch der Worker kennt die Feiertage jetzt beim Wochentag und beim Countdown.
+- **Tests:** Die gestellten Beispielschlüssel sind aus den Tests entfernt.
 
 ## Neu in 16.4.5
 
@@ -357,7 +371,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.4.5
+aquaticy --version            # 16.4.6
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup

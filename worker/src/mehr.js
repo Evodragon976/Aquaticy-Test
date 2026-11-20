@@ -243,6 +243,14 @@ const ANLAESSE = [
   [/silvester|new\s+year'?s\s+eve/, "Silvester", "New Year's Eve", (j) => new Date(Date.UTC(j, 11, 31))],
   [/neujahr|new\s+year/, "Neujahr", "New Year's Day", (j) => new Date(Date.UTC(j, 0, 1))],
   [/ostern|easter/, "Ostern", "Easter", (j) => ostern(j)],
+  // 16.4.6: gesetzliche Feiertage fuer Wochentag und Countdown -- vorher kam das Datum von heute.
+  [/karfreitag|good\s+friday/, "Karfreitag", "Good Friday", (j) => tagNach(ostern(j), -2)],
+  [/ostermontag|easter\s+monday/, "Ostermontag", "Easter Monday", (j) => tagNach(ostern(j), 1)],
+  [/pfingstmontag|whit\s+monday/, "Pfingstmontag", "Whit Monday", (j) => tagNach(ostern(j), 50)],
+  [/fronleichnam|corpus\s+christi/, "Fronleichnam", "Corpus Christi", (j) => tagNach(ostern(j), 60)],
+  [/tag\s+der\s+arbeit/, "Tag der Arbeit", "Labour Day (Germany)", (j) => new Date(Date.UTC(j, 4, 1))],
+  [/reformationstag/, "Reformationstag", "Reformation Day", (j) => new Date(Date.UTC(j, 9, 31))],
+  [/allerheiligen/, "Allerheiligen", "All Saints' Day", (j) => new Date(Date.UTC(j, 10, 1))],
   [/pfingsten|pentecost/, "Pfingsten", "Pentecost", (j) => tagNach(ostern(j), 49)],
   [/himmelfahrt|vatertag|ascension/, "Christi Himmelfahrt (Vatertag)", "Ascension Day", (j) => tagNach(ostern(j), 39)],
   [/muttertag|mother'?s\s+day/, "Muttertag", "Mother's Day (Germany)", (j) => nterSonntag(j, 5, 2)],
@@ -321,9 +329,10 @@ export function datumAntwort(text, sprache = "de", jetzt = new Date()) {
       zurueck ? `${n} ${einheit} ago it was **${zeig(d)}**.` : `In ${n} ${einheit} it will be **${zeig(d)}**.`) };
   }
   // Countdown: "wie viele Tage bis Weihnachten", "wie lange noch bis zum 1. mai"
+  // 16.4.6: auch "How many weeks until Christmas?" (vorher die Liste der Feiertage).
   // 16.4.5: "Wie viele Tage sind es bis Weihnachten?" und "Wie viele Wochen bis ...?" gingen
   // vorher an die Feiertage (Antwort: Datum des 1. Weihnachtstags).
-  let m = /(?:wie\s*(?:viele|lange)\s+(?:(?:werk|arbeits)?tage\s+|wochen\s+)?(?:(?:ist|sind|dauert)\s+es\s+)?(?:noch\s+)?bis|how\s+(?:many\s+days|long)\s+(?:is\s+it\s+)?(?:until|till|to)|countdown\s+(?:bis|to)|tage\s+bis)\s+(?:zu[mr]?\s+|zu\s+)?(.+)$/.exec(t);
+  let m = /(?:wie\s*(?:viele|lange)\s+(?:(?:werk|arbeits)?tage\s+|wochen\s+)?(?:(?:ist|sind|dauert)\s+es\s+)?(?:noch\s+)?bis|how\s+(?:many\s+(?:days|weeks)|long)\s+(?:is\s+it\s+|are\s+there\s+|are\s+left\s+)?(?:until|till|to)|countdown\s+(?:bis|to)|tage\s+bis)\s+(?:zu[mr]?\s+|zu\s+)?(.+)$/.exec(t);
   if (m) {
     const ziel = m[1];
     let datum = null, name = "", istDatum = false;
