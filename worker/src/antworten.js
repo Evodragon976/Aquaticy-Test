@@ -130,6 +130,13 @@ const STICH = {
   kurse: ["kurs", "wechselkurs", "umrechnen", "exchange", "rate", "waehrung", "currency"],
 };
 
+// 16.4.5: "Wird es windig in Kiel?", "Brauche ich einen Regenschirm in München?", "Ist es
+// heute neblig?" bekamen vorher kein Wetter. Nur genau -- "neben" ist kein "nebel".
+const WETTER_GENAU = new Set(["windig", "wind", "sturm", "stuermisch", "frost", "glatteis",
+  "nebel", "neblig", "nebelig", "hagel", "hagelt", "regenschirm", "schirm", "sonnencreme",
+  "regenwahrscheinlichkeit", "niederschlag", "gewittert", "nieselt", "nieselregen"]);
+const WETTER_SATZ = /\bfriert\s+es\b|\bes\s+friert\b/;
+
 // Echte Woerter, die einem Stichwort aehneln, aber etwas anderes meinen.
 const KEIN_TIPPFEHLER = new Set(["wetten", "wette", "vetter", "kurz", "kurze", "kurzem",
   "kuss", "kurse", "uhren", "date", "datei", "dateien", "news", "regel", "regeln", "rat",
@@ -519,14 +526,16 @@ const ORT_STOP = new Set([...FRAGEWOERTER, ...STICH.wetter, "wie", "wird", "ist"
   "das", "draussen", "gerade", "jetzt", "aktuell", "aktuelle", "aktuelles", "am", "wochenende",
   "woche", "diese", "dieser", "naechste", "naechsten", "sonntag", "montag", "dienstag",
   "mittwoch", "donnerstag", "freitag", "samstag", "warm", "kalt", "grad", "like", "will",
-  "be", "it", "weekend", "week", "this", "next", "now"]);
+  "be", "it", "weekend", "week", "this", "next", "now", ...WETTER_GENAU, "friert", "brauche",
+  "ich", "einen", "man", "abend", "abends", "nachmittag", "vormittag", "mittag", "nacht",
+  "frueh", "morning", "evening", "tonight"]);
 
 /** Der Ort in einer Wetterfrage -- aus dem Originaltext, damit Umlaute bleiben. */
 export function ortAus(text) {
   const t = String(text || "").replace(/[?!.]+\s*$/, "");
   const m = /(?:^|\s)(?:in|für|fuer|bei|um|nahe|around|for|at)\s+([\p{L}][\p{L}\p{N} .'-]{1,60})$/iu
     // 16.4.5: nur echte Tage -- "am Main" schnitt vorher "Frankfurt am Main" zu "Frankfurt".
-    .exec(t.replace(/\s+(?:heute|morgen|übermorgen|uebermorgen|today|tomorrow|am\s+(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|wochenende)|on\s+\p{L}+day|diese\s+woche|this\s+week|next\s+week|nächste\s+woche|naechste\s+woche|jetzt|gerade|now)\b.*$/iu, ""));
+    .exec(t.replace(/\s+(?:heute|morgen|übermorgen|uebermorgen|today|tomorrow|am\s+(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|wochenende)|on\s+\p{L}+day|diese\s+woche|this\s+week|next\s+week|nächste\s+woche|naechste\s+woche|jetzt|gerade|now)\b/giu, ""));
   if (m) {
     // Fuellwoerter nur vorn und hinten -- "Frankfurt am Main" behaelt sein "am" (16.4.5).
     const worte = m[1].trim().split(/\s+/);
@@ -561,8 +570,15 @@ function welcheTage(kern, heute, anzahl) {
   return [];
 }
 
+const DEFINITION = /^(?:(?:was|wer)\s+(?:ist|sind|bedeutet|bedeuten|heisst)|what\s+(?:is|are))\s+(?:ein|eine|der|die|das|a|an|the)?\s*([\p{L}-]+)$/u;
+const WETTER_THEMEN = new Set(["wetter", "vorhersage", "wettervorhersage", "temperatur",
+  "temperaturen", "weather", "forecast", "temperature"]);
+
 async function wetterAntwort(text, w, kern, sprache, kontext) {
-  if (!enthaelt(w, STICH.wetter) && !/wie\s+(?:warm|kalt)\s+(?:ist|wird)\s+es|how\s+(?:warm|cold)\s+is\s+it/.test(kern)) {
+  const definition = DEFINITION.exec(kern);
+  if (definition && !WETTER_THEMEN.has(definition[1])) return null;
+  if (!enthaelt(w, STICH.wetter) && !w.some((x) => WETTER_GENAU.has(x)) && !WETTER_SATZ.test(kern)
+      && !/wie\s+(?:warm|kalt)\s+(?:ist|wird)\s+es|how\s+(?:warm|cold)\s+is\s+it/.test(kern)) {
     return null;
   }
   let name = ortAus(text);
@@ -961,7 +977,9 @@ const TAGWORT = /^(?:heute|morgen|uebermorgen|am\s+wochenende|naechste\s+woche|d
 
 function wetterFrage(text) {
   const kern = normalisieren(WORTSCHATZ.verbessern(text));
-  return Boolean(enthaelt(woerter(kern), STICH.wetter)) || /wie\s+(?:warm|kalt)/.test(kern);
+  const w = woerter(kern);
+  return Boolean(enthaelt(w, STICH.wetter)) || w.some((x) => WETTER_GENAU.has(x))
+    || WETTER_SATZ.test(kern) || /wie\s+(?:warm|kalt)/.test(kern);
 }
 
 /** Eine Folgefrage mit der Frage davor zu einer ganzen Frage machen. */

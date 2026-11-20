@@ -101,3 +101,21 @@ test("Bruch als Exponent nach hoch", async () => {
   assert.match(await frag("Was ist 27 hoch 1/3?"), /\*\*3\*\*/);
   assert.match(await frag("Was ist 2 hoch 1/2?"), /\*\*1,414/);
 });
+
+test("Mehr Wetterwörter, Ort nach dem Tag, Definitionen", async () => {
+  const { ortAus } = await import("../src/antworten.js");
+  assert.equal(ortAus("Wie stark regnet es morgen in Köln?"), "Köln");
+  assert.equal(ortAus("Wie hoch ist die Regenwahrscheinlichkeit morgen in Köln?"), "Köln");
+  assert.equal(ortAus("Wetter in Berlin heute Abend"), "Berlin");
+  assert.equal(ortAus("Wetter in Frankfurt am Main"), "Frankfurt am Main");
+  for (const frage of ["Wird es windig in Kiel?", "Brauche ich einen Regenschirm in München?",
+    "Ist es heute neblig in Frankfurt?", "Friert es morgen in Dresden?"]) {
+    const antwort = await frag(frage);
+    assert.ok(antwort && !antwort.startsWith("Für welchen Ort"), frage);
+  }
+  for (const frage of ["Was ist Regen?", "Was ist ein Gewitter?", "Was ist Nebel?",
+    "Was liegt neben Berlin?", "Wie friert man Brot ein?"]) {
+    assert.equal(await frag(frage), "", frage);
+  }
+  assert.match(await frag("Was ist das Wetter?"), /^Für welchen Ort/);
+});

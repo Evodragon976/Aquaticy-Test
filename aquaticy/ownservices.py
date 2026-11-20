@@ -13,6 +13,7 @@ gute E-Mail?" oder "Welche Termine hat das Bürgeramt?" bleiben normale Fragen.
 from __future__ import annotations
 
 import re
+from datetime import date
 
 SOURCES = ("calendar", "mail")
 
@@ -38,6 +39,11 @@ _MAIL = re.compile(
     rf"|\b{_ES_GIBT}\s+{_LUECKE}{_MAIL_WORT}{_FREMD}"
     rf"|\b{_MAIL_WORT}{_DAVOR_ICH}"
     rf"|\b(?:neue|neuen|ungelesene|ungelesenen|new|unread)\s+{_MAIL_WORT}\b"
+    # 16.4.5: "Hat mir Peter geschrieben?", "Did Anna email me?" -- vorher Websuche.
+    r"|^\s*hat\s+mir\s+(?:[\w'-]+\s+){1,3}(?:eine?\s+)?(?:e-?mail\s+|mail\s+)?"
+    r"(?:geschrieben|gemailt|geantwortet)\s*[?.!]*\s*$"
+    r"|^\s*(?:did|has)\s+(?:[\w'-]+\s+){1,3}(?:e-?mailed|written\s+to|wr(?:o|i)te\s+to|"
+    r"replied\s+to|e-?mail)\s+me\b"
     rf"|^\s*(?:lies|lese|zeig|zeige|check|checke|pr(?:ü|ue)fe?|read|show|open|"
     rf"(?:ö|oe)ffne)\s+(?:mir\s+|me\s+)?(?:die\s+|the\s+)?{_LUECKE}{_MAIL_WORT}\b",
     re.IGNORECASE,
@@ -143,11 +149,45 @@ def followup_sources(text: str, previous: tuple[str, ...] | list[str] = ()) -> t
     return ("mail",) if _POST_FOLGE.search(roh) else ()
 
 
-def calendar_days(text: str) -> int:
-    """Wie viele Tage der Kalender zeigen soll: heute 1, morgen 2, sonst eine Woche."""
+_MONATE = ("januar", "februar", "märz", "april", "mai", "juni", "juli", "august", "september",
+           "oktober", "november", "dezember")
+_MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august",
+           "september", "october", "november", "december")
+_ZAHLWORT = {"zwei": 2, "drei": 3, "vier": 4, "fünf": 5, "two": 2, "three": 3, "four": 4,
+             "five": 5}
+
+
+def calendar_days(text: str, heute: date | None = None) -> int:
+    """Wie viele Tage der Kalender zeigen soll: heute 1, morgen 2, sonst eine Woche.
+
+    16.4.5: "Termine im Dezember" (am 19. November), "nächste Woche" und "in zwei Wochen"
+    reichten vorher nur sieben Tage weit -- die gesuchten Termine fehlten.
+    """
     klein = str(text or "").lower()
+    if heute is None:
+        from aquaticy import zeit
+
+        heute = zeit.jetzt().date()
+    monat = re.search(r"\b(?:im|in|for|during)\s+(" + "|".join(_MONATE + _MONTHS) + r")\b", klein)
+    if monat:
+        nummer = ((_MONATE.index(monat.group(1)) if monat.group(1) in _MONATE
+                   else _MONTHS.index(monat.group(1))) + 1)
+        jahr = heute.year if nummer >= heute.month else heute.year + 1
+        ende = date(jahr + (nummer == 12), nummer % 12 + 1, 1)
+        return max(1, min((ende - heute).days, 365))
+    menge = re.search(r"\b(?:in|innerhalb|n(?:ä|ae)chsten|next|within)\s+(?:den\s+|der\s+)?"
+                      r"(\d{1,3}|zwei|drei|vier|fünf|two|three|four|five)\s+"
+                      r"(tag(?:e|en)?|days?|woche(?:n)?|weeks?)\b", klein)
+    if menge:
+        n = _ZAHLWORT.get(menge.group(1)) or int(menge.group(1))
+        tage = n + 1 if menge.group(2).startswith(("tag", "day")) else n * 7 + 7
+        return max(1, min(tage, 365))
     if re.search(r"\b(?:monat|month)\b", klein):
         return 31
+    if re.search(r"\b(?:n(?:ä|ae)chste|kommende)\s+woche\b|\bnext\s+week\b", klein):
+        return 14 - heute.weekday()
+    if re.search(r"\b(?:wochenende|weekend)\b", klein):
+        return 7 - heute.weekday()
     if re.search(r"\b(?:woche|week)\b", klein):
         return 7
     if re.search(r"\b(?:(?:ü|ue)bermorgen)\b", klein):
