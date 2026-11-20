@@ -182,3 +182,54 @@ test("Einheiten: zusammengesetzte Dauer", () => {
   assert.equal(einheitenAntwort("2 hours 30 minutes in minutes", "en").text, "2 h 30 min is **150 minutes**.");
   assert.equal(einheitenAntwort("1,5 Stunden in Minuten").text, "1,5 Stunden sind **90 Minuten**.");
 });
+
+test("Wochentag eines benannten Tages", async () => {
+  const { datumAntwort } = await import("../src/mehr.js");
+  const tag = (f, sp = "de") => datumAntwort(f, sp, JETZT)?.text || "";
+  assert.equal(tag("Welcher Wochentag ist Heiligabend?"), "Der 24. Dezember 2026 ist ein **Donnerstag**.");
+  assert.equal(tag("Auf welchen Tag fällt Weihnachten 2027?"), "Der 24. Dezember 2027 ist ein **Freitag**.");
+  assert.equal(tag("Welcher Tag ist Halloween?"), "Der 31. Oktober 2027 ist ein **Sonntag**.");
+  assert.equal(tag("What day of the week is Christmas?", "en"), "25 December 2026 is a **Friday**.");
+  assert.match(tag("Welcher Wochentag war der 9.11.1989?"), /\*\*Donnerstag\*\*/);
+});
+
+test("Smalltalk: keine Ja/Nein-Antwort auf die falsche Frage", async () => {
+  for (const f of ["Are you an AI?", "Are you a human?"]) {
+    for (let i = 0; i < 6; i++) {
+      const a = (await festeAntwort(f, { sprache: "en", jetzt: JETZT, holen, zufall: () => i / 6 }))?.text || "";
+      assert.doesNotMatch(a, /^(?:No|Yes)\b/);
+    }
+  }
+});
+
+test("Weltzeit: wenn es dort ... Uhr ist", async () => {
+  const ZONEN = { tokio: "Asia/Tokyo", "new york": "America/New_York", berlin: "Europe/Berlin",
+    london: "Europe/London", sydney: "Australia/Sydney" };
+  const ort = async (url) => {
+    const u = new URL(String(url));
+    const n = u.searchParams.get("name");
+    const z = ZONEN[String(n).toLowerCase()];
+    return new Response(JSON.stringify({ results: z ? [{ name: n, latitude: 1, longitude: 1, country: "X", timezone: z }] : [] }),
+      { headers: { "content-type": "application/json" } });
+  };
+  const zeit = async (f) => (await festeAntwort(f, { sprache: "de", jetzt: JETZT, holen: ort, zufall: () => 0.4 }))?.text || "";
+  assert.match(await zeit("Wenn es in Berlin 9 Uhr ist, wie spät ist es dann in Tokio?"), /09:00 Uhr ist, ist es in \*\*Tokio, X\*\* \*\*17:00 Uhr\*\*\.$/);
+  assert.match(await zeit("Wie spät ist es in New York, wenn es bei uns 18 Uhr ist?"), /^Wenn es bei dir 18:00 Uhr ist, ist es in \*\*New York, X\*\* \*\*12:00 Uhr\*\*\.$/);
+  assert.match(await zeit("Wie spät ist es in Sydney, wenn es in London 20:30 Uhr ist?"), /07:30 Uhr\*\* – am nächsten Tag\.$/);
+});
+
+test("Weltzeit: Zeitverschiebung nach und zwischen", async () => {
+  const ZONEN = { tokio: "Asia/Tokyo", "new york": "America/New_York", berlin: "Europe/Berlin",
+    london: "Europe/London" };
+  const ort = async (url) => {
+    const n = new URL(String(url)).searchParams.get("name");
+    const z = ZONEN[String(n).toLowerCase()];
+    return new Response(JSON.stringify({ results: z ? [{ name: n, latitude: 1, longitude: 1, country: "X", timezone: z }] : [] }),
+      { headers: { "content-type": "application/json" } });
+  };
+  const zeit = async (f) => (await festeAntwort(f, { sprache: "de", jetzt: JETZT, holen: ort, zufall: () => 0.4 }))?.text || "";
+  assert.equal(await zeit("Was ist die Zeitverschiebung nach Tokio?"), "In **Tokio, X** ist es gerade **8 Stunden später** als bei dir.");
+  assert.equal(await zeit("Zeitunterschied zu London"), "In **London, X** ist es gerade **1 Stunde früher** als bei dir.");
+  assert.equal(await zeit("Wie viele Stunden Zeitunterschied zwischen Berlin und New York?"),
+    "Zwischen **Berlin, X** und **New York, X** liegen gerade **6 Stunden** – in New York ist es früher.");
+});

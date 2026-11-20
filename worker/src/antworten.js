@@ -46,7 +46,8 @@ const EN = {
   identitaet: ["I'm Aquaticy, an AI assistant made by Jonas. How can I help?",
     "My name is Aquaticy! I answer questions and look things up for you."],
   mensch: ["I'm not a human but an AI — Aquaticy, made by Jonas.",
-    "No, I'm an artificial intelligence. My name is Aquaticy."],
+    // 16.4.5: auch fuer "Are you an AI?" -- dort hiess "No, ..." das Gegenteil.
+    "I'm an artificial intelligence, not a human. My name is Aquaticy."],
   faehigkeiten: ["I answer your questions: knowledge from Wikipedia, weather, news, exchange "
     + "rates, public holidays, maths, date and time. Just ask.",
   "Ask me something! I look things up, calculate, and tell you the weather or the latest news."],

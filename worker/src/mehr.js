@@ -375,11 +375,19 @@ export function datumAntwort(text, sprache = "de", jetzt = new Date()) {
       `**${zahl(tage, sprache)} ${tagWort}** to go until ${name}${wochen}.${wann}`) };
   }
   // Wochentag eines Datums: "welcher wochentag war der 3.10.1990", "what day was july 4 1776"
-  m = /(?:welche[rn]?\s+(?:wochen)?tag\s+(?:ist|war|wird|faellt)|what\s+day\s+(?:of\s+the\s+week\s+)?(?:is|was|will\s+be))\s+(?:der|am|on)?\s*(.+)$/.exec(t);
+  m = /(?:welche[rn]?\s+(?:wochen)?tag\s+(?:ist|war|wird|faellt)|auf\s+welchen\s+(?:wochen)?tag\s+faellt|what\s+day\s+(?:of\s+the\s+week\s+)?(?:is|was|will\s+be|falls\s+on))\s+(?:der|am|on)?\s*(.+)$/.exec(t);
   if (m) {
     const ostern2 = /ostern|easter/.test(m[1]);
     const jahr = /\b(\d{4})\b/.exec(m[1]);
-    const gefunden = ostern2
+    // 16.4.5: "Welcher Wochentag ist Heiligabend?", "What day of the week is Christmas?" -- der
+    // Anlass war hier unbekannt, dann nannte die Uhrzeit das Datum von heute.
+    const anlass = ostern2 ? null : ANLAESSE.find(([muster]) => muster.test(m[1]));
+    let amAnlass = null;
+    if (anlass) {
+      amAnlass = anlass[3](jahr ? +jahr[1] : heute.getUTCFullYear());
+      if (!jahr && amAnlass < heute) amAnlass = anlass[3](heute.getUTCFullYear() + 1);
+    }
+    const gefunden = amAnlass ? { datum: amAnlass } : ostern2
       ? { datum: ostern(jahr ? +jahr[1] : heute.getUTCFullYear()) }
       : datumAus(m[1], heute.getUTCFullYear());
     if (!gefunden || !gueltig(gefunden.datum)) return null;
@@ -407,7 +415,101 @@ const DIENST_WEG = (sprache) => sp(sprache, "Der Ortsdienst antwortet gerade nic
   + "noch einmal.", "The place lookup isn't answering right now. Try again in a moment.");
 const ORT_ENDE = /\s+(?:heute|morgen|jetzt|gerade|today|tomorrow|now)$/;
 
+/** Datum und Uhrzeit von *datum* in der Zeitzone *zone* (nur Zahlen). */
+function zeitTeile(datum, zone) {
+  const f = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit",
+    day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const o = Object.fromEntries(f.formatToParts(datum).map((x) => [x.type, x.value]));
+  return { j: +o.year, m: +o.month, t: +o.day, h: +o.hour, min: +o.minute };
+}
+
+// 16.4.5: "Wenn es in Berlin 9 Uhr ist, wie spät ist es dann in Tokio?" nannte vorher die Zeit von
+// hier, "Wie spät ist es in New York, wenn es bei uns 18 Uhr ist?" suchte einen Ort "wenn es bei
+// uns 18 Uhr ist".
+async function weltzeitWenn(text, sprache, kontext) {
+  if (sprache === "en") return null;
+  const roh = String(text).trim().replace(/[?!.]+$/, "");
+  const frage = String.raw`(?:wie\s*sp(?:ä|ae)t|wie\s*viel\s+uhr)\s+ist\s+es\s+(?:dann\s+)?(?:in|auf)\s+`;
+  const bedingung = String.raw`wenn\s+es\s+(?:bei\s+uns|hier|in\s+(.+?))\s+(\d{1,2})(?:[:.](\d{2}))?\s*uhr\s+ist`;
+  let von, stunde, minute, nach;
+  const vorn = new RegExp(`^${bedingung}\\s*,?\\s+${frage}(.+)$`, "iu").exec(roh);
+  const hinten = new RegExp(`^${frage}(.+?)\\s*,?\\s+${bedingung}$`, "iu").exec(roh);
+  if (vorn) [, von, stunde, minute, nach] = vorn;
+  else if (hinten) [, nach, von, stunde, minute] = hinten;
+  else return null;
+  if (Number(stunde) > 24 || Number(minute || 0) > 59) return null;
+  const schritt = { type: "search", query: `Uhrzeit ${nach}` };
+  let zoneVon = kontext.zeitzone || "Europe/Berlin";
+  if (von) {
+    const platzVon = await dienste.ort(von, sprache, kontext.holen);
+    if (platzVon?.fehler) return { schritt, text: DIENST_WEG(sprache) };
+    if (!platzVon?.zeitzone) return { schritt, text: `Einen Ort „${von}“ finde ich gerade nicht.` };
+    zoneVon = platzVon.zeitzone;
+  }
+  const platz = await dienste.ort(nach, sprache, kontext.holen);
+  if (platz?.fehler) return { schritt, text: DIENST_WEG(sprache) };
+  if (!platz?.zeitzone) return { schritt, text: `Einen Ort „${nach}“ finde ich gerade nicht.` };
+  const jetzt = kontext.jetzt || new Date();
+  try {
+    const heute = zeitTeile(jetzt, zoneVon);
+    const lokal = Date.UTC(heute.j, heute.m - 1, heute.t, Number(stunde), Number(minute || 0));
+    const hier = zeitTeile(jetzt, zoneVon);
+    const versatz = Date.UTC(hier.j, hier.m - 1, hier.t, hier.h, hier.min)
+      - Math.floor(jetzt.getTime() / 60000) * 60000;
+    const dort = zeitTeile(new Date(lokal - versatz), platz.zeitzone);
+    const tage = Math.round((Date.UTC(dort.j, dort.m - 1, dort.t) - Date.UTC(heute.j, heute.m - 1, heute.t))
+      / 86400000);
+    const zwei = (n) => String(n).padStart(2, "0");
+    const tagText = tage === 1 ? " – am nächsten Tag" : tage === -1 ? " – am Tag davor" : "";
+    const wo = von ? `in ${von}` : "bei dir";
+    return { schritt, text: `Wenn es ${wo} ${zwei(Number(stunde))}:${zwei(Number(minute || 0))} Uhr ist, `
+      + `ist es in **${platz.name}** **${zwei(dort.h)}:${zwei(dort.min)} Uhr**${tagText}.` };
+  } catch {
+    return null;
+  }
+}
+
+// 16.4.5: "Zeitverschiebung nach Tokio", "Zeitunterschied zwischen Berlin und New York" gingen
+// vorher an Wikipedia.
+async function zeitUnterschied(text, sprache, kontext) {
+  if (sprache === "en") return null;
+  const roh = String(text).trim().replace(/[?!.]+$/, "");
+  const m = /zeit(?:verschiebung|unterschied|differenz)\s+(?:zwischen\s+(.+?)\s+und\s+(.+)|(?:nach|zu|mit|in)\s+(.+))$/iu
+    .exec(roh);
+  if (!m) return null;
+  const namen = m[3] ? [null, m[3]] : [m[1], m[2]];
+  const schritt = { type: "search", query: `Zeitverschiebung ${namen.filter(Boolean).join(" ")}` };
+  const zonen = [];
+  for (const name of namen) {
+    if (!name) { zonen.push([kontext.zeitzone || "Europe/Berlin", "dir"]); continue; }
+    const platz = await dienste.ort(name.replace(/^(?:der|die|den|dem|das)\s+/i, ""), sprache, kontext.holen);
+    if (platz?.fehler) return { schritt, text: DIENST_WEG(sprache) };
+    if (!platz?.zeitzone) return { schritt, text: `Einen Ort „${name}“ finde ich gerade nicht.` };
+    zonen.push([platz.zeitzone, platz.name]);
+  }
+  const jetzt = kontext.jetzt || new Date();
+  try {
+    const minuten = (zone) => {
+      const x = zeitTeile(jetzt, zone);
+      return (Date.UTC(x.j, x.m - 1, x.t, x.h, x.min) - Math.floor(jetzt.getTime() / 60000) * 60000) / 60000;
+    };
+    const diff = (minuten(zonen[1][0]) - minuten(zonen[0][0])) / 60;
+    const [a, b] = [zonen[0][1], zonen[1][1]];
+    if (!diff) return { schritt, text: m[3] ? `In **${b}** ist es gerade dieselbe Uhrzeit wie bei dir.`
+      : `**${a}** und **${b}** haben gerade dieselbe Uhrzeit.` };
+    const stunden = `${zahl(Math.abs(diff), sprache, 1)} ${Math.abs(diff) === 1 ? "Stunde" : "Stunden"}`;
+    const richtung = diff > 0 ? "später" : "früher";
+    return { schritt, text: m[3]
+      ? `In **${b}** ist es gerade **${stunden} ${richtung}** als bei dir.`
+      : `Zwischen **${a}** und **${b}** liegen gerade **${stunden}** – in ${b.split(",")[0]} ist es ${richtung}.` };
+  } catch {
+    return null;
+  }
+}
+
 export async function weltzeitAntwort(text, sprache, kontext) {
+  const wenn = await weltzeitWenn(text, sprache, kontext) || await zeitUnterschied(text, sprache, kontext);
+  if (wenn) return wenn;
   const t = glatt(text);
   const m = /(?:wie\s*spaet\s+ist\s+es|wie\s*viel\s+uhr\s+ist\s+es|uhrzeit|what\s+time\s+is\s+it|time)\s+(?:gerade\s+|jetzt\s+)?(?:in|im|auf|bei|in\s+der|in\s+den)\s+(.{2,80})$/.exec(t);
   if (!m) return null;

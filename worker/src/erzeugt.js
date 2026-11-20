@@ -236,13 +236,13 @@ export const DATEN = {
   {
    "antworten": [
     "Ich bin kein Mensch, sondern eine KI — Aquaticy, entwickelt von Jonas.",
-    "Nein, ich bin eine künstliche Intelligenz. Mein Name ist Aquaticy.",
+    "Eine künstliche Intelligenz – das bin ich. Mein Name ist Aquaticy.",
     "Ich bin eine KI. Keine Person, aber ich gebe mir Mühe, dir wirklich weiterzuhelfen.",
     "Ganz ehrlich: Ich bin ein Programm — Aquaticy, eine KI. Ein Mensch sitzt hier nicht.",
     "Ich bin Aquaticy, eine KI. Für meine Antworten nutze ich Sprachmodelle.",
     "Kein Mensch, sondern Software: Ich bin Aquaticy, ein KI-Assistent.",
     "Ich bin eine KI namens Aquaticy. Gefühle oder einen Körper habe ich nicht — aber viel Neugier für deine Fragen.",
-    "Nein, hier antwortet eine KI. Ich bin Aquaticy und helfe dir gern.",
+    "Hier antwortet eine KI. Ich bin Aquaticy und helfe dir gern.",
     "Ich bin ein KI-Assistent — Aquaticy. Die Antworten schreibe ich mithilfe von Sprachmodellen.",
     "Ich bin eine künstliche Intelligenz, kein Mensch. Was kann ich für dich tun?",
     "Aquaticy ist eine KI — und die bin ich. Frag mich einfach, was du wissen willst.",
@@ -535,11 +535,11 @@ export const DATEN = {
   },
   {
    "antworten": [
-    "Ja! Ich antworte in der Sprache, in der du schreibst — Deutsch, Englisch und viele andere.",
+    "Ich antworte in der Sprache, in der du schreibst — Deutsch, Englisch und viele andere.",
     "Klar, ich verstehe und schreibe viele Sprachen. Schreib mir einfach in deiner.",
-    "Ja, mehrere Sprachen sind kein Problem. Ich übersetze auch gern für dich.",
+    "Mehrere Sprachen sind kein Problem. Ich übersetze auch gern für dich.",
     "Natürlich! Deutsch ist meine Standardsprache, aber Englisch und viele weitere gehen auch.",
-    "Yes, I do — und Deutsch sowieso. In welcher Sprache möchtest du schreiben?"
+    "English, Deutsch und viele mehr. In welcher Sprache möchtest du schreiben?"
    ],
    "muster": "(?:(?:sprichst|kannst)\\s+du\\s+(?:auch\\s+)?(?:deutsch|englisch|english|französisch|franzoesisch|spanisch|italienisch|türkisch|tuerkisch|andere\\s+sprachen|mehrere\\s+sprachen)|do\\s+you\\s+speak\\s+(?:english|german)|welche\\s+sprachen\\s+(?:sprichst|kannst)\\s+du)",
    "name": "sprachen",
