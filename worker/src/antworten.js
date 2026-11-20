@@ -135,7 +135,7 @@ const STICH = {
 const WETTER_GENAU = new Set(["windig", "wind", "sturm", "stuermisch", "frost", "glatteis",
   "nebel", "neblig", "nebelig", "hagel", "hagelt", "regenschirm", "schirm", "sonnencreme",
   "regenwahrscheinlichkeit", "niederschlag", "gewittert", "nieselt", "nieselregen"]);
-const WETTER_SATZ = /\bfriert\s+es\b|\bes\s+friert\b/;
+const WETTER_SATZ = /\bfriert\s+es\b|\bes\s+friert\b|\b(?:need|bring|take)\s+an?\s+umbrella\b|\bis\s+it\s+(?:going\s+to\s+be\s+)?(?:windy|foggy|snowing|freezing|stormy)\b/;
 
 // Echte Woerter, die einem Stichwort aehneln, aber etwas anderes meinen.
 const KEIN_TIPPFEHLER = new Set(["wetten", "wette", "vetter", "kurz", "kurze", "kurzem",
@@ -295,6 +295,9 @@ export function rechenAusdruck(text) {
   // "15 % von 80": eigenes Zeichen, damit die Antwort es wieder so zeigen kann
   t = t.replace(/(\d+(?:[.,]\d+)?)\s*(?:%|prozent|percent)\s*(?:von|of)\s*(\d+(?:[.,]\d+)?)/g,
     "$1%$2");
+  // 16.4.5: Waehrung hinter einer Zahl und "die Wurzel" -- vorher keine Antwort.
+  t = t.replace(/(\d)\s*(?:€|euro|eur|dollar|\$)(?=\s|$|[+\-*/)])/g, "$1")
+    .replace(/\b(?:die|the)\s+(?=(?:quadrat)?wurzel|square\s+root)/g, "");
   t = t.replace(/(?:quadrat)?wurzel\s+(?:aus|von)\s+(\d+(?:[.,]\d+)?)|square\s+root\s+of\s+(\d+(?:[.,]\d+)?)|sqrt\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?|√\s*(\d+(?:[.,]\d+)?)/g,
     (_, a, b, c, d) => `sqrt(${a || b || c || d})`);
   // Funktionen und Konstanten: "sinus von 30", "log 100", "pi mal 2", "5 fakultaet"
@@ -304,7 +307,7 @@ export function rechenAusdruck(text) {
     .replace(/\b(?:tangens|tan)\s*(?:von|of)?\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?(?:\s*grad)?/g, "tan($1)")
     .replace(/\b(?:logarithmus|log|lg)\s*(?:von|of)?\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?/g, "log($1)")
     .replace(/\b(?:ln|natuerlicher\s+logarithmus)\s*(?:von|of)?\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?/g, "ln($1)")
-    .replace(/\b(?:fakultaet\s+von|factorial\s+of)\s+(\d+)|\b(\d+)\s+fakultaet\b/g, (_, a, b) => `${a || b}!`)
+    .replace(/\b(?:fakultaet\s+von|factorial\s+of)\s+(\d+)|\b(\d+)\s+(?:fakultaet|factorial)\b/g, (_, a, b) => `${a || b}!`)
     .replace(/π|\bpi\b/g, "pi");
   // 16.4.5: "27 hoch 1/3" ergab 9 -- mit "hoch" ist der ganze Bruch der Exponent.
   t = t.replace(/\bhoch\s+(-?\d+)\s*\/\s*(\d+)/g, "hoch ($1/$2)");
@@ -538,7 +541,9 @@ export function ortAus(text) {
     .exec(t.replace(/\s+(?:heute|morgen|übermorgen|uebermorgen|today|tomorrow|am\s+(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|wochenende)|on\s+\p{L}+day|diese\s+woche|this\s+week|next\s+week|nächste\s+woche|naechste\s+woche|jetzt|gerade|now)\b/giu, ""));
   if (m) {
     // Fuellwoerter nur vorn und hinten -- "Frankfurt am Main" behaelt sein "am" (16.4.5).
-    const worte = m[1].trim().split(/\s+/);
+    // 16.4.5: "für eine Radtour in Köln" -- der Ort steht hinter dem zweiten "in".
+    const worte = m[1].trim()
+      .replace(/^(?:eine?[nmr]?|den|die|das|der)\s+\p{L}+\s+(?:in|bei)\s+/iu, "").split(/\s+/);
     while (worte.length && ORT_STOP.has(falten(worte[0]))) worte.shift();
     while (worte.length && ORT_STOP.has(falten(worte[worte.length - 1]))) worte.pop();
     const kandidat = worte.join(" ");
@@ -577,6 +582,11 @@ const WETTER_THEMEN = new Set(["wetter", "vorhersage", "wettervorhersage", "temp
 async function wetterAntwort(text, w, kern, sprache, kontext) {
   const definition = DEFINITION.exec(kern);
   if (definition && !WETTER_THEMEN.has(definition[1])) return null;
+  // 16.4.5: "Ist Regen gut für Pflanzen?" zeigte das Wetter im Ort "Pflanzen".
+  if ((/^(?:warum|wieso|weshalb|wie\s+entsteh\w*|woraus\s+besteh\w*)\b/.test(kern)
+      || /^ist\s+\S+\s+(?:gut|schlecht|gesund|ungesund|gefaehrlich|schaedlich|wichtig)\s+fuer\b/
+        .test(kern))
+      && !/\b(?:heute|morgen|uebermorgen|wochenende|jetzt|gerade)\b/.test(kern)) return null;
   if (!enthaelt(w, STICH.wetter) && !w.some((x) => WETTER_GENAU.has(x)) && !WETTER_SATZ.test(kern)
       && !/wie\s+(?:warm|kalt)\s+(?:ist|wird)\s+es|how\s+(?:warm|cold)\s+is\s+it/.test(kern)) {
     return null;
@@ -826,6 +836,40 @@ async function feiertagAntwort(w, kern, sprache, kontext) {
       : sp(sprache, `Nein, ${wann.toLowerCase()} ist kein gesetzlicher Feiertag (${land}).`,
         `No, ${wann.toLowerCase()} isn't a public holiday (${land}).`);
     return { schritt, text: text + QUELLE_NAGER(sprache) };
+  }
+  // 16.4.5: "Wie viele Feiertage hat Deutschland?" bekam die naechsten Feiertage.
+  if (/\bwie\s*viele\s+(?:gesetzliche\s+)?feiertage\b/.test(kern)
+      && !/\b(?:im|in|bis|noch)\b/.test(kern.replace(/\bin\s+(?:deutschland|oesterreich|der\s+schweiz)\b/, ""))) {
+    const anzahl = liste.filter((f) => f.bundesweit).length;
+    return { schritt, text: sp(sprache, `Bundesweit gibt es **${anzahl} gesetzliche Feiertage** `
+      + `(${land}, ${jahr}). Je nach Region kommen weitere dazu.`,
+      `There are **${anzahl} nationwide public holidays** (${land}, ${jahr}). Some regions have more.`)
+      + QUELLE_NAGER(sprache) };
+  }
+  // 16.4.5: "Welche Feiertage gibt es zwischen dem 1.12. und dem 31.12.?" antwortete nur zum 1.12.
+  const roh = falten(kontext.original || kern);
+  const bereich = /\b(?:zwischen\s+(?:dem\s+)?(.{3,20}?)\s+und\s+(?:dem\s+)?(.{3,20}?)|vom\s+(.{3,20}?)\s+bis\s+(?:zum\s+)?(.{3,20}?))\s*[?.!]*$/
+    .exec(roh);
+  if (bereich) {
+    const [aText, bText] = bereich.slice(1).filter(Boolean);
+    const a = datumAus(aText, jahr), b = datumAus(bText, jahr);
+    if (a?.datum instanceof Date && b?.datum instanceof Date) {
+      let von = a.datum, bis = b.datum;
+      if (bis < von && !/\d{4}/.test(bText)) bis = new Date(Date.UTC(von.getUTCFullYear() + 1, bis.getUTCMonth(), bis.getUTCDate()));
+      if (/\d{4}/.test(bText) && !/\d{4}/.test(aText)) von = new Date(Date.UTC(bis.getUTCFullYear(), von.getUTCMonth(), von.getUTCDate()));
+      if (bis < von) [von, bis] = [bis, von];
+      const vonIso = von.toISOString().slice(0, 10), bisIso = bis.toISOString().slice(0, 10);
+      const jahre = [...new Set([von.getUTCFullYear(), bis.getUTCFullYear()])];
+      const alle = [];
+      for (const j of jahre) alle.push(...(j === jahr ? liste : await dienste.feiertage(j, land, kontext.holen) || []));
+      const drin = alle.filter((f) => f.datum >= vonIso && f.datum <= bisIso);
+      const text = drin.length
+        ? sp(sprache, `Feiertage vom ${datum(vonIso)} bis ${datum(bisIso)}:\n`,
+          `Public holidays from ${datum(vonIso)} to ${datum(bisIso)}:\n`) + drin.map((f) => `- ${zeile(f)}`).join("\n")
+        : sp(sprache, `Vom ${datum(vonIso)} bis ${datum(bisIso)} gibt es keinen gesetzlichen Feiertag (${land}).`,
+          `There's no public holiday from ${datum(vonIso)} to ${datum(bisIso)} (${land}).`);
+      return { schritt, text: text + QUELLE_NAGER(sprache) };
+    }
   }
   // 16.4.5: "Ist der 3. Oktober ein Feiertag?", "Welche Feiertage gibt es im Dezember?" --
   // vorher kam nur die Liste der naechsten Feiertage.

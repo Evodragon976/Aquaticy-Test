@@ -56,7 +56,8 @@ test("Daten: Ostern, Countdown, Wochentag, Tage seit", () => {
   assert.match(datumAntwort("Wie viele Tage bis Weihnachten?", "de", JETZT).text, /\*\*60 Tage\*\*/);
   assert.match(datumAntwort("wie lange noch bis Ostern", "de", JETZT).text, /28\. März 2027/);
   assert.match(datumAntwort("tage bis zum 24.12.", "de", JETZT).text, /\*\*60 Tage\*\*/);
-  assert.match(datumAntwort("how many days until christmas", "en", JETZT).text, /\*\*60 days\*\*/);
+  // 16.4.5: Im Englischen ist "Christmas" der 25. Dezember (vorher zaehlte der Worker bis zum 24.).
+  assert.match(datumAntwort("how many days until christmas", "en", JETZT).text, /\*\*61 days\*\*/);
   assert.match(datumAntwort("Welcher Wochentag war der 9.11.1989?", "de", JETZT).text,
     /\*\*Donnerstag\*\*/);
   assert.match(datumAntwort("wie viele Tage seit dem 1.1.2026", "de", JETZT).text, /\*\*297 Tage\*\*/);

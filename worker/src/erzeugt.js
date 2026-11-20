@@ -547,13 +547,23 @@ export const DATEN = {
   },
   {
    "antworten": [
+    "Gefühle wie ein Mensch habe ich nicht – aber ich schreibe gern mit dir und helfe dir, wo ich kann.",
+    "Mögen kann ich als KI nicht wirklich. Aber ich bin gern für dich da!",
+    "Als KI empfinde ich nichts – trotzdem unterhalte ich mich gern mit dir. Was kann ich für dich tun?"
+   ],
+   "muster": "(?:magst\\s+du\\s+mich|hast\\s+du\\s+mich\\s+(?:gern|lieb))",
+   "name": "mag_mich",
+   "nicht_bei_offener_frage": false
+  },
+  {
+   "antworten": [
     "Gefühle wie ein Mensch habe ich nicht — ich bin eine KI. Aber ich helfe dir sehr gern!",
     "Ehrlich gesagt: Nein, ich empfinde nichts. Ich bin ein Programm, das Sprache versteht und Antworten schreibt.",
     "Als KI fühle ich nichts, aber ich bin darauf ausgelegt, freundlich und hilfreich zu sein.",
     "Ich habe keine echten Gefühle. Trotzdem: Mit dir zu schreiben, ist genau das, wofür ich gemacht bin.",
     "Müde oder traurig werde ich nie — ich bin Software. Dafür bin ich rund um die Uhr für dich da."
    ],
-   "muster": "(?:hast\\s+du\\s+gef(?:ü|ue)hle|bist\\s+(?:du|ihr)\\s+(?:glücklich|gluecklich|traurig|müde|muede|einsam|gelangweilt)|magst\\s+du\\s+mich|kannst\\s+du\\s+(?:fühlen|fuehlen|denken)|träumst\\s+du|traeumst\\s+du)",
+   "muster": "(?:hast\\s+du\\s+gef(?:ü|ue)hle|bist\\s+(?:du|ihr)\\s+(?:glücklich|gluecklich|traurig|müde|muede|einsam|gelangweilt)|kannst\\s+du\\s+(?:fühlen|fuehlen|denken)|träumst\\s+du|traeumst\\s+du)",
    "name": "gefuehle",
    "nicht_bei_offener_frage": false
   },

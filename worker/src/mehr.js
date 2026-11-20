@@ -213,7 +213,9 @@ const nterSonntag = (jahr, monat, n) => {
 // Namen besonderer Tage -> Datum in einem Jahr
 const ANLAESSE = [
   [/heiligabend|christmas\s+eve/, "Heiligabend", "Christmas Eve", (j) => new Date(Date.UTC(j, 11, 24))],
-  [/weihnachten|christmas/, "Weihnachten (Heiligabend)", "Christmas", (j) => new Date(Date.UTC(j, 11, 24))],
+  [/weihnachten/, "Weihnachten (Heiligabend)", "Christmas Eve", (j) => new Date(Date.UTC(j, 11, 24))],
+  // 16.4.5: Englisch ist "Christmas" der 25. -- vorher zaehlte der Worker bis zum 24.
+  [/christmas/, "1. Weihnachtstag", "Christmas Day", (j) => new Date(Date.UTC(j, 11, 25))],
   [/silvester|new\s+year'?s\s+eve/, "Silvester", "New Year's Eve", (j) => new Date(Date.UTC(j, 11, 31))],
   [/neujahr|new\s+year/, "Neujahr", "New Year's Day", (j) => new Date(Date.UTC(j, 0, 1))],
   [/ostern|easter/, "Ostern", "Easter", (j) => ostern(j)],
@@ -351,10 +353,27 @@ const ORT_ENDE = /\s+(?:heute|morgen|jetzt|gerade|today|tomorrow|now)$/;
 
 export async function weltzeitAntwort(text, sprache, kontext) {
   const t = glatt(text);
-  const m = /(?:wie\s*spaet\s+ist\s+es|wie\s*viel\s+uhr\s+ist\s+es|uhrzeit|what\s+time\s+is\s+it|time)\s+(?:gerade\s+|jetzt\s+)?(?:in|im|auf|bei|in\s+der|in\s+den)\s+(.{2,60})$/.exec(t);
+  const m = /(?:wie\s*spaet\s+ist\s+es|wie\s*viel\s+uhr\s+ist\s+es|uhrzeit|what\s+time\s+is\s+it|time)\s+(?:gerade\s+|jetzt\s+)?(?:in|im|auf|bei|in\s+der|in\s+den)\s+(.{2,80})$/.exec(t);
   if (!m) return null;
   const roh = String(text).trim().replace(/[?!.]+$/, "").split(/\s+/);
-  const name = roh.slice(roh.length - m[1].split(/\s+/).length).join(" ").replace(ORT_ENDE, "");
+  const ganz = roh.slice(roh.length - m[1].split(/\s+/).length).join(" ").replace(ORT_ENDE, "");
+  // 16.4.5: "in der Türkei" suchte "der Türkei", "in Tokio und in London" einen Ort
+  // "Tokio und in London".
+  const orte = ganz.split(/\s*,\s*|\s+(?:und|sowie|oder|and)\s+/i)
+    .map((o) => o.replace(/^(?:in|im|der|die|den|dem|das|the)\s+/i, "").trim()).filter(Boolean);
+  if (orte.length > 1) {
+    const texte = [];
+    for (const ort of orte.slice(0, 3)) {
+      const einzeln = await weltzeitAntwort(sp(sprache, `Wie spät ist es in ${ort}`,
+        `What time is it in ${ort}`), sprache, kontext);
+      if (einzeln) texte.push(einzeln.text);
+    }
+    if (texte.length) {
+      return { schritt: { type: "search", query: sp(sprache, `Uhrzeit ${orte.join(", ")}`,
+        `time ${orte.join(", ")}`) }, text: texte.join("\n\n") };
+    }
+  }
+  const name = orte[0] || ganz;
   const schritt = { type: "search", query: sp(sprache, `Uhrzeit ${name}`, `time ${name}`) };
   const platz = await dienste.ort(name, sprache, kontext.holen);
   if (platz?.fehler) return { schritt, text: DIENST_WEG(sprache) };
@@ -379,12 +398,14 @@ export async function weltzeitAntwort(text, sprache, kontext) {
 
 export async function sonneAntwort(text, sprache, kontext) {
   const t = glatt(text);
-  if (!/sonne\w*\s+(?:auf|unter)|sonnen(?:aufgang|untergang)|wann\s+wird\s+es\s+(?:hell|dunkel)|sunrise|sunset|sun\s+(?:rise|set)/.test(t)) {
+  if (!/sonne\w*\s+(?:\S+\s+){0,3}?(?:auf|unter)\b|sonnen(?:aufgang|untergang)|wann\s+wird\s+es\s+(?:hell|dunkel)|sunrise|sunset|sun\s+(?:rise|set)/.test(t)) {
     return null;
   }
   const m = /\b(?:in|im|fuer|bei|for|at)\s+([\p{L}][\p{L}\s.'-]{1,50})$/u.exec(String(text).trim()
     .replace(/[?!.]+$/, "").replace(/\s+(?:heute|morgen|today|tomorrow)$/i, ""));
-  let name = m ? m[1].trim() : "";
+  // 16.4.5: "Wann geht in Berlin die Sonne unter?" suchte "Berlin die Sonne unter".
+  let name = m ? m[1].trim().replace(/\s+(?:geht\s+)?(?:die\s+)?sonne\s+(?:auf|unter)$/i, "")
+    .replace(/\s+(?:auf|unter)$/i, "").trim() : "";
   let naeherung = false;
   if (!name && kontext.stadt) { name = kontext.stadt; naeherung = true; }
   if (!name) {
@@ -425,17 +446,21 @@ export function zufallAntwort(text, sprache = "de", zufall = Math.random) {
     const anzahl = Math.min(10, Math.max(1, Number(zahlwort(anzahlRoh)) || 1));
     // "einen W20", "zwei W20": vorher immer sechs Seiten (16.4.5)
     const seitenRoh = (/\b[wd](4|6|8|10|12|20|100)\b|\b(4|6|8|10|12|20|100)-?seitig/.exec(t) || []);
-    const seiten = Number(seitenRoh[1] || seitenRoh[2]) || 6;
-    const wuerfe = Array.from({ length: anzahl }, () => ganz(1, seiten));
+    let seiten = Number(seitenRoh[1] || seitenRoh[2]) || 6;
+    let wieOft = anzahl;
+    // 16.4.5: "Würfle 3W6", "2d20" -- vorher ein Wurf.
+    const kombi = /\b([1-9]|1\d|20)\s*[wd](4|6|8|10|12|20|100)\b/.exec(t);
+    if (kombi) { wieOft = Number(kombi[1]); seiten = Number(kombi[2]); }
+    const wuerfe = Array.from({ length: wieOft }, () => ganz(1, seiten));
     const summe = wuerfe.reduce((a, b) => a + b, 0);
-    return { text: `🎲 ${wuerfe.map((w) => `**${w}**`).join(" + ")}${anzahl > 1 ? ` = **${summe}**` : ""}` };
+    return { text: `🎲 ${wuerfe.map((w) => `**${w}**`).join(" + ")}${wieOft > 1 ? ` = **${summe}**` : ""}` };
   }
   if (/(?:wirf|werfe|wirfst|flip|toss)\s+(?:mal\s+)?(?:eine\s+|a\s+)?(?:muenze|coin)|kopf\s+oder\s+zahl|heads\s+or\s+tails|muenzwurf/.test(t)) {
     const seite = zufall() < 0.5;
     return { text: sp(sprache, `🪙 **${seite ? "Kopf" : "Zahl"}**!`, `🪙 **${seite ? "Heads" : "Tails"}**!`) };
   }
   // 16.4.5: "zahl zwischen" verbrauchte das "zwischen" -- die Grenzen galten dann nicht.
-  let m = /(?:zufallszahl|zufaellige\s+zahl|random\s+number|zahl(?=\s+zwischen))(?:\s+(?:zwischen|von|between|from)\s+(-?\d+)\s+(?:und|bis|and|to)\s+(-?\d+))?/.exec(t);
+  let m = /(?:zufallszahl|zufaellige\s+zahl|random\s+number|zahl(?=\s+zwischen)|number(?=\s+between))(?:\s+(?:zwischen|von|between|from)\s+(-?\d+)\s+(?:und|bis|and|to)\s+(-?\d+))?/.exec(t);
   if (m) {
     let a = m[1] !== undefined ? Number(m[1]) : 1, b = m[2] !== undefined ? Number(m[2]) : 100;
     if (a > b) [a, b] = [b, a];

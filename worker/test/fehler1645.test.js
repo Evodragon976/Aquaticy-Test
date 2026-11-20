@@ -119,3 +119,31 @@ test("Mehr Wetterwörter, Ort nach dem Tag, Definitionen", async () => {
   }
   assert.match(await frag("Was ist das Wetter?"), /^Für welchen Ort/);
 });
+
+test("Würfelschreibweise, allgemeine Fragen, Ort hinter einer Tätigkeit", async () => {
+  const { ortAus } = await import("../src/antworten.js");
+  const drei = zufallAntwort("Würfle 3W6", "de", () => 0.5).text;
+  assert.equal(drei, "🎲 **4** + **4** + **4** = **12**");
+  assert.equal(ortAus("Ist das Wetter gut für eine Radtour in Köln?"), "Köln");
+  assert.equal(ortAus("Wetter in Neustadt in Holstein"), "Neustadt in Holstein");
+  assert.equal(await frag("Ist Regen gut für Pflanzen?"), "");
+  assert.equal(await frag("Warum ist Regen nass?"), "");
+});
+
+test("Sonne mit Ort davor, Währung und Artikel in Rechnungen", async () => {
+  assert.match(await frag("Was sind 15 Prozent von 200 Euro?"), /15 % von 200 = \*\*30\*\*/);
+  assert.match(await frag("Was ist die Wurzel aus 144?"), /\*\*12\*\*/);
+  assert.match(await frag("Was sind 3 Euro plus 4 Euro?"), /\*\*7\*\*/);
+});
+
+test("Christmas ist im Englischen der 25. Dezember", async () => {
+  assert.match(await frag("How many days until Christmas?", "en"), /36 days.*25 December 2026/s);
+  assert.match(await frag("Wie viele Tage bis Weihnachten?"), /35 Tage/);
+});
+
+test("Englische Wendungen im Worker", async () => {
+  assert.ok(await frag("Do I need an umbrella in London?", "en"));
+  assert.equal(await frag("Umbrella Academy cast", "en"), "");
+  assert.match(await frag("Pick a number between 1 and 10", "en"), /between 1 and 10/);
+  assert.match(await frag("What is 5 factorial?", "en"), /\*\*120\*\*/);
+});
