@@ -156,7 +156,27 @@ export function einheitenAntwort(text, sprache = "de") {
     .replace(/(\d+(?:[.,]\d+)?)\s*(?:fuss|ft|')\s*(\d+(?:[.,]\d+)?)\s*(?:zoll|inch|inches|")/g,
       (_, a, b) => String(Number(a.replace(",", ".")) * 12 + Number(b.replace(",", "."))).replace(".", ",") + " zoll")
     .replace(/^(?:wie\s*viel\s+(?:ist|sind)\s+)?ein(?:e|en|em)?\s+(?=\S+\s+(?:in|nach|zu|to)\s)/, "1 ");
-  const m = new RegExp(`(${ZAHL})\\s*(${EINHEIT})\\s+(?:in|nach|zu|to|into|als|=|sind\\s+wie\\s*viel(?:e)?)\\s+(${EINHEIT})$`).exec(t);
+  // 16.4.5: "Wie viele Gramm sind ein Pfund?", "How many feet in a mile?" -- die Frage nach
+  // vorn gestellt; Python konnte das schon.
+  const vorn = new RegExp(`^(?:wie\\s*viele?|how\\s+many)\\s+(${EINHEIT})\\s+(?:sind|ist|hat|haben|ergeben|machen|are|is|in)\\s+(?:(${ZAHL})|ein(?:e|en|em)?|one|an?)\\s*(${EINHEIT})$`).exec(t);
+  const umgestellt = vorn ? `${vorn[2] || "1"} ${vorn[3]} in ${vorn[1]}` : t;
+  // 16.4.5: "3 Stunden 20 Minuten in Minuten" -- vorher "20 Minuten sind 20 Minuten".
+  const dauer = /^(?:(\d+(?:[.,]\d+)?)\s*(?:stunden?|std|h|hours?)\s+(?:und\s+|and\s+)?)?(?:(\d+(?:[.,]\d+)?)\s*(?:minuten?|min|minutes?)\s*(?:und\s+|and\s+)?)?(?:(\d+(?:[.,]\d+)?)\s*(?:sekunden?|sek|s|seconds?))?\s+(?:in|nach|zu|to|into)\s+(stunden?|h|minuten?|min|sekunden?|s|hours|minutes|seconds)$/
+    .exec(umgestellt.replace(/^(?:wie\s*viel(?:e)?\s+(?:ist|sind)|was\s+(?:ist|sind))\s+/, ""));
+  if (dauer && [dauer[1], dauer[2], dauer[3]].filter(Boolean).length >= 2) {
+    const sek = (dauer[1] ? alsZahl(dauer[1]) * 3600 : 0) + (dauer[2] ? alsZahl(dauer[2]) * 60 : 0)
+      + (dauer[3] ? alsZahl(dauer[3]) : 0);
+    const ziel = dauer[4];
+    const faktor = /^(?:stunde|h)/.test(ziel) ? 3600 : /^min/.test(ziel) ? 60 : 1;
+    const englisch = /^(?:hours|minutes|seconds)$/.test(ziel) || sprache === "en";
+    const namen = englisch ? ["h", "min", "s"] : ["Std.", "Min.", "Sek."];
+    const vorn = [dauer[1], dauer[2], dauer[3]].map((w, i) => (w ? `${zahl(alsZahl(w), sprache)} ${namen[i]}` : ""))
+      .filter(Boolean).join(" ");
+    const nameZiel = faktor === 3600 ? ["Stunden", "hours"] : faktor === 60 ? ["Minuten", "minutes"] : ["Sekunden", "seconds"];
+    const wert = zahl(sek / faktor, sprache, 4);
+    return { text: englisch ? `${vorn} is **${wert} ${nameZiel[1]}**.` : `${vorn} sind **${wert} ${nameZiel[0]}**.` };
+  }
+  const m = new RegExp(`(${ZAHL})\\s*(${EINHEIT})\\s+(?:in|nach|zu|to|into|als|=|sind\\s+wie\\s*viel(?:e)?)\\s+(${EINHEIT})$`).exec(umgestellt);
   if (!m) return null;
   const wert = alsZahl(m[1]);
   const name = (roh) => roh.replace(/^grad\s+/, "").replace(/\s+/g, " ").trim();
@@ -182,7 +202,11 @@ export function einheitenAntwort(text, sprache = "de") {
   // "1 Stunde ist", nicht "1 Stunden sind" (16.4.5)
   const eins = wert === 1;
   const vonDe = eins ? (EINZAHL[a.de] || a.de) : a.de;
-  const vonEn = eins ? a.en.replace(/(?<=[a-z])s$/, "") : a.en;
+  // 16.4.5: vorher "1 inche", "1 feet", "1 German pounds (500 g)".
+  const EINZAHL_EN = { inches: "inch", feet: "foot", "German pounds (500 g)": "German pound (500 g)",
+    "football pitches": "football pitch", "US cups": "US cup", "US gallons": "US gallon",
+    "US pints": "US pint", "nautical miles": "nautical mile" };
+  const vonEn = eins ? (EINZAHL_EN[a.en] || a.en.replace(/(?<=[a-z])s$/, "")) : a.en;
   return { text: sp(sprache, `${zahl(wert, sprache)} ${vonDe} ${eins ? "ist" : "sind"} **${zahl(ergebnis, sprache, stellen)} ${b.de}**.`,
     `${zahl(wert, sprache)} ${vonEn} is **${zahl(ergebnis, sprache, stellen)} ${b.en}**.`) };
 }
@@ -232,6 +256,29 @@ const ANLAESSE = [
   [/winteranfang|winter\b/, "Winteranfang (etwa)", "start of winter (approx.)", (j) => new Date(Date.UTC(j, 11, 21))],
 ];
 
+// 16.4.5: bundesweite Feiertage fuer die Zahl der Arbeitstage (wie aquaticy/standard.py).
+function bundesweiteFeiertage(j) {
+  const o = ostern(j);
+  return [new Date(Date.UTC(j, 0, 1)), tagNach(o, -2), tagNach(o, 1), new Date(Date.UTC(j, 4, 1)),
+    tagNach(o, 39), tagNach(o, 50), new Date(Date.UTC(j, 9, 3)), new Date(Date.UTC(j, 11, 25)),
+    new Date(Date.UTC(j, 11, 26))].map((d) => d.getTime());
+}
+
+/** Montag bis Freitag ohne bundesweite Feiertage, von und bis mitgezaehlt. */
+export function arbeitstage(von, bis) {
+  if (bis < von) return 0;
+  const frei = new Set();
+  for (let j = von.getUTCFullYear(); j <= bis.getUTCFullYear(); j++) {
+    for (const t of bundesweiteFeiertage(j)) frei.add(t);
+  }
+  let n = 0;
+  for (let d = von; d <= bis; d = tagNach(d, 1)) {
+    const w = d.getUTCDay();
+    if (w !== 0 && w !== 6 && !frei.has(d.getTime())) n++;
+  }
+  return n;
+}
+
 /** Ein Datum aus "24.12.", "3.10.1990", "1. mai 2027", "may 1", "2027-03-28". */
 export function datumAus(t, jetztJahr) {
   let m = /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/.exec(t);
@@ -274,7 +321,9 @@ export function datumAntwort(text, sprache = "de", jetzt = new Date()) {
       zurueck ? `${n} ${einheit} ago it was **${zeig(d)}**.` : `In ${n} ${einheit} it will be **${zeig(d)}**.`) };
   }
   // Countdown: "wie viele Tage bis Weihnachten", "wie lange noch bis zum 1. mai"
-  let m = /(?:wie\s*(?:viele|lange)\s+(?:tage\s+)?(?:(?:ist\s+es\s+|sind\s+es\s+|dauert\s+es\s+)?noch\s+)?bis|how\s+(?:many\s+days|long)\s+(?:is\s+it\s+)?(?:until|till|to)|countdown\s+(?:bis|to)|tage\s+bis)\s+(?:zu[mr]?\s+|zu\s+)?(.+)$/.exec(t);
+  // 16.4.5: "Wie viele Tage sind es bis Weihnachten?" und "Wie viele Wochen bis ...?" gingen
+  // vorher an die Feiertage (Antwort: Datum des 1. Weihnachtstags).
+  let m = /(?:wie\s*(?:viele|lange)\s+(?:(?:werk|arbeits)?tage\s+|wochen\s+)?(?:(?:ist|sind|dauert)\s+es\s+)?(?:noch\s+)?bis|how\s+(?:many\s+days|long)\s+(?:is\s+it\s+)?(?:until|till|to)|countdown\s+(?:bis|to)|tage\s+bis)\s+(?:zu[mr]?\s+|zu\s+)?(.+)$/.exec(t);
   if (m) {
     const ziel = m[1];
     let datum = null, name = "", istDatum = false;
@@ -314,8 +363,15 @@ export function datumAntwort(text, sprache = "de", jetzt = new Date()) {
       ` – about ${Math.floor(tage / 7)} weeks`) : "";
     const wann = istDatum ? "" : ` (${zeig(datum)})`;
     const tagWort = sp(sprache, tage === 1 ? "Tag" : "Tage", tage === 1 ? "day" : "days");
+    // 16.4.5: "Wie viele Werktage bis Weihnachten?" nannte vorher alle Kalendertage.
+    let arbeit = "";
+    if (sprache !== "en" && /\b(?:werk|arbeits)tage?\b/.test(t) && tage >= 1 && tage <= 3660) {
+      const n = arbeitstage(tagNach(heute, 1), tagNach(heute, tage - 1));
+      arbeit = ` Dazwischen liegen **${zahl(n, sprache)} ${n === 1 ? "Arbeitstag" : "Arbeitstage"}** `
+        + "(Montag bis Freitag, ohne bundesweite Feiertage).";
+    }
     return { text: sp(sprache,
-      `Bis ${istDatum ? "zum " : ""}${name} sind es noch **${zahl(tage, sprache)} ${tagWort}**${wochen}.${wann}`,
+      `Bis ${istDatum ? "zum " : ""}${name} sind es noch **${zahl(tage, sprache)} ${tagWort}**${wochen}.${wann}${arbeit}`,
       `**${zahl(tage, sprache)} ${tagWort}** to go until ${name}${wochen}.${wann}`) };
   }
   // Wochentag eines Datums: "welcher wochentag war der 3.10.1990", "what day was july 4 1776"

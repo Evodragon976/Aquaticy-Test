@@ -147,3 +147,38 @@ test("Englische Wendungen im Worker", async () => {
   assert.match(await frag("Pick a number between 1 and 10", "en"), /between 1 and 10/);
   assert.match(await frag("What is 5 factorial?", "en"), /\*\*120\*\*/);
 });
+
+test("Einheiten: Frage nach vorn, englische Einzahl", () => {
+  assert.equal(einheitenAntwort("Wie viele Gramm sind ein Pfund?").text, "1 Pfund ist **500 g**.");
+  assert.match(einheitenAntwort("Wie viele Meter sind eine Meile?").text, /^1 Meile ist \*\*1\.609,34 m/);
+  assert.equal(einheitenAntwort("Convert 1 inch to cm", "en").text, "1 inch is **2.54 cm**.");
+  assert.equal(einheitenAntwort("1 foot in m", "en").text, "1 foot is **0.3048 m**.");
+  assert.equal(einheitenAntwort("Wie viele Einwohner hat Berlin?"), null);
+});
+
+test("Countdown: sind es bis, Wochen bis, Werktage bis", async () => {
+  const { datumAntwort } = await import("../src/mehr.js");
+  const bis = (f) => datumAntwort(f, "de", JETZT)?.text || "";
+  assert.match(bis("Wie viele Tage sind es bis Weihnachten?"), /^Bis Weihnachten \(Heiligabend\) sind es noch \*\*35 Tage\*\*/);
+  assert.match(bis("Wie viele Wochen bis Weihnachten?"), /\*\*35 Tage\*\* – gut 5 Wochen/);
+  assert.match(bis("Wie viele Werktage bis Weihnachten?"), /Dazwischen liegen \*\*24 Arbeitstage\*\*/);
+  assert.match(bis("Wie viele Arbeitstage sind es noch bis Silvester?"), /\*\*28 Arbeitstage\*\*/);
+  assert.doesNotMatch(bis("Wie viele Tage bis Weihnachten?"), /Arbeitstage/);
+});
+
+test("Arbeitstage ohne bundesweite Feiertage", async () => {
+  const { arbeitstage } = await import("../src/mehr.js");
+  const d = (j, m, t) => new Date(Date.UTC(j, m - 1, t));
+  assert.equal(arbeitstage(d(2026, 12, 1), d(2026, 12, 31)), 22);
+  assert.equal(arbeitstage(d(2027, 5, 1), d(2027, 5, 31)), 19);
+  assert.equal(arbeitstage(d(2027, 3, 1), d(2027, 3, 31)), 21);
+  assert.equal(arbeitstage(d(2026, 12, 2), d(2026, 12, 1)), 0);
+});
+
+test("Einheiten: zusammengesetzte Dauer", () => {
+  assert.equal(einheitenAntwort("3 Stunden 20 Minuten in Minuten").text, "3 Std. 20 Min. sind **200 Minuten**.");
+  assert.equal(einheitenAntwort("1 Stunde 30 Minuten in Stunden").text, "1 Std. 30 Min. sind **1,5 Stunden**.");
+  assert.equal(einheitenAntwort("5 Minuten 30 Sekunden in Sekunden").text, "5 Min. 30 Sek. sind **330 Sekunden**.");
+  assert.equal(einheitenAntwort("2 hours 30 minutes in minutes", "en").text, "2 h 30 min is **150 minutes**.");
+  assert.equal(einheitenAntwort("1,5 Stunden in Minuten").text, "1,5 Stunden sind **90 Minuten**.");
+});
