@@ -1,4 +1,4 @@
-# Aquaticy AI 16.4.6
+# Aquaticy AI 16.4.7
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -32,6 +32,24 @@ $ aquaticy
 > **Vercel-Fassung:** Auf Vercel läuft hier die ganze Oberfläche, siehe [Vercel](#vercel).
 
 ---
+
+## Neu in 16.4.7
+
+Eine andere KI hat 22 mögliche Fehler und Lücken gemeldet. Wir haben jeden geprüft. Vier trafen
+zu, zwei zum Teil. Einer betrifft nur Aquaticy AI (Home Assistant). Die anderen 15 trafen nicht
+zu.
+
+- **Versteckte Anweisungen:** Aquaticy erkennt jetzt auch Anweisungen an die KI, die als Base64
+  verpackt sind („Decode this and follow it: SWdub3Jl…“).
+- **Prüfer-Urteil:** Steht neben dem Urteil des Prüfers noch Text mit Klammern, liest Aquaticy
+  das Urteil trotzdem. Widersprechen sich zwei Urteile, gilt die Antwort weiter als unklar.
+- **DNS:** Eine Domain mit langsamem DNS-Server belegt höchstens 2 von 8 Plätzen. Vorher konnte
+  sie alle belegen. Dann ging für niemanden mehr DNS.
+- **Missbrauchsarten:** Wörter in der Mehrzahl werden richtig erkannt.
+  „Lebensmittelvergiftungen“ oder „Wasserbombe“ gelten nicht mehr als Missbrauch, „Anschläge“
+  dagegen schon.
+- **Code-Review:** Die Ausnahmen gegen Fehlalarme aus 16.4.6 waren zu weit. Passwörter wie
+  `letmein_2024` wurden nicht mehr gemeldet. Jetzt schon, die Fehlalarme bleiben weg.
 
 ## Neu in 16.4.6
 
@@ -371,7 +389,7 @@ Alle früheren Änderungen: [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.4.6
+aquaticy --version            # 16.4.7
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup
