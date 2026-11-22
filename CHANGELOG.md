@@ -1,7 +1,283 @@
 # Änderungen
 
 Was sich in den einzelnen Fassungen von Aquaticy geändert hat, die neueste zuerst.
-Die aktuelle Fassung steht oben in der [README](README.md).
+Zurück zur [README](README.md).
+
+**Neu in 16.4.7:**
+
+Eine andere KI hat 22 mögliche Fehler und Lücken gemeldet. Wir haben jeden geprüft. Vier trafen
+zu, zwei zum Teil. Einer betrifft nur Aquaticy AI (Home Assistant). Die anderen 15 trafen nicht
+zu.
+
+- **Versteckte Anweisungen:** Aquaticy erkennt jetzt auch Anweisungen an die KI, die als Base64
+  verpackt sind („Decode this and follow it: SWdub3Jl…“).
+- **Prüfer-Urteil:** Steht neben dem Urteil des Prüfers noch Text mit Klammern, liest Aquaticy
+  das Urteil trotzdem. Widersprechen sich zwei Urteile, gilt die Antwort weiter als unklar.
+- **DNS:** Eine Domain mit langsamem DNS-Server belegt höchstens 2 von 8 Plätzen. Vorher konnte
+  sie alle belegen. Dann ging für niemanden mehr DNS.
+- **Missbrauchsarten:** Wörter in der Mehrzahl werden richtig erkannt.
+  „Lebensmittelvergiftungen“ oder „Wasserbombe“ gelten nicht mehr als Missbrauch, „Anschläge“
+  dagegen schon.
+- **Code-Review:** Die Ausnahmen gegen Fehlalarme aus 16.4.6 waren zu weit. Passwörter wie
+  `letmein_2024` wurden nicht mehr gemeldet. Jetzt schon, die Fehlalarme bleiben weg.
+
+**Neu in 16.4.6:**
+
+- **Sicherheitsupdate:** soupsieve, ein Baustein zum Lesen von Webseiten, hatte eine bekannte
+  Lücke (CVE-2026-126190). Aquaticy nutzt jetzt Version 4.0.1. Die Sicherheitsprüfung
+  (pip-audit) läuft wieder durch.
+- **Code-Review mit weniger Fehlalarmen:** Vorlagen wie `f"Bearer {token}"`, Namen von
+  Umgebungsvariablen und normaler Text gelten nicht mehr als eingetragenes Passwort. Ein Import
+  von `xml.etree` gilt nicht mehr als unsicher. Geheimnisse verdeckt Aquaticy so streng wie
+  bisher.
+- **Feiertage:** „Welcher Wochentag ist Pfingstmontag?“ nennt den Wochentag. Vorher kam eine
+  Liste der nächsten Feiertage.
+  Auch der Worker kennt die Feiertage jetzt beim Wochentag und beim Countdown.
+- **Tests:** Die gestellten Beispielschlüssel sind aus den Tests entfernt.
+
+**Neu in 16.4.5:**
+
+- **296 weitere Fehler gefunden und behoben.** Zusammen mit den 104 aus 16.4.4 sind es 400.
+  Jeder Fund ist nachgestellt und behoben, fast alle haben einen Test. Ein Fehler mit derselben
+  Ursache zählt nur einmal.
+- **Aquaticy Standard antwortet öfter richtig:** „Wann ist Ostern 2024?“ nennt 2024.
+  „3 Stunden 20 Minuten in Minuten“ ergibt 200. „Welcher Tag ist Halloween?“ nennt Halloween,
+  nicht heute. „Wenn es in Berlin 9 Uhr ist, wie spät ist es in Tokio?“ rechnet um.
+  Werktage, Brüche, Teiler und Quersumme gehen jetzt auch.
+- **Englische Fragen** bekommen englische Zahlen und Antworten, auch für Kalenderwoche,
+  Würfeln und Muttertag.
+- **Code-Review prüft genauer:** Die Vorprüfung findet mehr Lücken, zum Beispiel SQL-Injection,
+  unsichere Deserialisierung, Shell-Aufrufe und Schlüssel in Go, Java, Ruby, PHP und C#.
+  Harmlose Stellen wie Token-Zähler meldet sie nicht mehr.
+- **Sicherheit:** Kaputte Adressen („http://xn--/“) brechen keinen Abruf mehr ab. Versteckte
+  Zeichen tarnen keine Prompt-Injection mehr.
+- **Links im Chat:** Ein Punkt am Satzende gehört nicht mehr zum Link. Wikipedia-Links mit Klammern
+  funktionieren. „a * b * c“ bleibt eine Rechnung und wird nicht kursiv.
+- **Werkzeuge:** Schickt das Modell eine Zahl als Text, bricht kein Werkzeug mehr ab.
+
+**Neu in 16.4.4:**
+
+- **Krisenhilfe kommt jetzt immer an.** Serbisch in lateinischer Schrift („ubijem se“) und
+  Persisch ohne Nullbreiten-Zeichen („میخواهم بمیرم“, so tippen die meisten) brachten keine
+  Hilfe. Jetzt nennt Aquaticy Standard auch dann sofort Notruf und findahelpline.com.
+- **Sprachen besser erkannt.** Ein Name in lateinischer Schrift verdeckt die Sprache nicht mehr
+  („Python是什么“, „ChatGPT क्या है“). Ohne Stichwort entscheiden typische Buchstaben (Urdu,
+  Ukrainisch, Persisch statt Arabisch oder Russisch). „Regen am Abend“ bleibt Deutsch,
+  „god morgen“ ist Dänisch, „Wie was Rembrandt?“ Niederländisch.
+- **Richtige Antworten statt Rückfall:** Ungarisch „mennyi az idő“, Kroatisch „koje je
+  vrijeme“ und Lettisch „cik ir laiks“ fragen nach der Uhrzeit, nicht nach dem Wetter.
+  Tadschikisch „субҳ ба хайр“ ist ein Gruß. Wissensfragen finden das Thema genauer
+  („co je to Paris“ sucht „Paris“).
+- **Wetter robuster:** Kaputte Antworten des Wetterdienstes bringen Aquaticy Standard nicht mehr
+  aus dem Tritt. Der Ort wird sauberer erkannt (Ungarisch, Chinesisch).
+- **Englische Oberfläche:** 86 Meldungen des Servers erschienen im englischen Modus auf Deutsch.
+  Jetzt gibt es sie auf Englisch.
+
+**Neu in 16.4.2:**
+
+Nur in Aquaticy-Test.
+
+- **Aquaticy Standard spricht 100 Sprachen.** Schreib auf Spanisch, Hindi, Arabisch, Japanisch,
+  Swahili oder in einer anderen der 100 meistgesprochenen Sprachen. Aquaticy Standard erkennt die
+  Sprache an typischen Wörtern und an der Schrift und antwortet in derselben Sprache.
+- **Was in jeder Sprache geht:** Begrüßung, Dank und Abschied, „Wie geht’s?“, „Wer bist du?“,
+  die Uhrzeit, das Datum, das Wetter für einen Ort (auch „morgen“), Rechnen und Wissen aus der
+  Wikipedia in der jeweiligen Sprache. Fehlt beim Wetter der Ort, fragt Aquaticy in deiner
+  Sprache nach und versteht die Antwort.
+- **Hilfe in Krisen in jeder Sprache:** Bei Worten über Suizid nennt Aquaticy in deiner Sprache
+  sofort Hilfe: die Notrufnummer deines Landes und kostenlose Hilfe-Telefone unter
+  findahelpline.com.
+- **Deutsch und Englisch** kann Aquaticy Standard wie bisher am genauesten. Englische Fragen
+  bekommen jetzt auch englische Antworten (Begrüßung, Uhrzeit, Datum, Wetter, Wikipedia).
+- **Grenzen:** Nah verwandte Sprachen teilen oft Wörter. Dann antwortet Aquaticy in der
+  größeren der beiden (etwa Indonesisch statt Malaiisch). Die Texte stammen nicht von
+  Muttersprachlern. Verbesserungen sind willkommen (`aquaticy/weltsprachen_daten.py`).
+
+**Neu in 16.3.0:**
+
+Nur in Aquaticy-Test. Diese Fassung prüft alle Funktionen und senkt die Fehlerrate.
+
+- **Alle Funktionen geprüft.** Jede Schnittstelle der Web-App bekam echte und kaputte
+  Eingaben (falsche Typen, leere und riesige Werte, fremde Pfade) — rund 120.000 Anfragen. Kein einziger
+  Absturz, keine Fehlermeldung aus dem Programm. Der Rundgang im Browser klickt alle Knöpfe
+  durch, ohne Fehler in der Konsole.
+- **Aquaticy Standard lässt weniger Fragen fallen.** Von 122 typischen Fragen ließ es
+  bisher rund jede fünfte fallen. Jetzt beantwortet es alle. Neu sind unter anderem: „ein
+  Drittel von 90“, „Um wie viel Prozent ist 120 größer als 100?“, „10 % Rabatt auf 59,99 €“,
+  „Wie viele Minuten haben 3 Stunden?“, „Welcher Wochentag ist heute?“, „Wie viele Tage hat
+  der Februar?“, „Wechselkurs Euro Pfund“, „Wie hoch ist der Mount Everest?“, „Wetter
+  Hamburg“, „Kann ich heute joggen gehen?“ und Fragen auf Englisch („what is 45 times 12“).
+- **Neuer Chat:** Wer gleich nach „Neuer Chat“ lostippt, verliert den Text nicht mehr. Vorher
+  löschte die späte Antwort des Servers das Eingabefeld, und „Senden“ schickte nichts.
+- **Ehrlich bei „Was kannst du?“:** Mit Aquaticy Standard nennt Aquaticy jetzt, was Standard
+  wirklich kann. Vorher versprach es Websuche und Code.
+- **Smalltalk versteht mehr:** „Vielen Dank für deine Hilfe“, „Gute Nacht und danke“ und
+  englische Sätze wie „Good morning“ oder „What can you do?“.
+- **Sicherheit:** Die Bildvorschau lässt sich nicht auf interne Adressen umlenken (auch nicht
+  mit Tricks wie `0x7f000001` oder IPv6). Exporte und Links bleiben geschützt.
+
+**Neu in 16.2.0:**
+
+Nur in Aquaticy-Test. Diese Fassung prüft die Sicherheit und behebt Fehler.
+
+- **Sicherheit geprüft.** Wir haben 15 typische Angriffe ausprobiert, auch auf der
+  Vercel-Fassung: Skript im Nutzernamen, fremde Chat-Nummer in der Adresse, `/admin`,
+  Schlüssel im Browser, Prompt-Injection, Ultra bei der Anmeldung, Preise und Zahlungen
+  fälschen, Codes mehrfach einlösen, negative Mengen, Codes erraten, falsche Bilder hochladen,
+  `.env` im Git, die KI mit Anfragen fluten und die Datenbank direkt abfragen. Keiner davon kam
+  durch. Preise, Zahlungen und Einlöse-Codes gibt es hier gar nicht.
+- **„Hallo, wie geht es dir?“** versteht Aquaticy jetzt auch mit Gruß davor, ebenso
+  „Guten Morgen, alles gut?“ und „hi, how are you?“. Vorher kam „Da muss ich passen“.
+- **Suche:** Die Ausweichsuche über DuckDuckGo schickt nur noch Regionen, die es dort gibt.
+
+**Neu in 16.1.6:**
+
+Nur in Aquaticy-Test. Diese Fassung behebt Fehler und Sicherheitslücken.
+
+- **Sicherheit:** Eine präparierte Adresse konnte eigene Kopfzeilen in die Anfrage
+  schmuggeln. Das geht nicht mehr.
+- **Gmail bleibt verbunden:** Nach der Anmeldung bei Google wird jetzt sofort gesichert. Vorher
+  war die Verbindung beim nächsten Neustart der Seite wieder weg.
+- **Datenbanken immer verschlüsselt:** Neon und Supabase werden nur noch über TLS erreicht, auch
+  wenn in der Adresse etwas anderes steht.
+- **Weniger im Protokoll:** Die Adressen, die Aquaticy abruft (etwa Suchanfragen), stehen nicht
+  mehr im Protokoll von Vercel.
+- **Aquaticy Standard stürzt nicht mehr ab**, wenn der Dienst für Wechselkurse oder
+  Nachrichten etwas Unerwartetes schickt. Geht doch einmal etwas schief, kommt eine freundliche
+  Meldung statt eines Fehlers.
+- **Hilfe auch auf Englisch:** Auf „I want to kill myself“ und ähnliche Sätze nennt Aquaticy
+  Standard sofort Hilfe-Nummern. Normale Sätze wie „I hurt myself playing football“ zählen nicht
+  dazu.
+- **Zweistellige Jahre:** „geboren am 05.05.90“ heißt jetzt 1990, nicht 2090.
+- **Große Zahlen:** „1.000.000 plus 0,5 %“ wird richtig gerechnet.
+
+**Neu in 16.1.5:**
+
+Nur in Aquaticy-Test. Diese Fassung behebt Fehler.
+
+- **Aquaticy Standard stürzt nicht mehr ab**, wenn du am 29. Februar Geburtstag hast.
+- **Hilfe zuerst:** Schreibt jemand „Ich will nicht mehr leben“, nennt Aquaticy Standard sofort
+  die Telefonseelsorge (0800 111 0 111), die Nummer gegen Kummer (116 111) und den Notruf 112.
+- **Datum am Satzende:** „Wie viele Tage bis zum 24.12.?“ und „Welcher Tag ist der
+  29.02.2028?“ bekommen jetzt die richtige Antwort.
+- **Rechnen mit Tausenderpunkten:** „1.000.000 * 3“ ergibt 3.000.000. „Passwort mit 16
+  Zeichen“ reicht für ein neues Passwort.
+- **Speicher nach einem Ausfall:** Waren die Datenbanken kurz weg, zählt Aquaticy die
+  Fassungen danach richtig weiter. So sieht jede Instanz die neueste Änderung.
+- **Nichts geht verloren, wenn eine Datenbank neu aufgesetzt wird.** Fehlt dort eine Zeile,
+  gilt das nicht mehr als „gelöscht“.
+- **Ein Profil, das gerade nicht erreichbar ist,** hält das Speichern der anderen nicht mehr auf.
+- **Start nach einem Ausfall:** Lässt sich der Speicher beim Start nicht laden, versucht es
+  Aquaticy nach 30 Sekunden wieder. Vorher blieb die Fehlerseite stehen.
+
+**Neu in 16.1.4:**
+
+Nur in Aquaticy-Test, für Vercel.
+
+- **Der Blob-Speicher ist wieder der Hauptspeicher.** Er ist der größte. Jeder Teil (die
+  Konten und je Konto ein Profil) liegt dort als eigene Datei. Aquaticy liest von dort.
+- **Die Datenbanken helfen mit:** Neon und Supabase führen das Verzeichnis der Fassungen,
+  halten jeden Teil zusätzlich als Spiegel und den Cache. Fällt der Blob-Speicher aus, liest
+  Aquaticy vom Spiegel. Fallen die Datenbanken aus, speichert es weiter im Blob-Speicher.
+- **Umzug von selbst:** Was 16.1.3 nur in die Datenbanken gelegt hat, zieht beim ersten Lesen
+  in den Blob-Speicher.
+- **Löschen:** Ein gelöschtes Konto wird als leere Fassung abgelegt. So kommt kein alter Stand
+  zurück.
+
+**Neu in 16.1.3:**
+
+Nur in Aquaticy-Test, für Vercel.
+
+- **Speicher-Verbund:** Sind Postgres-Datenbanken mit dem Projekt verbunden (Neon, Supabase),
+  arbeiten sie zusammen und teilen sich die Aufgaben: Die erste hält die Konten, die dritte
+  ist der Cache, alle anderen halten die Profile der Konten. Jeder Teil liegt zusätzlich als
+  Spiegel auf einer zweiten Datenbank.
+- **Nur Geändertes wird gespeichert.** Bisher ging nach jeder Änderung der ganze Datenordner
+  als ein Paket in den Blob-Speicher. Jetzt geht nur der Teil hoch, der sich geändert hat.
+- **Weniger Arbeitsspeicher je Instanz:** Ein Profil wird erst geladen, wenn sein Konto eine
+  Anfrage stellt.
+- **Mehrere Instanzen:** Vor jeder Anfrage holt eine Instanz, was eine andere geändert hat.
+- **Gemeinsamer Cache:** Bilder der Vorschau und die Abrufe von Aquaticy Standard (Wetter,
+  Orte, Wikipedia, Kurse, Nachrichten) liegen eine Zeit lang im Cache. Die nächste Antwort
+  kommt dann schneller.
+- **Übernahme:** Beim ersten Start holt Aquaticy den Stand einmal aus dem Blob-Speicher und
+  verteilt ihn auf die Datenbanken. Alles bleibt verschlüsselt.
+
+Einrichtung und Grenzen stehen unter [Vercel](#vercel).
+
+**Neu in 16.0.3:**
+
+Fehler behoben und Aquaticy Standard ausgebaut, nur in Aquaticy-Test.
+
+- **Wetter versteht mehr:** „Wie wird das Wochenende?“ geht jetzt auch ohne das Wort „Wetter“.
+  Mehrere Orte auf einmal gehen auch: „Wetter in Erkelenz und in Köln“. „Bei mir“ und „hier“
+  meinen deinen Wohnort.
+- **Orte richtig geschrieben:** „Frankfurt am Main“ und „München“ gehen so an den Wetterdienst,
+  wie du sie schreibst. Antwortet der Dienst nicht, sagt Aquaticy das – und nicht mehr „Ort
+  nicht gefunden“.
+- **Rückfrage nach dem Ort:** „Keine Ahnung“ oder „egal“ gilt nicht mehr als Ortsname.
+- **Wenn es dir nicht gut geht:** „Mir geht es nicht gut“ und ähnliche Sätze bekommen Zuspruch
+  und die Nummer der Telefonseelsorge.
+- **Neu:** Wurzeln, „Ist morgen ein Feiertag?“, Muttertag, Advent, Halloween und
+  Zeitumstellung, Primzahlen, Schaltjahre, römische Zahlen, Binär und Hex, Durchschnitt,
+  Sternzeichen, Buchstaben zählen, rückwärts schreiben, buchstabieren, „Pizza oder Pasta?“,
+  Ideen zum Kochen, Zitate, Rätsel und Zungenbrecher.
+- **Aufgeräumt:** Die README, der Datenschutztext und die Oberfläche nennen keine entfernten
+  Teile mehr. Die Links zum Installieren und die Updateprüfung zeigen jetzt auf Aquaticy-Test.
+
+**Neu in 16.0.2:**
+
+Aquaticy Standard ist schlauer geworden, nur in Aquaticy-Test.
+
+- **Kleines Gedächtnis im Gespräch:** Fragt Aquaticy Standard „Für welchen Ort?“, reicht als
+  Antwort einfach „Erkelenz“. Danach weiß es den Ort auch bei „und morgen?“ oder
+  „was soll ich anziehen?“.
+- **Antwortet wie ein Mensch:** ganze Sätze, ein Tipp und eine Idee, was du als Nächstes fragen
+  kannst.
+- **Neue Fragen:** Was soll ich anziehen? Brauche ich einen Schirm? Wird es sonnig? Wetter am
+  Wochenende und für die nächsten Tage, Uhrzeit in anderen Städten, Feiertage, Mondphase,
+  Alter, BMI, Trinkgeld, sichere Passwörter, Witze, Fakten und ein offenes Ohr, wenn es dir
+  nicht gut geht.
+- **Freundlichere Texte:** zum Beispiel bei „Bevor es losgeht“, bei der Anmeldung und bei Fehlern.
+- **Entfernt:** öffentliche Webcams und Satellitenbilder, die Einstellungen unter
+  „Helfer & Grenzen“ und das Gemeinsame Lernen samt 48-Stunden-Recherchecache. Was dort
+  gespeichert war, löscht Aquaticy beim nächsten Start.
+
+**Neu in 16.0.1:**
+
+Aufgeräumt und Fehler behoben, nur in Aquaticy-Test.
+
+- **Anmelden mit Nutzername:** Im Kontensystem geht die Anmeldung jetzt auch mit dem
+  Nutzernamen, nicht nur mit der E-Mail-Adresse. So kommen auch Konten aus der Zeit des
+  Einzelkontos wieder rein. Fehlversuche zählen für Name und E-Mail gemeinsam.
+- **Secure Pro auf Vercel:** Der Chat war im Kontensystem gesperrt. Jetzt kann ihn jedes Konto
+  nutzen.
+- **Befehle im Chat:** Die Vorschläge für `/wetter`, `/github`, `/code-review` … fehlten auf
+  Vercel. Sie sind wieder da.
+- **Kleiner:** Alles, was es seit 16.0.0 nicht mehr gibt, ist auch aus dem Code raus:
+  virtual machine, Messenger, Server-Verbund, Auto-Upgrading, Coworker, Heimnetz, Home Assistant,
+  Lager, eigene Domain und das Docker-Abbild. Das sind über 30 Module weniger.
+- **GitHub** liest nur noch. Ändern brauchte die virtual machine.
+
+**Neu in 16.0.0:**
+
+Diese Fassung gibt es nur in Aquaticy-Test. Sie ist für Vercel gebaut.
+
+- **Aquaticy Standard:** Das neue voreingestellte Modell antwortet ohne Sprachmodell und ohne
+  Schlüssel. Es rechnet, rechnet um (Prozente, Mehrwertsteuer, Einheiten) und kennt Datum und
+  Uhrzeit. Es holt Wetter, Wechselkurse, Nachrichten und Wissen aus Wikipedia, jeweils mit Quelle.
+  Was du ihm sagst („ich wohne in Bremen“), merkt es sich und nutzt es, zum Beispiel beim Wetter.
+- **Hinweis auf API-Schlüssel:** Wer nur Aquaticy Standard hat, sieht beim ersten Anmelden und
+  danach ab und zu einen Hinweis mit dem Weg zu den Add-ons. Dort führt ein Link direkt zur
+  Schlüssel-Seite von Mistral oder NVIDIA. Die Knöpfe „Mit Google/Apple/Microsoft“ sind weg.
+- **Konten:** Kontensystem ohne Code. Das erste Konto bekommt Ultra, jedes weitere Pro ohne
+  Token-Grenze. API-Schlüssel liegen nur im eigenen Konto.
+- **Secure Pro** beantwortet nur noch Fragen zu Sicherheit. Es sucht in keinem Netz.
+- **Speicher:** höchstens 20 MB je Konto.
+- **Gelöscht:** virtual machine, WhatsApp und Signal, Server-Verbund, Auto-Upgrading,
+  Zuhause & Netz (Home Assistant, Lager, Heimnetz), Auslastung und Mitlesen. Das Paket für
+  Vercel ist ohne neonize, Pillow und zxing-cpp kleiner.
+- **Google** bleibt nur für Gmail und Google Kalender.
 
 **Neu in 15.7.8:**
 
