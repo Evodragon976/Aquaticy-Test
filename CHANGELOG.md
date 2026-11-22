@@ -3,6 +3,28 @@
 Was sich in den einzelnen Fassungen von Aquaticy geändert hat, die neueste zuerst.
 Zurück zur [README](README.md).
 
+**Neu in 16.5.7:**
+
+- **Bestätigung in zwei Schritten per E-Mail:** In den Einstellungen unter Konto schaltest du
+  sie an oder aus. Ist sie an, schickt Aquaticy nach dem Passwort einen Code mit 6 Ziffern an
+  deine E-Mail-Adresse. Erst mit dem Code bist du drin. Bei einem falschen Code kommt eine
+  Sicherheitswarnung per Mail. Einschalten geht nur mit einem Code, Ausschalten nur mit dem
+  Passwort. Ein Code gilt 10 Minuten, einmal und nur im selben Browser, mit höchstens
+  5 Versuchen.
+- **E-Mail-Versand:** Aquaticy verschickt über einen SMTP-Dienst, nur verschlüsselt. Die Mails
+  heißen „Aquaticy (aquaticy-test.vercel.app)“ und verlinken auf die Seite. Eine
+  vercel.app-Adresse kann kein Absender sein (DNS gehört Vercel). Absender ist darum das
+  Postfach des Dienstes oder, mit eigener Domain, `no-reply@deine-domain`. Einrichten:
+  README, „Bestätigung in zwei Schritten“.
+- **Aquaticy Standard auf Englisch:** „What day is tomorrow?“, „What day was yesterday?“,
+  „What day of the week is it?“ und „How many days in 2028?“ bekamen nur „Sorry“. Auf Deutsch
+  ging das schon. Jetzt kommt die Antwort, zum Beispiel „Tomorrow is **Monday, 23 November
+  2026**.“
+- **Wetter auf Englisch:** Bei „What day will it rain in Berlin?“ suchte Aquaticy den Ort
+  „day Berlin“. Jetzt sucht es Berlin.
+- **Worker:** „Which day is tomorrow?“ und „What is tomorrow's date?“ gehen jetzt. „What day
+  will it rain in Berlin?“ bekam das Datum von heute statt des Wetters.
+
 **Neu in 16.4.7:**
 
 Eine andere KI hat 22 mögliche Fehler und Lücken gemeldet. Wir haben jeden geprüft. Vier trafen

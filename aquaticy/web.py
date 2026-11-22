@@ -506,6 +506,39 @@ AUTH: AuthStore | None = None
 
 AIGUARD: Any = None
 
+#: 16.5.7: Bestaetigung in zwei Schritten (aquaticy/zweifaktor.py). Auf Vercel setzt
+#: vercel.start() eine Instanz mit der Postgres-Datenbank der Konten.
+ZWEI_FAKTOR: Any = None
+
+
+def _zwei_faktor() -> Any:
+    """Die Bestaetigung in zwei Schritten zum aktuellen AUTH -- oder None ohne Konten."""
+    global ZWEI_FAKTOR
+    if AUTH is None:
+        return None
+    if ZWEI_FAKTOR is None or ZWEI_FAKTOR.auth is not AUTH:
+        from aquaticy.zweifaktor import SqliteAblage, ZweiFaktor
+
+        ZWEI_FAKTOR = ZweiFaktor(AUTH, SqliteAblage(AUTH.db_path))
+    return ZWEI_FAKTOR
+
+
+ZF_PAUSE = "Die Anmeldung geht gerade nicht. Versuch es gleich noch einmal."
+
+
+def _mail_sprache(payload: dict[str, Any], accept_language: str = "") -> str:
+    """In welcher Sprache die Mails kommen: wie die Oberflaeche (de oder en)."""
+    wert = str(payload.get("lang") or "").strip().lower() or accept_language.strip().lower()
+    return "en" if wert.startswith("en") else "de"
+
+
+def _geraet_text(geraet: Any, sprache: str) -> str:
+    browser = str(getattr(geraet, "browser", "") or "")
+    hardware = str(getattr(geraet, "hardware", "") or "").split(" · ")[0]
+    if not browser and not hardware:
+        return ""
+    return f"{browser} {'on' if sprache == 'en' else 'auf'} {hardware}".strip()
+
 
 SERVER: Any = None
 
@@ -515,7 +548,7 @@ POST_WHEN_BANNED = frozenset({
     "/api/prefs", "/api/stop", "/api/clear", "/api/open", "/api/chat-edit",
 
     "/api/account/delete", "/api/account/wipe", "/api/account/password",
-    "/api/account/logout-all", "/api/account/events-seen",
+    "/api/account/logout-all", "/api/account/events-seen", "/api/account/2fa",
 })
 
 ACCOUNT_ROUTES = frozenset({
@@ -2939,6 +2972,8 @@ class Handler(BaseHTTPRequestHandler):
             "/api/auth/login",
 
             "/api/auth/challenge",
+            # 16.5.7: der Code aus der E-Mail -- vor der Sitzung, wie die Anmeldung selbst.
+            "/api/auth/code",
 
             "/api/auth/logout",
         }
@@ -3443,6 +3478,7 @@ class Handler(BaseHTTPRequestHandler):
                 "last_address": AUTH.last_address(account.id),
                 "sessions": AUTH.session_count(account.id),
                 "events": AUTH.events(account.id),
+                "zwei_faktor": _zwei_faktor().zustand(account),
             })
         elif route == "/google":
             self._google_return()
@@ -3664,7 +3700,6 @@ class Handler(BaseHTTPRequestHandler):
 
             from aquaticy.devices import (
                 DEVICE_COOKIE,
-                DEVICE_COOKIE_AGE,
                 clean_device,
                 new_device_token,
                 token_hash,
@@ -3750,31 +3785,15 @@ class Handler(BaseHTTPRequestHandler):
             if account is None:  # pragma: no cover
                 self._json({"ok": False, "error": falsch}, 401)
                 return
-            try:
-                token = AUTH.create_session(account, self._device(), self._client_ip())
-            except ValueError:
-                self._json({"ok": False, "error": falsch}, 401)
+            if not route.endswith("register") and self._zweiten_schritt_beginnen(
+                    account, payload, geraete_kennung, neue_kennung):
                 return
-            AUTH.note_seen(account.id, self._client_ip())
-
-            if not route.endswith("register"):
-                with contextlib.suppress(Exception):
-                    if not AUTH.is_known_device(account.id, geraet):
-                        AUTH.add_event(account.id, "neues-geraet",
-                                       f"Anmeldung mit {geraet.browser} auf "
-                                       f"{geraet.hardware.split(' · ')[0]}")
-
-            with contextlib.suppress(Exception):
-                AUTH.note_device(account.id, geraet)
-            self._json_cookie(
-                {"ok": True, "account": {"email": account.email,
-                  "username": account.username, "plan": account.plan}},
-                AUTH_COOKIE,
-                token,
-                30 * 86400,
-                extra=((DEVICE_COOKIE, geraete_kennung, DEVICE_COOKIE_AGE),)
-                if neue_kennung else (),
-            )
+            self._anmeldung_abschliessen(account, geraet, geraete_kennung, neue_kennung,
+                                         registriert=route.endswith("register"))
+        elif route == "/api/auth/code":
+            self._zweiter_schritt()
+        elif route == "/api/account/2fa":
+            self._zwei_faktor_einstellen(self._read_json(limit=AUTH_BODY_BYTES))
         elif route == "/api/auth/logout":
             if AUTH is not None:
                 AUTH.logout(self._cookie(AUTH_COOKIE))
@@ -4267,6 +4286,172 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
             return False
         return True
 
+    def _anmeldung_abschliessen(self, account: Account, geraet: Any, geraete_kennung: str,
+                                neue_kennung: bool, *, registriert: bool) -> None:
+        """Sitzung anlegen und Keks setzen -- nach dem Passwort oder nach dem Code."""
+        from aquaticy.devices import DEVICE_COOKIE, DEVICE_COOKIE_AGE
+
+        assert AUTH is not None
+        try:
+            token = AUTH.create_session(account, self._device(), self._client_ip())
+        except ValueError:
+            self._json({"ok": False, "error": WRONG_LOGIN_SINGLE if AUTH.single
+                        else WRONG_LOGIN}, 401)
+            return
+        AUTH.note_seen(account.id, self._client_ip())
+        if not registriert:
+            with contextlib.suppress(Exception):
+                if not AUTH.is_known_device(account.id, geraet):
+                    AUTH.add_event(account.id, "neues-geraet",
+                                   f"Anmeldung mit {geraet.browser} auf "
+                                   f"{geraet.hardware.split(' · ')[0]}")
+        with contextlib.suppress(Exception):
+            AUTH.note_device(account.id, geraet)
+        self._json_cookie(
+            {"ok": True, "account": {"email": account.email,
+              "username": account.username, "plan": account.plan}},
+            AUTH_COOKIE,
+            token,
+            30 * 86400,
+            extra=((DEVICE_COOKIE, geraete_kennung, DEVICE_COOKIE_AGE),)
+            if neue_kennung else (),
+        )
+
+    def _zweiten_schritt_beginnen(self, account: Account, payload: dict[str, Any],
+                                  geraete_kennung: str, neue_kennung: bool) -> bool:
+        """16.5.7: Ist die Bestaetigung in zwei Schritten an, geht ein Code per Mail raus.
+
+        Returns: True -- schon beantwortet (Code verschickt oder Fehler), keine Sitzung.
+        False -- weiter wie bisher (zweiter Schritt aus).
+        """
+        from aquaticy.devices import DEVICE_COOKIE, DEVICE_COOKIE_AGE
+        from aquaticy.zweifaktor import ANMELDEN, ZweiFaktorFehler
+
+        zf = _zwei_faktor()
+        if zf is None:
+            return False
+        sprache = _mail_sprache(payload, self.headers.get("Accept-Language") or "")
+        try:
+            if not zf.noetig(account):
+                return False
+            antwort = zf.beginnen(account, ANMELDEN, self._device(), geraete_kennung, sprache)
+        except ZweiFaktorFehler as exc:
+            self._json({"ok": False, "error": str(exc)}, exc.status)
+            return True
+        except Exception as exc:
+            # Datenbank kurz weg: keine Sitzung, aber eine klare Antwort (424: ab 500 ersetzt
+            # der Server jede Meldung durch einen allgemeinen Satz).
+            print(f"  [2FA] {type(exc).__name__}: {exc}")
+            self._json({"ok": False, "error": ZF_PAUSE}, 424)
+            return True
+        inhalt = {"ok": False, "zwei_faktor": True, **antwort}
+        if neue_kennung:
+            # Der Code gilt nur in diesem Browser: der Geraete-Keks muss schon jetzt stehen.
+            self._json_cookie(inhalt, DEVICE_COOKIE, geraete_kennung, DEVICE_COOKIE_AGE)
+        else:
+            self._json(inhalt)
+        return True
+
+    def _zweiter_schritt(self) -> None:
+        """POST /api/auth/code: der Code aus der E-Mail -- erst damit entsteht die Sitzung."""
+        from aquaticy.devices import DEVICE_COOKIE, clean_device, token_hash
+        from aquaticy.zweifaktor import ANMELDEN, ZweiFaktorFehler
+
+        zf = _zwei_faktor()
+        if AUTH is None or zf is None:
+            self._json({"ok": False, "error": "Bitte melde dich an."}, 401)
+            return
+        if not AUTH_LIMIT.allow(self._client_ip()):
+            self._json({"error": "Zu viele Anmeldeversuche. Bitte warte eine Minute."}, 429)
+            return
+        payload = self._read_json(limit=AUTH_BODY_BYTES)
+        if AIGUARD is not None:
+            from aquaticy.aiguard import BANNED_MESSAGE
+
+            if AIGUARD.is_banned(ip=self._client_ip()) is not None:
+                self._json({"ok": False, "error": BANNED_MESSAGE, "code": "banned"}, 403)
+                return
+        geraete_kennung = self._cookie(DEVICE_COOKIE)
+        if not token_hash(geraete_kennung):
+            self._json({"ok": False, "error": "Diese Anmeldung ist abgelaufen. Melde dich neu an.",
+                        "neu_anmelden": True}, 401)
+            return
+        geraet = clean_device(payload.get("device"),
+                              user_agent=self.headers.get("User-Agent") or "",
+                              accept_language=self.headers.get("Accept-Language") or "",
+                              cookie=geraete_kennung)
+        sprache = _mail_sprache(payload, self.headers.get("Accept-Language") or "")
+        token = str(payload.get("challenge") or "")[:200]
+        try:
+            if payload.get("action") == "neu":
+                self._json(zf.neu_senden(token, self._device(), geraete_kennung, sprache))
+                return
+            account = zf.pruefen(token, str(payload.get("code") or "")[:40], ANMELDEN,
+                                 self._device(), geraete_kennung, sprache=sprache,
+                                 geraet=_geraet_text(geraet, sprache))
+        except ZweiFaktorFehler as exc:
+            self._json({"ok": False, "error": str(exc), "neu_anmelden": exc.neu_anmelden},
+                       exc.status)
+            return
+        except Exception as exc:
+            print(f"  [2FA] {type(exc).__name__}: {exc}")
+            self._json({"ok": False, "error": ZF_PAUSE}, 424)
+            return
+        self._anmeldung_abschliessen(account, geraet, geraete_kennung, False, registriert=False)
+
+    def _zwei_faktor_einstellen(self, payload: dict[str, Any]) -> None:
+        """POST /api/account/2fa: einschalten (mit Code an die Adresse), ausschalten (Passwort)."""
+        from aquaticy.devices import DEVICE_COOKIE
+        from aquaticy.zweifaktor import EINSCHALTEN, ZweiFaktorFehler
+
+        konto = self._account()
+        zf = _zwei_faktor()
+        if AUTH is None or konto is None or zf is None:
+            self._json({"ok": False, "error": "Bitte melde dich an."}, 401)
+            return
+        aktion = str(payload.get("action") or "")
+        sprache = _mail_sprache(payload, self.headers.get("Accept-Language") or "")
+        kennung = self._cookie(DEVICE_COOKIE)
+        token = str(payload.get("challenge") or "")[:200]
+        try:
+            if aktion == "start":
+                if zf.ist_an(konto.id):
+                    self._json({"ok": True, "zustand": zf.zustand(konto)})
+                    return
+                self._json({"ok": True, **zf.beginnen(konto, EINSCHALTEN, self._device(),
+                                                      kennung, sprache)})
+                return
+            if aktion == "neu":
+                self._json(zf.neu_senden(token, self._device(), kennung, sprache))
+                return
+            if aktion == "bestaetigen":
+                zf.einschalten(konto, token, str(payload.get("code") or "")[:40],
+                               self._device(), kennung, sprache)
+                self._json({"ok": True, "zustand": zf.zustand(konto)})
+                return
+            if aktion == "aus":
+                schluessel = "konto:" + konto.id
+                if LOGIN_FAILS.full(schluessel):
+                    self._json({"ok": False, "error": (
+                        "Zu viele falsche Passwörter. Bitte warte eine Viertelstunde.")}, 429)
+                    return
+                passwort = str(payload.get("password") or "")
+                if not 0 < len(passwort) <= 128 or not zf.ausschalten(konto, passwort, sprache):
+                    LOGIN_FAILS.allow(schluessel)
+                    self._json({"ok": False, "error": "Das Passwort stimmt nicht."}, 403)
+                    return
+                self._json({"ok": True, "zustand": zf.zustand(konto)})
+                return
+        except ZweiFaktorFehler as exc:
+            self._json({"ok": False, "error": str(exc), "neu_anmelden": exc.neu_anmelden},
+                       exc.status)
+            return
+        except Exception as exc:
+            print(f"  [2FA] {type(exc).__name__}: {exc}")
+            self._json({"ok": False, "error": ZF_PAUSE}, 424)
+            return
+        self._json({"ok": False, "error": "Unbekannte Aktion."}, 400)
+
     def _account_action(self, route: str, payload: dict[str, Any]) -> None:
         """Das eigene Konto verwalten (9.5.32).
 
@@ -4341,6 +4526,9 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
         except ValueError as exc:
             self._json({"ok": False, "error": str(exc)}, 409)
             return
+        zf = _zwei_faktor()
+        if zf is not None:
+            zf.konto_weg(konto.id)
         self._json_cookie({"ok": True, "deleted": True}, AUTH_COOKIE, "", 0)
 
     def _chat(self) -> None:

@@ -1341,6 +1341,19 @@ html.vv,html.vv body{height:var(--app-h)}
         <button type="submit" class="btn primary" id="auth-submit">Konto erstellen</button>
       </div>
     </form>
+    <!-- 16.5.7: Bestaetigung in zwei Schritten -- der Code aus der E-Mail. -->
+    <form id="code-form" hidden>
+      <p id="code-lead"></p>
+      <label><span class="lbl">Bestätigungscode</span>
+        <input type="text" id="auth-code" inputmode="numeric" autocomplete="one-time-code"
+               maxlength="12" required></label>
+      <div class="auth-error" id="code-error" role="alert"></div>
+      <div class="auth-actions">
+        <button type="submit" class="btn primary" id="code-submit">Anmelden</button>
+        <button type="button" class="btn" id="code-neu">Neuen Code senden</button>
+        <button type="button" class="btn" id="code-zurueck">Zurück</button>
+      </div>
+    </form>
   </section>
 
   <section class="auth-card" id="leave-card" hidden>
@@ -1833,6 +1846,14 @@ html.vv,html.vv body{height:var(--app-h)}
           <button type="button" class="btn" id="account-password">Passwort ändern</button>
           <button type="button" class="btn" id="account-logout-all">Überall sonst abmelden</button>
         </div>
+        <div class="group">Bestätigung in zwei Schritten</div>
+        <p class="note">Bei jeder Anmeldung schickt Aquaticy dir zusätzlich einen Code per E-Mail.
+          Wer nur dein Passwort kennt, kommt dann nicht hinein.</p>
+        <div class="note" id="zf-status"></div>
+        <div class="actions section">
+          <button type="button" class="btn" id="zf-an" hidden>Einschalten</button>
+          <button type="button" class="btn" id="zf-aus" hidden>Ausschalten</button>
+        </div>
         <div class="danger-zone">
           <strong>Daten und Konto löschen</strong>
           <p class="note">„Alle Daten löschen“ löscht Chats, Bilder, Dateien, Erinnerungen,
@@ -2088,7 +2109,7 @@ const thread = $("#thread"), main = $("#main"), input = $("#input"), send = $("#
 let busy = false;
 let currentChat = "";
 let secureChat = false;
-const aquaticyVersion = window.__AQUATICY_VERSION__ || "16.4.7";
+const aquaticyVersion = window.__AQUATICY_VERSION__ || "16.5.7";
 $("#version").textContent = "v" + aquaticyVersion;
 // Laeuft noch die alte Version, obwohl eine neue installiert ist? (15.0.0)
 const aquaticyInstalliert = window.__AQUATICY_INSTALLED__ || "";
@@ -2637,6 +2658,7 @@ $("#auth-form").addEventListener("submit", async (event) => {
       : $("#auth-pro-code").value.trim().toUpperCase()),
     terms_accepted: authMode === "register" && $("#auth-terms").checked,
     device: geraeteInfo(),
+    lang: sprache,
   };
   const anmelden = authMode === "login";
   if (anmelden){
@@ -2652,11 +2674,14 @@ $("#auth-form").addEventListener("submit", async (event) => {
     neuerBesuchsNachweis();
   }
   try {
-    const res = await api(`/api/auth/${authMode}`, {method:"POST",
+    const res = await api(`/api/auth/${authMode}`, {method:"POST", quietErrors:true,
       headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
     const data = await res.json();
     if (anmelden && res.status === 428 && data.challenge){
       zeigeMenschCheck(data.challenge); return;
+    }
+    if (anmelden && res.ok && data.zwei_faktor && data.challenge){
+      zeigeCodeSchritt(data); return;
     }
     if (anmelden && res.status === 429 && data.code === "dropped"){
       $("#human-check").hidden = true;
@@ -2668,6 +2693,60 @@ $("#auth-form").addEventListener("submit", async (event) => {
     location.reload();
   } catch { error.textContent = "Aquaticy ist gerade nicht erreichbar. Versuch es gleich noch einmal."; }
 });
+
+// 16.5.7: Bestaetigung in zwei Schritten -- nach dem Passwort der Code aus der E-Mail.
+let zweiterSchritt = null;
+function zeigeCodeSchritt(daten){
+  zweiterSchritt = { challenge: daten.challenge, an: daten.an || "" };
+  $("#auth-form").hidden = true;
+  $("#auth-tabs").hidden = true;
+  $("#auth-lead").textContent = "Bestätige, dass du es bist.";
+  $("#code-lead").textContent =
+    `Wir haben dir einen Code an ${zweiterSchritt.an} geschickt. Gib ihn hier ein.`;
+  $("#code-error").textContent = "";
+  $("#code-submit").disabled = false;
+  $("#code-neu").disabled = false;
+  $("#code-form").hidden = false;
+  $("#auth-code").value = "";
+  $("#auth-code").focus();
+}
+async function codeSchicken(body){
+  try {
+    const res = await api("/api/auth/code", { method: "POST", quietErrors: true,
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ ...body, challenge: zweiterSchritt?.challenge || "",
+                             lang: sprache }) });
+    return { ok: res.ok, ...(await res.json()) };
+  } catch {
+    return { ok: false,
+             error: "Aquaticy ist gerade nicht erreichbar. Versuch es gleich noch einmal." };
+  }
+}
+$("#code-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!zweiterSchritt) return;
+  const fehler = $("#code-error");
+  fehler.textContent = "";
+  $("#code-submit").disabled = true;
+  const daten = await codeSchicken({ code: $("#auth-code").value, device: geraeteInfo() });
+  if (daten.ok){ location.reload(); return; }
+  fehler.textContent = daten.error || "Das hat nicht geklappt.";
+  if (daten.neu_anmelden){
+    zweiterSchritt = null;
+    $("#code-neu").disabled = true;
+    return;
+  }
+  $("#code-submit").disabled = false;
+  $("#auth-code").select();
+});
+$("#code-neu").addEventListener("click", async () => {
+  if (!zweiterSchritt) return;
+  const daten = await codeSchicken({ action: "neu" });
+  $("#code-error").textContent = daten.ok ? "Ein neuer Code ist unterwegs."
+    : (daten.error || "Das hat nicht geklappt.");
+  if (daten.neu_anmelden){ zweiterSchritt = null; $("#code-submit").disabled = true; }
+});
+$("#code-zurueck").addEventListener("click", () => location.reload());
 
 async function bootAuth(){
   try {
@@ -4810,6 +4889,31 @@ const EN = {
 "Konto erstellen": "Create account",
 "Alles klar": "Got it",
 "Zurück": "Back",
+"Bestätigungscode": "Verification code",
+"Neuen Code senden": "Send a new code",
+"Bestätige, dass du es bist.": "Confirm it's you.",
+"Ein neuer Code ist unterwegs.": "A new code is on its way.",
+"Bestätigung in zwei Schritten": "Two-step verification",
+"Bei jeder Anmeldung schickt Aquaticy dir zusätzlich einen Code per E-Mail. Wer nur dein Passwort kennt, kommt dann nicht hinein.": "Every time you sign in, Aquaticy also emails you a code. Someone who only knows your password can't get in.",
+"Ausschalten": "Turn off",
+"Code eingeben": "Enter code",
+"Die Bestätigung in zwei Schritten ist aus.": "Two-step verification is off.",
+"Die Bestätigung in zwei Schritten ist an, aber der Betreiber hat sie gerade für alle ausgesetzt.": "Two-step verification is on, but the operator has paused it for everyone right now.",
+"Die Bestätigung in zwei Schritten ist jetzt an.": "Two-step verification is now on.",
+"Die Bestätigung in zwei Schritten ist jetzt aus.": "Two-step verification is now off.",
+"Bestätigung in zwei Schritten ausschalten": "Turn off two-step verification",
+"Dafür muss der Betreiber einen E-Mail-Versand einrichten (README, „Bestätigung in zwei Schritten“).": "The operator needs to set up email sending for this (README, “Two-step verification”).",
+"Dein Konto hat keine E-Mail-Adresse. Dafür braucht es eine.": "Your account has no email address. You need one for this.",
+"Der E-Mail-Versand ist nicht eingerichtet.": "Email sending isn't set up.",
+"Der E-Mail-Versand ist nicht eingerichtet. Der Betreiber kann den zweiten Schritt mit AQUATICY_2FA_AUS=1 vorübergehend aussetzen.": "Email sending isn't set up. The operator can pause the second step for now with AQUATICY_2FA_AUS=1.",
+"Die E-Mail mit dem Code ließ sich gerade nicht verschicken. Versuch es gleich noch einmal.": "The email with the code couldn't be sent right now. Try again in a moment.",
+"Die Anmeldung geht gerade nicht. Versuch es gleich noch einmal.": "Signing in isn't possible right now. Try again in a moment.",
+"Wir haben dir gerade schon mehrere Codes geschickt. Warte eine Viertelstunde und versuch es dann noch einmal.": "We've just sent you several codes. Wait 15 minutes, then try again.",
+"Diese Anmeldung ist abgelaufen. Melde dich neu an.": "This sign-in has expired. Sign in again.",
+"Der Code ist abgelaufen oder wurde zu oft falsch eingegeben. Melde dich neu an.": "The code has expired or was entered wrong too often. Sign in again.",
+"Der Code stimmt nicht. Du hast noch einen Versuch.": "The code is wrong. You have one attempt left.",
+"Dieser Code gehört zu einem anderen Konto.": "This code belongs to a different account.",
+"Unbekannte Aktion.": "Unknown action.",
 "Neuer Chat": "New chat",
 "Letzte Chats": "Recent chats",
 "Code-Chats": "Code chats",
@@ -5408,6 +5512,15 @@ const schluessel = text => text.replace(/\s+/g, " ").trim();
 
 
 const EN_MUSTER = [
+  // 16.5.7: Bestaetigung in zwei Schritten
+  [/^Wir haben dir einen Code an (.+) geschickt\. Gib ihn hier ein\.$/,
+   "We sent a code to $1. Enter it here."],
+  [/^Die Bestätigung in zwei Schritten ist an\. Codes gehen an (.+)\.$/,
+   "Two-step verification is on. Codes go to $1."],
+  [/^Der Code stimmt nicht\. Du hast noch (\d+) Versuche\.$/,
+   "The code is wrong. You have $1 attempts left."],
+  [/^Warte noch (\d+) Sekunden, dann kannst du einen neuen Code anfordern\.$/,
+   "Wait $1 more seconds, then you can request a new code."],
   [/^Der Prüfbereich bleibt privat und umfasst (\d+) Adressen\.$/,
    "The check stays within a private range of $1 addresses."],
   [/^Bei (\d+) erreichbaren Geräten antwortet keiner der geprüften Risikodienste\.$/,
@@ -7199,7 +7312,63 @@ async function ladeSicherheit(versuch = 0){
   $("#security-summary").textContent =
     `Zuletzt genutzte Adresse: ${daten.last_address || "—"} · `
     + `angemeldet auf ${Number(daten.sessions) || 0} Gerät(en)`;
+  zeigeZweiFaktor(daten.zwei_faktor);
 }
+function zeigeZweiFaktor(zf){
+  const status = $("#zf-status"), an = $("#zf-an"), aus = $("#zf-aus");
+  if (!zf){ status.textContent = ""; an.hidden = true; aus.hidden = true; return; }
+  if (zf.an){
+    status.textContent = zf.abgeschaltet
+      ? "Die Bestätigung in zwei Schritten ist an, aber der Betreiber hat sie gerade für alle "
+        + "ausgesetzt."
+      : `Die Bestätigung in zwei Schritten ist an. Codes gehen an ${zf.email}.`;
+  } else {
+    status.textContent = zf.grund || "Die Bestätigung in zwei Schritten ist aus.";
+  }
+  an.hidden = !!zf.an;
+  an.disabled = !zf.moeglich;
+  aus.hidden = !zf.an;
+}
+async function zfAktion(body){
+  try {
+    const res = await api("/api/account/2fa", { method: "POST", quietErrors: true,
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ ...body, lang: sprache }) });
+    return await res.json();
+  } catch { return { ok: false, error: "Keine Verbindung zu Aquaticy." }; }
+}
+$("#zf-an").addEventListener("click", async () => {
+  const start = await zfAktion({ action: "start" });
+  if (!start.ok){ hinweis(start.error || "Das hat nicht geklappt."); return; }
+  if (!start.challenge){ ladeSicherheit(); return; }
+  for (let runde = 0; runde < 5; runde++){
+    const code = await guardDialog({ head: "Konto", title: "Code eingeben",
+      text: `Wir haben dir einen Code an ${start.an} geschickt. Gib ihn hier ein.`,
+      ok: "Einschalten", cancel: "Abbrechen",
+      input: { type: "text", label: "Bestätigungscode" } });
+    if (code === null) return;
+    const daten = await zfAktion({ action: "bestaetigen", challenge: start.challenge, code });
+    if (daten.ok){
+      toast("Die Bestätigung in zwei Schritten ist jetzt an.");
+      ladeSicherheit();
+      return;
+    }
+    if (daten.neu_anmelden || runde === 4){
+      hinweis(daten.error || "Das hat nicht geklappt.");
+      return;
+    }
+    toast(daten.error || "Das hat nicht geklappt.");
+  }
+});
+$("#zf-aus").addEventListener("click", async () => {
+  const passwort = await passwortAbfragen("Bestätigung in zwei Schritten ausschalten",
+                                          "Zur Sicherheit: dein Passwort");
+  if (passwort === null) return;
+  const daten = await zfAktion({ action: "aus", password: passwort });
+  toast(daten.ok ? "Die Bestätigung in zwei Schritten ist jetzt aus."
+        : (daten.error || "Das hat nicht geklappt."));
+  ladeSicherheit();
+});
 async function kontoAktion(route, body){
   try {
     const res = await api(route, { method: "POST", headers: {"Content-Type": "application/json"},

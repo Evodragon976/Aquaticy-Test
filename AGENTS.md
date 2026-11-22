@@ -46,7 +46,8 @@ Vor jedem Commit: `python tools/pruefung.py` muss mit 0 enden.
   - `cli.py` Kommandozeile, `config.py` Einstellungen.
   - Sicherheit: `netguard.py` (nur öffentliche Ziele), `injection.py`
     (Prompt-Injection), `aiguard.py` (Missbrauch), `guardrails.py` (Recht),
-    `auth.py` (Konten), `privacy.py`/`keyvault.py` (Verschlüsselung).
+    `auth.py` (Konten), `privacy.py`/`keyvault.py` (Verschlüsselung),
+    `zweifaktor.py` (Bestätigung in zwei Schritten), `mailversand.py` (Mails nur über TLS).
   - `addons.py` (Add-ons, Rechte), Plugins: `plugins.py`, Vorprüfung für Code- und
     Security-Review in `review_scan.py`.
   - Secure Pro (nur Fragen): `secure_knowledge.py` (Malware-Wissen), `secure_chat.py` (Rolle

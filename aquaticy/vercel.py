@@ -171,6 +171,13 @@ def start() -> str:
         web._profile_settings = _only_own_keys(web._profile_settings)
         web.AIGUARD = guard_for(data_dir)
         web.TOKEN = ""
+        if verbund is not None:
+            # 16.5.7: Codes und Versuche der Bestaetigung in zwei Schritten in Postgres --
+            # der Teil "kern" ist eine Einheit, ein Zaehler darin waere nicht sicher.
+            from aquaticy.zweifaktor import PostgresAblage, SqliteAblage, ZweiFaktor
+
+            web.ZWEI_FAKTOR = ZweiFaktor(web.AUTH, PostgresAblage(verbund.konten),
+                                         kopie=SqliteAblage(web.AUTH.db_path))
         _STATE["web"] = web
         _STATE["handler"] = _handler_class(web)
         # Den Stand des ganzen Ordners braucht nur die Sicherung als ein Archiv (ohne Verbund).

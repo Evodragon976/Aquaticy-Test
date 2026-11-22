@@ -1061,8 +1061,8 @@ export const DATEN = {
    "UNKLAR": "nothing solid found"
   }
  },
- "version": "16.4.7",
- "version_label": "16.4.7",
+ "version": "16.5.7",
+ "version_label": "16.5.7",
  "wetterlage": {
   "0": "klar",
   "1": "überwiegend klar",

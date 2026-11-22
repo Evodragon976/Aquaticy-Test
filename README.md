@@ -1,4 +1,4 @@
-# Aquaticy AI 16.4.7
+# Aquaticy AI 16.5.7
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -43,6 +43,7 @@ Was sich in jeder Fassung geändert hat, steht im [CHANGELOG.md](CHANGELOG.md).
 - [Benutzung im Terminal](#benutzung-im-terminal)
 - [Die Weboberfläche](#die-weboberfläche)
 - [Konten: Normal, Pro und Ultra](#konten-normal-pro-und-ultra)
+- [Bestätigung in zwei Schritten](#bestätigung-in-zwei-schritten)
 - [Add-ons](#add-ons)
 - [Speicher](#speicher)
 - [Gmail und Kalender](#gmail-und-kalender)
@@ -112,7 +113,7 @@ Was sich in jeder Fassung geändert hat, steht im [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.4.7
+aquaticy --version            # 16.5.7
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup
@@ -578,6 +579,56 @@ mit AES-256-GCM verschlüsselt. Jedes Konto hat einen eigenen Schlüssel, abgele
 (`auth.key`). Sichere `data.key` und `auth.key` nie zusammen mit den Daten. Ohne sie sind die
 Daten nicht mehr lesbar. Der Server braucht den Schlüssel, um mit Chats zu arbeiten. Geschützt
 ist gegen gestohlene Datenbanken und Sicherungen und gegen andere Konten.
+
+---
+
+## Bestätigung in zwei Schritten
+
+*Einstellungen → Konto → Bestätigung in zwei Schritten.* Ist sie an, reicht das Passwort allein
+nicht mehr. Nach dem Passwort schickt Aquaticy einen Code mit 6 Ziffern an die E-Mail-Adresse
+des Kontos. Erst mit dem Code bist du angemeldet. Ein falscher Code lässt dich nicht hinein,
+und an deine Adresse geht eine Sicherheitswarnung.
+
+- **Einschalten** geht nur mit einem Code an deine Adresse. So ist sicher, dass sie stimmt.
+- **Ausschalten** geht nur mit deinem Passwort. Beides meldet Aquaticy dir per E-Mail.
+- Ein Code gilt **10 Minuten**, nur **einmal** und nur im **selben Browser**. Nach 5 falschen
+  Versuchen musst du dich neu anmelden. Ändert sich das Passwort, gilt der Code nicht mehr.
+- Höchstens 5 Codes in einer Viertelstunde und 20 am Tag. Höchstens eine Warnung in
+  10 Minuten.
+- Gespeichert wird nur ein Hash des Codes, nie der Code selbst. Auf Vercel zählt Aquaticy die
+  Versuche in der Postgres-Datenbank der Konten. So zählen alle Instanzen gemeinsam.
+
+### E-Mail-Versand einrichten (Betreiber)
+
+Ohne Mail-Versand lässt sich die Bestätigung nicht einschalten. Trag diese Umgebungsvariablen
+ein (auf Vercel unter *Settings → Environment Variables*, danach neu deployen):
+
+| Variable | Wert |
+|---|---|
+| `AQUATICY_SMTP_HOST` | der SMTP-Server, z. B. `smtp.gmail.com` |
+| `AQUATICY_SMTP_PORT` | `465` (TLS, Standard) oder `587` (STARTTLS). Port 25 geht nicht. |
+| `AQUATICY_SMTP_USER` | der Benutzername, oft die Adresse des Postfachs |
+| `AQUATICY_SMTP_PASSWORD` | das Passwort, bei Gmail ein [App-Passwort](https://myaccount.google.com/apppasswords) |
+| `AQUATICY_MAIL_FROM` | optional: die Absenderadresse |
+
+Aquaticy verschickt nur verschlüsselt. Das Passwort steht nie in einer Meldung.
+
+**Warum nicht `no-reply@aquaticy-test.vercel.app`?** Die Domain gehört Vercel. Für sie kann
+niemand sonst die DNS-Einträge setzen (SPF, DKIM), die Gmail, Outlook und Co. heute verlangen.
+Kein Mail-Dienst verschickt deshalb mit dieser Adresse, und Mails ohne diese Einträge landen
+im Spam oder werden abgewiesen. So geht es trotzdem über die vercel.app-Seite:
+
+- Die Mails heißen „Aquaticy (aquaticy-test.vercel.app)“ und verlinken auf die Seite. Die
+  Adresse der Seite liest Aquaticy aus `VERCEL_PROJECT_PRODUCTION_URL` (setzt Vercel selbst).
+- Absender ist das Postfach aus `AQUATICY_SMTP_USER`. Am einfachsten ist ein eigenes
+  Gmail-Konto für Aquaticy mit App-Passwort (Gmail erlaubt bis zu 500 Mails am Tag).
+- Hängst du eine eigene Domain an das Vercel-Projekt, wird daraus automatisch
+  `no-reply@deine-domain`. Dann muss der Mail-Dienst (z. B. Resend oder Brevo) die Domain
+  bestätigt haben.
+
+**Notfall:** Geht der Mail-Versand nicht mehr, wartet die Anmeldung mit Code, bis er wieder
+geht. Aquaticy schaltet den Schritt nie still ab. Nur du als Betreiber kannst ihn mit
+`AQUATICY_2FA_AUS=1` für alle aussetzen. Danach den Wert wieder entfernen.
 
 ---
 

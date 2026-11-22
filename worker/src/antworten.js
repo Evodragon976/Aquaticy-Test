@@ -468,9 +468,11 @@ function rechenAntwort(text, sprache) {
 function zeitAntwort(w, kern, sprache, { jetzt, zeitzone }) {
   const fragtZeit = /wie\s*spaet|wie\s*viel\s+uhr|wieviel\s+uhr|uhrzeit|what\s+time|current\s+time/
     .test(kern) || (enthaelt(w, ["uhrzeit"]) && w.length <= 6);
-  const fragtDatum = /welche[rns]?\s+(?:tag|datum|wochentag)|welches\s+datum|den\s+wievielten|der\s+wievielte|datum\s+(?:ist\s+)?heute|heutige[sn]?\s+datum|what\s+(?:day|date)|what(?:\s+is|'s)\s+the\s+date|was\s+fuer\s+ein\s+tag|today'?s\s+date|welches\s+jahr|what\s+year|kalenderwoche/.test(kern)
+  const fragtDatum = /welche[rns]?\s+(?:tag|datum|wochentag)|welches\s+datum|den\s+wievielten|der\s+wievielte|datum\s+(?:ist\s+)?heute|heutige[sn]?\s+datum|what\s+(?:day|date)|what(?:\s+is|'s)\s+the\s+date|was\s+fuer\s+ein\s+tag|today'?s\s+date|welches\s+jahr|what\s+year|kalenderwoche|which\s+(?:day|date)\s+(?:is|was)\s+(?:it\s+)?(?:today|tomorrow|yesterday|the\s+day)|(?:tomorrow|yesterday)(?:'?s)?\s+date/.test(kern)
     || (enthaelt(w, ["datum", "wochentag"]) && w.length <= 6);
   if (!fragtZeit && !fragtDatum) return null;
+  // 16.5.7: "What day will it rain in Berlin?" ist eine Wetterfrage -- vorher kam das Datum.
+  if (enthaelt(w, STICH.wetter) || w.some((x) => WETTER_GENAU.has(x))) return null;
   const zone = zeitzone || "Europe/Berlin";
   const loc = sprache === "en" ? "en-GB" : "de-DE";
   let uhr, tag;
