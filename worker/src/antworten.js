@@ -18,7 +18,7 @@ import { datumAus, datumAntwort, einheitenAntwort, gespraechMehr, prozentAntwort
 // -- Feste Antworten ----------------------------------------------------------
 // Was die App kann, kann diese Fassung nur zum Teil. Diese Arten bekommen deshalb
 // eigene Antworten -- die aus smalltalk.py sprechen von Websuche und Code-Modus.
-const EIGENE = {
+const EIGENE = { __proto__: null,
   faehigkeiten: [
     "Ich beantworte deine Fragen: Wissen aus Wikipedia, Wetter, Nachrichten, Wechselkurse, "
       + "Feiertage, Rechnen, Datum und Uhrzeit. Frag einfach drauflos.",
@@ -38,7 +38,7 @@ const EIGENE = {
   ],
 };
 
-const EN = {
+const EN = { __proto__: null,
   schoepfer: ["Jonas built me. I'm Aquaticy, your AI assistant.",
     "My developer is Jonas. He created Aquaticy so you get answers with real sources."],
   fremde_ki: ["No, I'm Aquaticy — an AI made by Jonas.",
@@ -74,7 +74,7 @@ const EN = {
 };
 
 // Englische Nachrichten, die smalltalk.py nicht kennt -- dieselben Arten.
-const EN_MUSTER = {
+const EN_MUSTER = { __proto__: null,
   schoepfer: "who\\s+(?:made|built|created|programmed|developed)\\s+you|who\\s+is\\s+your\\s+"
     + "(?:creator|developer|maker)",
   identitaet: "who\\s+are\\s+you|what\\s+(?:is|'s)\\s+your\\s+name|what\\s+are\\s+you",
@@ -117,7 +117,7 @@ const ARTEN = DATEN.smalltalk.map((art) => ({
 const ANREDE = new RegExp(musterFalten(DATEN.anrede), "i");
 
 // -- Stichwoerter der Dienste -------------------------------------------------
-const STICH = {
+const STICH = { __proto__: null,
   wetter: ["wetter", "regen", "regnet", "regnen", "schnee", "schneit", "gewitter", "vorhersage",
     "wettervorhersage", "temperatur", "temperaturen", "sonnig", "bewoelkt", "weather", "rain",
     "raining", "snow", "forecast", "temperature", "sunny"],
@@ -207,7 +207,7 @@ export function waehle(liste, schluessel, zufall = Math.random) {
 }
 
 // Was smalltalk.py nicht kennt, ein Gespraech aber oft hat: Witze und wie es einem geht.
-const WITZE = {
+const WITZE = { __proto__: null,
   de: ["Was macht ein Pirat am Computer? Er drückt die Enter-Taste. 🏴‍☠️",
     "Warum können Geister so schlecht lügen? Weil man durch sie hindurchsieht.",
     "Treffen sich zwei Magneten. Sagt der eine: „Was soll ich heute bloß anziehen?“",
@@ -692,7 +692,7 @@ export function wetterTipp(tage, sprache) {
 }
 
 // -- Waehrungen ---------------------------------------------------------------
-const WAEHRUNGEN = {
+const WAEHRUNGEN = { __proto__: null,
   euro: "EUR", euros: "EUR", eur: "EUR", "€": "EUR", dollar: "USD", dollars: "USD",
   usd: "USD", "$": "USD", pfund: "GBP", pound: "GBP", pounds: "GBP", gbp: "GBP", "£": "GBP",
   franken: "CHF", franc: "CHF", francs: "CHF", chf: "CHF", yen: "JPY", jpy: "JPY",
@@ -703,7 +703,7 @@ const WAEHRUNGEN = {
   nok: "NOK", czk: "CZK", cad: "CAD", aud: "AUD", nzd: "NZD", sgd: "SGD", hkd: "HKD",
   ron: "RON", isk: "ISK", ils: "ILS", schekel: "ILS", thb: "THB", baht: "THB",
 };
-const WAEHRUNGSNAME = {
+const WAEHRUNGSNAME = { __proto__: null,
   EUR: ["Euro", "euros"], USD: ["US-Dollar", "US dollars"], GBP: ["Britische Pfund",
     "British pounds"], CHF: ["Schweizer Franken", "Swiss francs"], JPY: ["Yen", "yen"],
   CNY: ["Yuan", "yuan"], PLN: ["Złoty", "złoty"], TRY: ["Türkische Lira", "Turkish lira"],
@@ -797,7 +797,8 @@ async function kursAntwort(w, kern, sprache, kontext) {
 }
 
 // -- Feiertage ----------------------------------------------------------------
-const LAENDER = { oesterreich: "AT", austria: "AT", schweiz: "CH", switzerland: "CH",
+const LAENDER = { __proto__: null,
+  oesterreich: "AT", austria: "AT", schweiz: "CH", switzerland: "CH",
   deutschland: "DE", germany: "DE", frankreich: "FR", france: "FR", italien: "IT", italy: "IT",
   spanien: "ES", spain: "ES", niederlande: "NL", netherlands: "NL", polen: "PL", poland: "PL",
   usa: "US", amerika: "US", england: "GB", grossbritannien: "GB", uk: "GB" };

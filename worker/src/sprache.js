@@ -6,7 +6,7 @@
 // Themen bleiben, wie sie sind: verglichen wird nur mit dem eigenen Wortschatz, und
 // nur bei kleinem Abstand.
 
-const UMLAUTE = { "ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss" };
+const UMLAUTE = { __proto__: null, "ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss" };
 
 /** Kleinschreibung, Umlaute als ae/oe/ue, langgezogene Buchstaben gekuerzt. */
 export function falten(text) {

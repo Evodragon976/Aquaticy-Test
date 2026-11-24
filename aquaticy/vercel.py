@@ -296,7 +296,9 @@ def _auth_class(basis: type) -> type:
         def register(self, email: str, password: str, plan: str, pro_code: str = "",
                      **kwargs: Any) -> Any:
             with _FIRST_ACCOUNT:
-                erstes = not self.accounts()
+                # 17.0.0: Gaeste zaehlen nicht -- sonst bekaeme das erste echte Konto kein
+                # Ultra, nur weil gerade ein Gast da ist.
+                erstes = not [konto for konto in self.accounts() if not konto.guest]
                 if erstes:
                     return super().register(email, password, "ultra", self.ultra_code,
                                             **kwargs)

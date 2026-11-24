@@ -890,10 +890,12 @@ def test_final_answer_sends_a_sanitized_history(
 
 def test_system_prompt_carries_todays_date(settings: Settings, toolbox: Toolbox) -> None:
     """Sonst sucht ein Modell mit altem Wissensstand nach "Test 2024"."""
-    from datetime import date
+    from aquaticy import zeit
 
     agent = Agent(settings, cache=None, toolbox=toolbox)
-    assert date.today().strftime("%d.%m.%Y") in agent.messages[0]["content"]
+    # 17.0.0: das Datum in Deutschland (aquaticy/zeit.py), wie im Agenten -- mit date.today()
+    # schlug der Test zwischen 23 und 24 Uhr UTC fehl, weil dort schon der naechste Tag ist.
+    assert zeit.heute().strftime("%d.%m.%Y") in agent.messages[0]["content"]
 
 
 def test_notes_are_injected_into_the_system_prompt(

@@ -82,7 +82,7 @@ export function prozentAntwort(text, sprache = "de") {
 
 // -- Einheiten -----------------------------------------------------------------
 // [Art, Faktor zur Grundeinheit, Name DE, Name EN]
-const E = {};
+const E = Object.create(null);
 const einheit = (namen, art, faktor, de, en) => {
   for (const n of namen) E[n] = { art, faktor, de, en };
 };
@@ -135,12 +135,14 @@ einheit(["kib", "kibibyte"], "daten", 1024, "KiB", "KiB");
 einheit(["mib", "mebibyte"], "daten", 1024 ** 2, "MiB", "MiB");
 einheit(["gib", "gibibyte"], "daten", 1024 ** 3, "GiB", "GiB");
 /** Einzahl der deutschen Namen fuer "1 Stunde ist ...". */
-const EINZAHL = { Sekunden: "Sekunde", Minuten: "Minute", Stunden: "Stunde", Tage: "Tag",
+const EINZAHL = { __proto__: null,
+  Sekunden: "Sekunde", Minuten: "Minute", Stunden: "Stunde", Tage: "Tag",
   Wochen: "Woche", Jahre: "Jahr", Meilen: "Meile", "Gallonen (US)": "Gallone (US)",
   "Pints (US)": "Pint (US)", "Tassen (US)": "Tasse (US)", Acres: "Acre",
   Fußballfelder: "Fußballfeld", Seemeilen: "Seemeile", Unzen: "Unze", Pfund: "Pfund",
   Zoll: "Zoll", Fuß: "Fuß", Yards: "Yard", Knoten: "Knoten" };
-const TEMPERATUR = { celsius: "C", c: "C", "°c": "C", fahrenheit: "F", f: "F", "°f": "F",
+const TEMPERATUR = { __proto__: null,
+  celsius: "C", c: "C", "°c": "C", fahrenheit: "F", f: "F", "°f": "F",
   kelvin: "K", k: "K" };
 
 function tempUmrechnen(wert, von, nach) {
@@ -212,7 +214,8 @@ export function einheitenAntwort(text, sprache = "de") {
 }
 
 // -- Daten und Countdowns ----------------------------------------------------------
-const MONATE = { januar: 1, jan: 1, january: 1, februar: 2, feb: 2, february: 2, maerz: 3,
+const MONATE = { __proto__: null,
+  januar: 1, jan: 1, january: 1, februar: 2, feb: 2, february: 2, maerz: 3,
   mrz: 3, march: 3, mar: 3, april: 4, apr: 4, mai: 5, may: 5, juni: 6, jun: 6, june: 6, juli: 7,
   jul: 7, july: 7, august: 8, aug: 8, september: 9, sep: 9, sept: 9, oktober: 10, okt: 10,
   october: 10, oct: 10, november: 11, nov: 11, dezember: 12, dez: 12, december: 12, dec: 12 };
@@ -648,7 +651,8 @@ export function zufallAntwort(text, sprache = "de", zufall = Math.random) {
 }
 
 // -- Uebersetzen ------------------------------------------------------------------
-const SPRACHEN = { englisch: "en", english: "en", deutsch: "de", german: "de", franzoesisch: "fr",
+const SPRACHEN = { __proto__: null,
+  englisch: "en", english: "en", deutsch: "de", german: "de", franzoesisch: "fr",
   french: "fr", spanisch: "es", spanish: "es", italienisch: "it", italian: "it", tuerkisch: "tr",
   turkish: "tr", niederlaendisch: "nl", hollaendisch: "nl", dutch: "nl", polnisch: "pl",
   polish: "pl", portugiesisch: "pt", portuguese: "pt", russisch: "ru", russian: "ru",
@@ -658,7 +662,8 @@ const SPRACHEN = { englisch: "en", english: "en", deutsch: "de", german: "de", f
   norwegian: "no", tschechisch: "cs", czech: "cs", kroatisch: "hr", croatian: "hr",
   latein: "la", latin: "la", koreanisch: "ko", korean: "ko", finnisch: "fi", finnish: "fi",
   ungarisch: "hu", hungarian: "hu", rumaenisch: "ro", romanian: "ro" };
-const SPRACHNAME = { en: ["Englisch", "English"], de: ["Deutsch", "German"], fr: ["Französisch",
+const SPRACHNAME = { __proto__: null,
+  en: ["Englisch", "English"], de: ["Deutsch", "German"], fr: ["Französisch",
   "French"], es: ["Spanisch", "Spanish"], it: ["Italienisch", "Italian"] };
 
 function spracheAus(wort) {
@@ -698,7 +703,7 @@ export async function uebersetzenAntwort(text, sprache, kontext) {
 }
 
 // -- Gespraech: mehr als Hallo und Danke ------------------------------------------
-const FAKTEN = {
+const FAKTEN = { __proto__: null,
   de: ["Ein Tag auf der Venus dauert länger als ein ganzes Venusjahr: Sie dreht sich in rund 243 Erdtagen "
     + "einmal um sich selbst, braucht für eine Runde um die Sonne aber nur etwa 225.",
   "Oktopusse haben drei Herzen und blaues Blut.",
@@ -713,7 +718,7 @@ const FAKTEN = {
   "Sharks existed before trees – by roughly 50 million years.",
   "A lightning bolt is about five times hotter than the surface of the Sun."],
 };
-const MUT = {
+const MUT = { __proto__: null,
   de: ["Kleine Schritte zählen auch. Hauptsache, du gehst los.",
     "Du musst nicht perfekt sein, um anzufangen – aber du musst anfangen, um besser zu werden.",
     "Heute ist ein guter Tag, um etwas zu schaffen, auf das du morgen stolz bist.",
@@ -723,7 +728,7 @@ const MUT = {
     "You don't have to be perfect to start – but you have to start to get better.",
     "Mistakes are proof that you're trying.", "One thing at a time. You've got this!"],
 };
-const IDEEN_ESSEN = {
+const IDEEN_ESSEN = { __proto__: null,
   de: ["Wie wär's mit **Pfannkuchen**? Geht schnell und schmeckt süß wie herzhaft.",
     "Ein **Gemüse-Curry** mit Reis – lecker und gut für Reste.", "**Spaghetti aglio e olio**: "
     + "Knoblauch, Olivenöl, Chili, fertig in 15 Minuten.", "Eine **Ofenkartoffel** mit Kräuterquark.",

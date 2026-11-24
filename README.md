@@ -1,4 +1,4 @@
-# Aquaticy AI 16.5.7
+# Aquaticy AI 17.0.0
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -113,7 +113,7 @@ Was sich in jeder Fassung geändert hat, steht im [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 16.5.7
+aquaticy --version            # 17.0.0
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup
@@ -520,6 +520,15 @@ brauchst du nicht.
 
 **Mit Kontensystem.** Wer die Weboberfläche öffnet, legt zuerst ein Konto an. Jedes Konto hat
 eigene Chats, Einstellungen, Speicher und Schlüssel.
+
+**Ohne Anmeldung fortfahren (seit 17.0.0).** Mit dem Kontensystem gibt es auf der Anmeldekarte einen
+Knopf für Gäste. Ein Gast braucht keine E-Mail und kein Passwort. Er stimmt aber dem Datenschutz und
+den Nutzungsbedingungen zu. Alles gilt nur in diesem Tab: Schließt du ihn, löscht Aquaticy das
+Gastkonto samt Chats und Einstellungen nach wenigen Minuten. Nach 12 Stunden endet jeder Gastzugang.
+Unter *Einstellungen → Konto* steht für Gäste nur „Anmelden“. Gäste nutzen das Kontingent von
+„Normal“. Es hängt an der Adresse, damit ein neuer Tab nicht bei null anfängt. Pro Adresse gibt es
+höchstens 3 Gäste gleichzeitig. Passwort, Google und Löschen gibt es für Gäste nicht, auch keine
+Bestätigung in zwei Schritten. Im Einzelkonto gibt es keinen Gastzugang.
 
 **Gleichzeitige Chats mit Ollama.** Verschiedene Konten können gleichzeitig Fragen stellen
 und Antworten empfangen; im Test sind es zehn Konten mit zehn offenen Antwortstreams.

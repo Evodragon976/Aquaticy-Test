@@ -46,7 +46,7 @@ export function wetterlage(code, sprache = "de") {
   return sprache === "en" ? (WETTER_EN[String(code)] || "unknown") : de;
 }
 
-const WETTER_EN = {
+const WETTER_EN = { __proto__: null,
   0: "clear sky", 1: "mainly clear", 2: "partly cloudy", 3: "overcast", 45: "fog",
   48: "freezing fog", 51: "light drizzle", 53: "drizzle", 55: "heavy drizzle",
   56: "light freezing drizzle", 57: "freezing drizzle", 61: "light rain", 63: "rain",

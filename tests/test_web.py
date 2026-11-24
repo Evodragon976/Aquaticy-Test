@@ -2983,7 +2983,9 @@ def test_no_plain_checkbox_is_left_over() -> None:
     roh = html.count('<input type="checkbox"')
     angezogen = html.count('<input type="checkbox" role="switch" class="schalter"')
     # 16.0.2 (Aquaticy-Test): Das Haekchen fuer Gemeinsames Lernen ist entfallen.
-    assert roh == angezogen + 1
+    # 17.0.0: dazu die Zustimmung beim Gastzugang ("Ohne Anmeldung fortfahren").
+    assert roh == angezogen + 2
+    assert '<input type="checkbox" id="gast-terms">' in html
     assert '<input type="checkbox" id="auth-terms" required>' in html
     assert 'id="consent-learning"' not in html
 

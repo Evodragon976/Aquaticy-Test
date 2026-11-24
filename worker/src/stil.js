@@ -19,7 +19,7 @@ export function eine(liste, schluessel, zufall = Math.random) {
 
 export const sp = (sprache, de, en) => (sprache === "en" ? en : de);
 
-export const ABSCHLUSS = {
+export const ABSCHLUSS = { __proto__: null,
   de: ["Willst du mehr dazu wissen? Frag einfach weiter.",
     "Wenn du magst, schlage ich noch mehr dazu nach.",
     "Frag gern nach, wenn etwas unklar ist.",
@@ -28,7 +28,7 @@ export const ABSCHLUSS = {
     "Feel free to ask if anything is unclear.", ""],
 };
 
-export const EINSTIEG = {
+export const EINSTIEG = { __proto__: null,
   de: ["", "", "Gute Frage! ", "Klar, gern: ", "Kurz erklärt: "],
   en: ["", "", "Good question! ", "Sure: ", "In short: "],
 };
