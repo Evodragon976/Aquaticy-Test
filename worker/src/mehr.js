@@ -291,22 +291,48 @@ export function arbeitstage(von, bis) {
 }
 
 /** Ein Datum aus "24.12.", "3.10.1990", "1. mai 2027", "may 1", "2027-03-28". */
+// 17.1.0: Nur Daten, die es gibt. Date.UTC rechnete vorher weiter: "29.02.2027" wurde zum
+// 1. Maerz, "31.04." zum 1. Mai -- und Jahre unter 100 wurden zu 19xx.
+function echtesDatum(jahr, monat, tag) {
+  if (!(jahr >= 1 && jahr <= 9999 && monat >= 1 && monat <= 12 && tag >= 1 && tag <= 31)) return null;
+  const d = new Date(Date.UTC(2000, monat - 1, tag));
+  d.setUTCFullYear(jahr);
+  return d.getUTCFullYear() === jahr && d.getUTCMonth() === monat - 1 && d.getUTCDate() === tag ? d : null;
+}
+
+function datumFund(jahr, monat, tag, mitJahr) {
+  // Ohne Jahr gibt es den 29. Februar im naechsten Schaltjahr (wie in aquaticy/standard.py).
+  for (let j = jahr; j <= (mitJahr ? jahr : jahr + 8); j++) {
+    const d = echtesDatum(j, monat, tag);
+    if (d) return { datum: d, mitJahr };
+  }
+  return { datum: null, mitJahr, ungueltig: { jahr, monat, tag } };
+}
+
+export function ungueltigText(u, sprache) {
+  const zwei = (n) => String(n).padStart(2, "0");
+  const anzeige = `${zwei(u.tag)}.${zwei(u.monat)}.${String(u.jahr).padStart(4, "0")}`;
+  const schalt = u.monat === 2 && u.tag === 29 && u.jahr >= 1 && u.jahr <= 9999;
+  return sp(sprache, `Den ${anzeige} gibt es nicht${schalt ? ` – ${u.jahr} ist kein Schaltjahr` : ""}.`,
+    `${anzeige} doesn't exist${schalt ? ` – ${u.jahr} isn't a leap year` : ""}.`);
+}
+
 export function datumAus(t, jetztJahr) {
   let m = /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/.exec(t);
-  if (m) return { datum: new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])), mitJahr: true };
-  m = /\b(\d{1,2})\.\s*(\d{1,2})(?:\.(?:\s*(\d{4}|\d{2}(?!\d)))?|(?=\s|$))/.exec(t);
+  if (m) return datumFund(+m[1], +m[2], +m[3], true);
+  // Nie mitten in einer Zahlenkette ("1.1.1", "Version 1.24.12").
+  m = /(?<![\d.])\b(\d{1,2})\.\s*(\d{1,2})(?:\.(?:\s*(\d{4}|\d{2}))?(?!\d)|(?=\s|$))/.exec(t);
   if (m) {
-    const jahr = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : jetztJahr;
-    return { datum: new Date(Date.UTC(jahr, +m[2] - 1, +m[1])), mitJahr: Boolean(m[3]) };
+    const kurz = Number(m[3]);
+    // "05.05.90" ist 1990, nicht 2090 -- mehr als 20 Jahre voraus gilt als 19xx (wie in Python).
+    const jahr = m[3] ? (m[3].length === 2 ? (2000 + kurz <= jetztJahr + 20 ? 2000 + kurz : 1900 + kurz)
+      : kurz) : jetztJahr;
+    return datumFund(jahr, +m[2], +m[1], Boolean(m[3]));
   }
   m = /\b(\d{1,2})\.?\s+([a-z]+)(?:\s+(\d{4}))?\b/.exec(t);
-  if (m && MONATE[m[2]]) {
-    return { datum: new Date(Date.UTC(m[3] ? +m[3] : jetztJahr, MONATE[m[2]] - 1, +m[1])), mitJahr: Boolean(m[3]) };
-  }
+  if (m && MONATE[m[2]]) return datumFund(m[3] ? +m[3] : jetztJahr, MONATE[m[2]], +m[1], Boolean(m[3]));
   m = /\b([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b/.exec(t);
-  if (m && MONATE[m[1]]) {
-    return { datum: new Date(Date.UTC(m[3] ? +m[3] : jetztJahr, MONATE[m[1]] - 1, +m[2])), mitJahr: Boolean(m[3]) };
-  }
+  if (m && MONATE[m[1]]) return datumFund(m[3] ? +m[3] : jetztJahr, MONATE[m[1]], +m[2], Boolean(m[3]));
   return null;
 }
 
@@ -349,6 +375,7 @@ export function datumAntwort(text, sprache = "de", jetzt = new Date()) {
     }
     if (!datum) {
       const gefunden = datumAus(ziel, heute.getUTCFullYear());
+      if (gefunden?.ungueltig) return { text: ungueltigText(gefunden.ungueltig, sprache) };
       if (gefunden && gueltig(gefunden.datum)) {
         datum = gefunden.datum;
         if (!gefunden.mitJahr && datum < heute) {
@@ -402,6 +429,7 @@ export function datumAntwort(text, sprache = "de", jetzt = new Date()) {
     const gefunden = amAnlass ? { datum: amAnlass } : ostern2
       ? { datum: ostern(jahr ? +jahr[1] : heute.getUTCFullYear()) }
       : datumAus(m[1], heute.getUTCFullYear());
+    if (gefunden?.ungueltig) return { text: ungueltigText(gefunden.ungueltig, sprache) };
     if (!gefunden || !gueltig(gefunden.datum)) return null;
     const war = gefunden.datum < heute;
     return { text: sp(sprache, `Der ${gefunden.datum.toLocaleDateString(loc, { day: "numeric", month: "long",
@@ -414,6 +442,7 @@ export function datumAntwort(text, sprache = "de", jetzt = new Date()) {
   m = /(?:wie\s*viele\s+tage\s+(?:sind\s+(?:es\s+)?|ist\s+es\s+)?(?:seit|her\s+seit)|how\s+many\s+days\s+since)\s+(?:dem\s+)?(.+)$/.exec(t);
   if (m) {
     const gefunden = datumAus(m[1], heute.getUTCFullYear());
+    if (gefunden?.ungueltig) return { text: ungueltigText(gefunden.ungueltig, sprache) };
     if (!gefunden || !gueltig(gefunden.datum)) return null;
     const tage = Math.round((heute - gefunden.datum) / 86400000);
     return { text: sp(sprache, `Seit dem ${zeig(gefunden.datum)} sind **${zahl(tage, sprache)} Tage** vergangen.`,

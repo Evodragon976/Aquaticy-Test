@@ -476,7 +476,13 @@ def app(environ: dict[str, Any],
     if verbund is not None and _STATE["aktiv"] == 0:
         # Nur wenn gerade keine andere Anfrage laeuft: holen, was andere Instanzen aenderten.
         with contextlib.suppress(Exception), _SAVE_LOCK:
-            verbund.auffrischen()
+            if verbund.auffrischen():
+                # 17.1.0: Eine fremde Fassung (etwa von einer alten Instanz waehrend eines Deploys)
+                # kann neue Spalten noch nicht haben -- nachziehen, bevor jemand sie liest.
+                from aquaticy import web
+
+                if web.AUTH is not None:
+                    web.AUTH.ensure_schema()
     speichern = methode in ("POST", "DELETE") or (
         methode == "GET" and str(environ.get("PATH_INFO") or "") in SAVE_AFTER_GET)
     return _relay(_raw_request(environ, body), ip, speichern, start_response)
@@ -543,8 +549,16 @@ def _weiterreichen(handler: Any, roh: bytes, ip: str, speichern: bool,
         datei.close()
         aussen.close()
         faden.join(timeout=5)
-        if speichern and int(teile[1]) < 500:
+        # 17.1.0: Hat das Aufraeumen (auch bei GET) Gaeste geloescht, gilt das ueberall.
+        if (speichern or _gaeste_geloescht()) and int(teile[1]) < 500:
             save_if_changed()
+
+
+def _gaeste_geloescht() -> bool:
+    """17.1.0: Hat web.gaeste_aufraeumen() bei dieser Anfrage Gaeste geloescht?"""
+    from aquaticy import web
+
+    return bool(web.gaeste_geloescht_abholen())
 
 
 class _FakeServer:

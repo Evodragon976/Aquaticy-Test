@@ -3,6 +3,35 @@
 Was sich in den einzelnen Fassungen von Aquaticy geändert hat, die neueste zuerst.
 Zurück zur [README](README.md).
 
+**Neu in 17.1.0:** Nur Fehler behoben.
+
+- **Gastzugang auf Vercel:** Löschte das Aufräumen abgelaufene Gäste bei einer Statusabfrage,
+  speicherte Vercel das nicht. Erst die nächste schreibende Anfrage machte es dauerhaft. Jetzt
+  speichert Vercel sofort.
+- **Vercel beim Deploy:** Lädt eine neue Instanz eine Datenbank von einer älteren, ergänzt sie
+  fehlende Spalten, bevor jemand sie liest. Anmelden klappt auch ohne die neue Spalte.
+- **Gastzugang:** Gäste sahen in den Antworten des Servers ihre interne Adresse
+  „gast-…@gast.invalid“. „Keine, du bist Gast“ blieb in der englischen Oberfläche deutsch.
+  „Anmelden“ in den Einstellungen öffnete den Reiter „Registrieren“. Auf dem Handy konnte ein
+  Wechsel der App wie das Schließen des Tabs wirken, dann war der Gast nach 2 Minuten weg. Ein
+  Aufräumen löscht höchstens 25 Gäste auf einmal. Vor einem neuen Gast kommen die Gäste derselben
+  Adresse zuerst dran.
+- **Worker:** Ein Datum, das es nicht gibt, wurde zum nächsten Tag: „Welcher Wochentag ist der
+  29.02.2027?“ ergab „Der 1. März 2027 ist ein Montag“. Jetzt heißt es „Den 29.02.2027 gibt es nicht
+  – 2027 ist kein Schaltjahr.“ „05.05.90“ ist 1990 statt 2090, und „1.1.1“ ist kein Datum mehr.
+  „Welche Kalenderwoche ist der 1.1.2027?“ nannte die Woche von heute. In der Nacht von Sonntag auf
+  Montag kam noch die alte Woche. Und auf „Guten Morgen, welches Datum ist heute?“ oder „Welches
+  Datum ist heute Morgen?“ kam das Datum von morgen.
+- **Aquaticy Standard:** „Wie viele Tage hat der Monat Februar?“ und „How many days does this month
+  have?“ gehen jetzt. „29.02.0000“ wurde zum Jahr 2000, und „1.1.1“ galt als 1. Januar dieses
+  Jahres. „Welche Kalenderwoche ist morgen?“ und „… ist der 29.02.2027?“ nannten die Woche von
+  heute. Auf „Hello, what day is it?“ kam nur ein Gruß zurück, und „Welches Datum ist heute Morgen?“
+  nannte das Datum von morgen. „100 km in miles“ bekam eine deutsche Antwort.
+- **Schneller:** Die Prüfung auf Beleidigungen braucht für eine Nachricht mit 100.000 Zeichen etwa
+  0,3 bis 0,5 statt bis zu 2,2 Sekunden. Sie findet dasselbe wie vorher (19.212 Sätze verglichen).
+- **Tests:** Der Test für den Systemtext hält die Uhr fest. Lagen zwei Fragen in verschiedenen
+  Minuten, schlug er vorher zufällig fehl.
+
 **Neu in 17.0.0:**
 
 - **Ohne Anmeldung fortfahren:** Auf der Anmeldekarte gibt es einen neuen Knopf. Damit nutzt du

@@ -13,7 +13,7 @@ import { ABSCHLUSS, EINSTIEG, besterSatz, eine, inhaltsWoerter, kernSaetze, saet
   from "./stil.js";
 import { seiteAbrufen } from "./abruf.js";
 import { datumAus, datumAntwort, einheitenAntwort, gespraechMehr, prozentAntwort, sonneAntwort,
-  uebersetzenAntwort, weltzeitAntwort, zufallAntwort } from "./mehr.js";
+  uebersetzenAntwort, ungueltigText, weltzeitAntwort, zufallAntwort } from "./mehr.js";
 
 // -- Feste Antworten ----------------------------------------------------------
 // Was die App kann, kann diese Fassung nur zum Teil. Diese Arten bekommen deshalb
@@ -465,7 +465,7 @@ function rechenAntwort(text, sprache) {
 }
 
 // -- Datum und Uhrzeit --------------------------------------------------------
-function zeitAntwort(w, kern, sprache, { jetzt, zeitzone }) {
+function zeitAntwort(w, kern, sprache, { jetzt, zeitzone, original }) {
   const fragtZeit = /wie\s*spaet|wie\s*viel\s+uhr|wieviel\s+uhr|uhrzeit|what\s+time|current\s+time/
     .test(kern) || (enthaelt(w, ["uhrzeit"]) && w.length <= 6);
   const fragtDatum = /welche[rns]?\s+(?:tag|datum|wochentag)|welches\s+datum|den\s+wievielten|der\s+wievielte|datum\s+(?:ist\s+)?heute|heutige[sn]?\s+datum|what\s+(?:day|date)|what(?:\s+is|'s)\s+the\s+date|was\s+fuer\s+ein\s+tag|today'?s\s+date|welches\s+jahr|what\s+year|kalenderwoche|which\s+(?:day|date)\s+(?:is|was)\s+(?:it\s+)?(?:today|tomorrow|yesterday|the\s+day)|(?:tomorrow|yesterday)(?:'?s)?\s+date/.test(kern)
@@ -475,19 +475,23 @@ function zeitAntwort(w, kern, sprache, { jetzt, zeitzone }) {
   if (enthaelt(w, STICH.wetter) || w.some((x) => WETTER_GENAU.has(x))) return null;
   const zone = zeitzone || "Europe/Berlin";
   const loc = sprache === "en" ? "en-GB" : "de-DE";
-  let uhr, tag;
+  let uhr, tag, heute;
   try {
     uhr = jetzt.toLocaleTimeString(loc, { timeZone: zone, hour: "2-digit", minute: "2-digit" });
     tag = jetzt.toLocaleDateString(loc, { timeZone: zone, weekday: "long", day: "numeric",
       month: "long", year: "numeric" });
+    heute = tagInZone(jetzt, zone);
   } catch {
     return null;
   }
   const ort = zone.split("/").pop().replace(/_/g, " ");
   // "Welches Datum ist morgen?" nannte vorher das Datum von heute (16.4.5).
-  const versatz = /\buebermorgen\b|day\s+after\s+tomorrow/.test(kern) ? 2
-    : /\bvorgestern\b|day\s+before\s+yesterday/.test(kern) ? -2
-    : /\bmorgen\b|\btomorrow\b/.test(kern) ? 1 : /\bgestern\b|\byesterday\b/.test(kern) ? -1 : 0;
+  // 17.1.0: "Guten Morgen, welches Datum ist heute?" ist kein "morgen" -- vorher kam das von morgen.
+  const ohneGruss = kern.replace(/\b(?:guten|heute)\s+morgen\b|\b(?:good|this)\s+morning\b/g, " ");
+  const versatz = /\buebermorgen\b|day\s+after\s+tomorrow/.test(ohneGruss) ? 2
+    : /\bvorgestern\b|day\s+before\s+yesterday/.test(ohneGruss) ? -2
+    : /\bmorgen\b|\btomorrow\b/.test(ohneGruss) ? 1
+    : /\bgestern\b|\byesterday\b/.test(ohneGruss) ? -1 : 0;
   if (fragtDatum && versatz && !/kalenderwoche/.test(kern)) {
     let anderer;
     try {
@@ -506,20 +510,57 @@ function zeitAntwort(w, kern, sprache, { jetzt, zeitzone }) {
       `It's **${uhr}** right now (time zone ${ort}).`) };
   }
   if (/kalenderwoche/.test(kern)) {
-    return { text: sp(sprache, `Wir haben **Kalenderwoche ${kw(jetzt)}**. Heute ist ${tag}.`,
-      `It's **week ${kw(jetzt)}**. Today is ${tag}.`) };
+    // 17.1.0: "Welche Kalenderwoche ist der 1.1.2027?" nannte vorher die Woche von heute -- und
+    // die Woche hing am Tag in UTC, nicht am Tag in der Zeitzone (Sonntag 23:30 UTC ist in Berlin
+    // schon Montag).
+    const gefunden = datumAus(falten(original || kern), heute.getUTCFullYear());
+    if (gefunden?.ungueltig) return { text: ungueltigText(gefunden.ungueltig, sprache) };
+    const ziel = gefunden?.datum ?? (versatz ? new Date(heute.getTime() + versatz * 86400000) : null);
+    if (ziel) {
+      const zeig = ziel.toLocaleDateString(loc, { weekday: "long", day: "numeric", month: "long",
+        year: "numeric", timeZone: "UTC" });
+      const jahr = kwJahr(ziel), anders = jahr !== ziel.getUTCFullYear();
+      return { text: sp(sprache,
+        `Der ${zeig} liegt in **Kalenderwoche ${kw(ziel)}**${anders ? ` von ${jahr}` : ""}.`,
+        `${zeig} is in **week ${kw(ziel)}**${anders ? ` of ${jahr}` : ""}.`) };
+    }
+    return { text: sp(sprache, `Wir haben **Kalenderwoche ${kw(heute)}**. Heute ist ${tag}.`,
+      `It's **week ${kw(heute)}**. Today is ${tag}.`) };
   }
   return { text: sp(sprache, `Heute ist **${tag}**. Gerade ist es ${uhr} Uhr (Zeitzone ${ort}).`,
     `Today is **${tag}**. It's ${uhr} right now (time zone ${ort}).`) };
 }
 
+/** Der Donnerstag der Woche (ISO 8601): Sein Jahr ist das Jahr der Kalenderwoche. */
+function donnerstag(datum) {
+  // 17.1.0: Ohne Date.UTC -- das machte aus dem Jahr 50 das Jahr 1950.
+  const d = new Date(datum.getTime());
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  return d;
+}
+
 /** Kalenderwoche nach ISO 8601. */
 export function kw(datum) {
-  const d = new Date(Date.UTC(datum.getUTCFullYear(), datum.getUTCMonth(), datum.getUTCDate()));
-  const tag = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - tag);
-  const jahresanfang = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const d = donnerstag(datum);
+  const jahresanfang = new Date(0);
+  jahresanfang.setUTCFullYear(d.getUTCFullYear(), 0, 1);
   return Math.ceil(((d - jahresanfang) / 86400000 + 1) / 7);
+}
+
+/** Das Jahr, zu dem die Kalenderwoche gehoert: Der 1.1.2027 liegt in Woche 53 von 2026. */
+export function kwJahr(datum) {
+  return donnerstag(datum).getUTCFullYear();
+}
+
+/** Der heutige Tag in der Zeitzone, als Mitternacht in UTC. */
+function tagInZone(jetzt, zone) {
+  const teile = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: zone,
+    year: "numeric", month: "numeric", day: "numeric" }).formatToParts(jetzt)
+    .map((t) => [t.type, Number(t.value)]));
+  const d = new Date(0);
+  d.setUTCFullYear(teile.year, teile.month - 1, teile.day);
+  return d;
 }
 
 // -- Wetter -------------------------------------------------------------------

@@ -2054,14 +2054,29 @@ def konto_entfernen(konto: Account) -> None:
         zf.konto_weg(konto.id)
 
 
+GAESTE_JE_DURCHGANG = 25
+#: 17.1.0: So lange darf ein Durchgang hoechstens loeschen (Sekunden).
+GAESTE_SEKUNDEN = 5.0
 #: 17.0.0: Wann zuletzt nach abgelaufenen Gaesten gesehen wurde (monotone Uhr).
 _GAESTE_ZULETZT = [0.0]
+#: 17.1.0: Hat das Aufraeumen Gaeste geloescht? Auf Vercel speichert der Rahmen nach einer GET-
+#: Anfrage sonst nichts -- das Loeschen aus /api/auth/status ginge mit der Instanz verloren.
+_GAESTE_GELOESCHT = threading.Event()
 
 
-def gaeste_aufraeumen(*, sofort: bool = False) -> int:
+def gaeste_geloescht_abholen() -> bool:
+    """17.1.0: True, wenn seit dem letzten Abholen Gaeste geloescht wurden (danach False)."""
+    if _GAESTE_GELOESCHT.is_set():
+        _GAESTE_GELOESCHT.clear()
+        return True
+    return False
+
+
+def gaeste_aufraeumen(*, sofort: bool = False, adresse: str = "") -> int:
     """17.0.0: Loescht abgelaufene Gaeste samt Daten -- hoechstens einmal pro Minute.
 
     Laeuft bei Statusabfragen und vor jedem neuen Gast, ohne eigenen Hintergrund-Thread.
+    Args: adresse -- vor einem neuen Gast: Gaeste dieser Adresse zuerst (17.1.0).
     Returns: wie viele Gaeste geloescht wurden.
     """
     if AUTH is None:
@@ -2072,11 +2087,18 @@ def gaeste_aufraeumen(*, sofort: bool = False) -> int:
     _GAESTE_ZULETZT[0] = jetzt
     weg = 0
     try:
-        kennungen = AUTH.expired_guests()
+        kennungen = AUTH.expired_guests(vorrang_ip=adresse)
         AUTH.forget_old_guest_usage()
     except Exception:
         return 0
+    # 17.1.0: hoechstens GAESTE_JE_DURCHGANG Loeschungen und GAESTE_SEKUNDEN auf einmal -- nach
+    # einer langen Pause sollen nicht hunderte Loeschungen eine einzige Anfrage aufhalten. Der
+    # Rest folgt beim naechsten Mal. Was nicht klappt, zaehlt nicht: Sonst hielten immer dieselben
+    # Fehlschlaege alle anderen auf.
+    ende = time.monotonic() + GAESTE_SEKUNDEN
     for kennung in kennungen:
+        if weg >= GAESTE_JE_DURCHGANG or time.monotonic() > ende:
+            break
         konto = AUTH.account(kennung)
         if konto is None or not konto.guest:
             continue
@@ -2086,6 +2108,8 @@ def gaeste_aufraeumen(*, sofort: bool = False) -> int:
         except Exception:  # nosec B112
             continue
         weg += 1
+    if weg:
+        _GAESTE_GELOESCHT.set()
     return weg
 
 
@@ -3483,7 +3507,8 @@ class Handler(BaseHTTPRequestHandler):
                     "consent": self._cookie(CONSENT_COOKIE) == "yes",
                     "authenticated": account is not None,
                     "account": (
-                        {"email": account.email, "username": account.username,
+                        {"email": "" if account.guest else account.email,
+                         "username": account.username,
                          "plan": account.plan} if account else None
                     ),
                     "single": bool(AUTH is not None and AUTH.single),
@@ -3528,7 +3553,8 @@ class Handler(BaseHTTPRequestHandler):
 
             self._json(
                 {
-                    "email": account.email,
+                    # 17.1.0: Gaeste haben nur eine interne Adresse -- die zeigt niemand an.
+                    "email": "" if account.guest else account.email,
                     "username": account.username,
                     "plan": account.plan,
                     "pro": account.elevated,
@@ -3567,7 +3593,8 @@ class Handler(BaseHTTPRequestHandler):
                     "version_label": VERSION_LABEL,
                     "account": (
                         {
-                            "email": SESSION.account.email,
+                            "email": ("" if SESSION.account.guest
+                                      else SESSION.account.email),
                             "username": SESSION.account.username,
                             "plan": SESSION.plan,
 
@@ -4605,7 +4632,7 @@ p{{margin:0 0 8px;color:#57534a}}</style></head><body><main>
             if AIGUARD.is_banned(ip=adresse, device=geraet.cookie_hash) is not None:
                 self._json({"ok": False, "error": BANNED_MESSAGE, "code": "banned"}, 403)
                 return
-        gaeste_aufraeumen(sofort=True)
+        gaeste_aufraeumen(sofort=True, adresse=adresse)
         try:
             konto = AUTH.create_guest(ip=adresse, device=geraet, terms_version=LEGAL_VERSION)
         except ValueError as exc:

@@ -2300,6 +2300,9 @@ def test_the_system_prompt_only_changes_when_the_situation_does(
     """Der Systemtext steht am Anfang -- wer ihn anfasst, wirft den beim
     Anbieter zwischengespeicherten Prefix weg und zahlt ihn neu."""
     monkeypatch.setattr("litellm.completion", ScriptedLLM(_message(content="Fertig.")))
+    # 17.1.0: Die Uhr steht still. Der Systemtext nennt die Minute; lagen die beiden Fragen in
+    # verschiedenen Minuten, war das zu Recht eine neue Lage -- und der Test schlug zufaellig fehl.
+    monkeypatch.setattr(Agent, "_clock_now", staticmethod(lambda: "2026-11-24 12:00"))
     agent = Agent(settings, cache=None, toolbox=toolbox)
 
     agent.ask("Erste Frage", stream=False, structured=False)
