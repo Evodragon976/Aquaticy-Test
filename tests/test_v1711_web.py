@@ -91,14 +91,29 @@ def test_a_new_chat_works_on_another_instance(server: int,
     assert status == 200 and web.CHAT_KENNUNG.fullmatch(neu)
     _andere_instanz(monkeypatch)
     status, roh = browser("POST", "/api/chat", {"message": "Hallo", "mode": "normal"}, chat=neu)
-    assert status == 200 and f'"session_id": "{neu}"' in roh and '"type": "done"' in roh
+    assert status == 200 and '"type": "done"' in roh
+    # Die andere Instanz kennt den leeren Chat nicht: Die Nachricht landet in einem frischen
+    # Chat mit neuer Kennung, die die Seite aus dem Ereignis "chat" uebernimmt.
+    kennung = json.loads(roh.split("data: ", 2)[1].split("\n", 1)[0])["session_id"]
+    assert kennung != neu and web.CHAT_KENNUNG.fullmatch(kennung)
     _andere_instanz(monkeypatch)
-    status, roh = browser("POST", "/api/open", {"session_id": neu}, chat=neu)
+    status, roh = browser("POST", "/api/open", {"session_id": kennung}, chat=neu)
     daten = json.loads(roh)
     assert status == 200 and daten["ok"] is True and daten["turns"][0]["question"] == "Hallo"
     _andere_instanz(monkeypatch)
     status, roh = browser("POST", "/api/clear", {}, chat=neu)
-    assert status == 200 and json.loads(roh)["current"] != neu
+    assert status == 200 and json.loads(roh)["current"] not in (neu, kennung)
+
+
+def test_a_foreign_chat_id_is_never_taken_over(server: int,
+                                                monkeypatch: pytest.MonkeyPatch) -> None:
+    anna, bert = _gast(server), _gast(server)
+    _, roh = anna("POST", "/api/clear", {})
+    fremd = json.loads(roh)["current"]
+    # Lauf-Abfragen mit einer fremden Kennung bleiben abgelehnt (wie test_v1211_terra).
+    assert bert("GET", "/api/runstate", chat=fremd)[0] == 400
+    status, roh = bert("POST", "/api/chat", {"message": "Hallo", "mode": "normal"}, chat=fremd)
+    assert status == 200 and f'"session_id": "{fremd}"' not in roh
 
 
 def test_a_strange_chat_id_is_still_refused(server: int) -> None:

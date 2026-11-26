@@ -412,8 +412,9 @@ def prozente(text: str) -> str:
         g, p, art = zahl(treffer.group(1)), zahl(treffer.group(2)), treffer.group(3)
         faktor = 1 + p / 100 if art == "aufschlag" else 1 - p / 100
         wort = "Aufschlag" if art == "aufschlag" else "Rabatt"
-        return (f"{schoen(p)} % {wort} auf {schoen(g)} sind **{schoen(g * faktor)}** "
-                f"(Unterschied: {schoen(abs(g * faktor - g))}).")
+        # 17.1.1: "Preis 80 Euro, 25 % Rabatt" -- vorher ohne Euro ("sind 60").
+        return (f"{schoen(p)} % {wort} auf {schoen(g)} € sind **{schoen(g * faktor)} €** "
+                f"(Unterschied: {schoen(abs(g * faktor - g))} €).")
     treffer = re.search(rf"(?<![\d/.,])(\d{{1,4}})\s*/\s*(\d{{1,4}})\s+(?:von|aus|of)\s+"
                         rf"{ZAHL}", kern)
     if treffer and int(treffer.group(2)) > 0:
@@ -447,8 +448,11 @@ def prozente(text: str) -> str:
         p, art, g = zahl(treffer.group(1)), treffer.group(2), zahl(treffer.group(3))
         faktor = 1 + p / 100 if art == "aufschlag" else 1 - p / 100
         wort = "Aufschlag" if art == "aufschlag" else "Rabatt"
-        return (f"{schoen(p)} % {wort} auf {schoen(g)} sind **{schoen(g * faktor)}** "
-                f"(Unterschied: {schoen(abs(g * faktor - g))}).")
+        # 17.1.1: "20 % Rabatt auf 50 €" -- vorher ohne Euro ("sind 40").
+        geld = re.match(r"\s*(€|eur\b|euro\b|\$|dollar\b|usd\b)", kern[treffer.end():])
+        e = "" if not geld else " €" if geld.group(1) in ("€", "eur", "euro") else " $"
+        return (f"{schoen(p)} % {wort} auf {schoen(g)}{e} sind **{schoen(g * faktor)}{e}** "
+                f"(Unterschied: {schoen(abs(g * faktor - g))}{e}).")
     treffer = PROZENT_VON.search(kern)
     if treffer:
         p, g = zahl(treffer.group(1)), zahl(treffer.group(3))
@@ -458,7 +462,10 @@ def prozente(text: str) -> str:
         if kern[treffer.end():].lstrip().startswith(("%", "prozent")):
             # 16.4.5: "10 % von 10 %" ist 1 % -- vorher stand dort "sind 1".
             return f"{schoen(p)} % von {schoen(g)} % sind **{schoen(g * p / 100)} %**."
-        return f"{schoen(p)} % von {schoen(g)} sind **{schoen(g * p / 100)}**."
+        # 17.1.1: mit Waehrung -- "15 % von 80 €" ergab vorher "sind 12" ohne Euro.
+        geld = re.match(r"\s*(€|eur\b|euro\b|\$|dollar\b|usd\b)", kern[treffer.end():])
+        e = "" if not geld else " €" if geld.group(1) in ("€", "eur", "euro") else " $"
+        return f"{schoen(p)} % von {schoen(g)}{e} sind **{schoen(g * p / 100)}{e}**."
     treffer = PROZENT_PLUS.search(kern)
     if treffer:
         g, art, p = zahl(treffer.group(1)), treffer.group(2), zahl(treffer.group(3))
@@ -502,12 +509,16 @@ _EINHEITEN_JE_ART: dict[str, list[tuple[str, float]]] = {
                 # 17.1.1: Kueche -- vorher "kann ich nicht" (Tasse wie im Worker: US-Cup).
                 ("tasse", .2365882365), ("tassen", .2365882365), ("cup", .2365882365),
                 ("cups", .2365882365), ("essloeffel", .015), ("el", .015),
-                ("tablespoon", .015), ("tablespoons", .015), ("tbsp", .015),
-                ("teeloeffel", .005), ("tl", .005), ("teaspoon", .005), ("teaspoons", .005),
-                ("tsp", .005)],
+                # US-Loeffel zur US-Tasse: 16 tablespoons sind 1 cup (vorher 15,77).
+                ("tablespoon", .01478676478125), ("tablespoons", .01478676478125),
+                ("tbsp", .01478676478125), ("teeloeffel", .005), ("tl", .005),
+                ("teaspoon", .00492892159375), ("teaspoons", .00492892159375),
+                ("tsp", .00492892159375)],
     "flaeche": [("m2", 1), ("quadratmeter", 1), ("qm", 1), ("km2", 1e6),
                 ("quadratkilometer", 1e6), ("ha", 1e4), ("hektar", 1e4), ("ar", 100),
-                ("acre", 4046.8564224), ("acres", 4046.8564224)],
+                ("acre", 4046.8564224), ("acres", 4046.8564224),
+                # 17.1.1: englisch ("square meters" wird in einheiten() zu "m2").
+                ("hectares", 1e4), ("hectare", 1e4)],
     "tempo": [("km/h", 1), ("kmh", 1), ("m/s", 3.6), ("mph", 1.609344), ("knoten", 1.852)],
     "zeit": [("sekunde", 1), ("sekunden", 1), ("s", 1), ("minute", 60), ("minuten", 60),
              ("min", 60), ("stunde", 3600), ("stunden", 3600), ("h", 3600), ("tag", 86400),
@@ -516,6 +527,9 @@ _EINHEITEN_JE_ART: dict[str, list[tuple[str, float]]] = {
     "leistung": [("w", 1), ("watt", 1), ("kw", 1000), ("kilowatt", 1000), ("ps", 735.49875),
                  ("hp", 745.699872)],
     "daten": [("byte", 1), ("bytes", 1), ("kb", 1e3), ("mb", 1e6), ("gb", 1e9), ("tb", 1e12),
+              # 17.1.1: "How many bytes in a kilobyte?" -- vorher "Sorry".
+              ("kilobyte", 1e3), ("kilobytes", 1e3), ("megabyte", 1e6), ("megabytes", 1e6),
+              ("gigabyte", 1e9), ("gigabytes", 1e9), ("terabyte", 1e12), ("terabytes", 1e12),
               ("kib", 1024), ("mib", 1024**2), ("gib", 1024**3), ("tib", 1024**4),
               ("bit", .125), ("bits", .125), ("kbit", 125), ("mbit", 125e3), ("gbit", 125e6)],
     # 17.1.1: Energie und Druck. Vorher galt "Wattstunden" als Watt -- "1000 Wattstunden in
@@ -542,6 +556,8 @@ for _name, _gleich in (("gram", "g"), ("grams", "g"), ("kilogram", "kg"), ("kilo
                        ("liters", "l"), ("litres", "l"), ("gallons", "gallon"),
                        ("hour", "h"), ("hours", "h"), ("minutes", "min"), ("seconds", "s"),
                        ("days", "tag"), ("day", "tag"), ("weeks", "woche"),
+                       # 17.1.1: "How many hours in a week?" -- vorher "Sorry".
+                       ("week", "woche"),
                        # "6 Fuß in Metern": die Einheit im Dativ (16.4.5).
                        ("metern", "m"), ("kilometern", "km"), ("zentimetern", "cm"),
                        ("millimetern", "mm"), ("litern", "l"), ("millilitern", "ml"),
@@ -556,7 +572,9 @@ def anzeige(name: str) -> str:
     if EINHEITEN.get(name, ("",))[0] == "daten":
         # 17.1.1: vorher "8 BIT sind 1 BYTE".
         bits = {"bit": "Bit", "bits": "Bit", "byte": "Byte", "bytes": "Byte", "kbit": "kbit",
-                "mbit": "Mbit", "gbit": "Gbit"}
+                "mbit": "Mbit", "gbit": "Gbit", "kilobyte": "KB", "kilobytes": "KB",
+                "megabyte": "MB", "megabytes": "MB", "gigabyte": "GB", "gigabytes": "GB",
+                "terabyte": "TB", "terabytes": "TB"}
         return bits.get(name) or name.upper().replace("IB", "iB")
     deutsch = {"metern": "Meter", "kilometern": "Kilometer", "zentimetern": "Zentimeter",
                "millimetern": "Millimeter", "litern": "Liter", "millilitern": "Milliliter",
@@ -604,6 +622,13 @@ _DAUER = re.compile(
 
 def _dauer_umrechnen(gefaltet: str) -> str:
     """16.4.5: "3 Stunden 20 Minuten in Minuten" -- vorher "20 Minuten sind 20 Minuten"."""
+    # 17.1.1: auch als Frage -- "Wie viele Minuten sind 1 Stunde 20 Minuten?" rechnete vorher
+    # nur die Stunde.
+    frage = re.match(r"(?:wie\s*viele?|how\s+many)\s+(stunden|minuten|sekunden|hours|minutes|"
+                     r"seconds)\s+(?:sind|ist|haben|hat|ergeben|machen|are|is|in|make)\s+(.+)$",
+                     gefaltet)
+    if frage:
+        gefaltet = f"{frage.group(2)} in {frage.group(1)}"
     treffer = _DAUER.search(gefaltet)
     if not treffer or sum(1 for g in treffer.groups()[:3] if g) < 2:
         return ""
@@ -636,6 +661,9 @@ def einheiten(text: str) -> str:
                                 f"{'zoll' if t.group(3) == 'zoll' else 'inches'}",
                       gefaltet)
     gefaltet = re.sub(r"\bein(?:e|en|em)?\s+(?=[a-z°/]+\s+(?:in|nach|zu|to)\s)", "1 ", gefaltet)
+    # 17.1.1: "1 acre in square meters" -- vorher "Sorry".
+    gefaltet = re.sub(r"\bsquare\s+(?:meters?|metres?)\b", "m2", gefaltet)
+    gefaltet = re.sub(r"\bsquare\s+(?:kilometers?|kilometres?)\b", "km2", gefaltet)
     dauer = _dauer_umrechnen(gefaltet)
     if dauer:
         return dauer
@@ -792,6 +820,15 @@ def in_einheit(text: str, kern: str, tage: int, heute: date | None = None) -> st
         wochen, rest = divmod(tage, 7)
         mehr = f" und {rest} {'Tag' if rest == 1 else 'Tage'}" if rest else ""
         return text + f" Das sind **{wochen} {'Woche' if wochen == 1 else 'Wochen'}{mehr}**."
+    if heute is not None and tage >= 28 and re.search(r"\bmonate?n?\b", kern):
+        # 17.1.1: "Wie viele Monate bis Weihnachten?" nannte vorher nur Tage.
+        ziel = heute + timedelta(days=tage)
+        monate = 0
+        while (naechster := _monate_spaeter(heute, monate + 1)) is not None and naechster <= ziel:
+            monate += 1
+        rest = (ziel - (_monate_spaeter(heute, monate) or heute)).days
+        mehr = f" und {rest} {'Tag' if rest == 1 else 'Tage'}" if rest else ""
+        return text + f" Das sind **{monate} {'Monat' if monate == 1 else 'Monate'}{mehr}**."
     if tage >= 1 and re.search(r"\bstunden\b", kern):
         return text + f" Das sind etwa **{schoen(tage * 24)} Stunden**."
     return text
@@ -863,6 +900,24 @@ def _datum_extra(kern: str, jetzt: datetime) -> str:
     Wochenende?", "Ist morgen Montag?".
     """
     heute = jetzt.date()
+    # "Wann ist der 1. Mai?" -- vorher "kann ich nicht".
+    wann_ = re.fullmatch(r"wann\s+ist\s+(?:der\s+)?(\d{1,2})\.?\s*(" + "|".join(MONATE)
+                         + r")(?:\s+(\d{4}))?", kern)
+    if wann_:
+        nummer = MONATE.index(wann_.group(2)) + 1
+        jahr = int(wann_.group(3) or heute.year)
+        tag_nr = int(wann_.group(1))
+        if 1 <= jahr <= 9999 and 1 <= tag_nr <= calendar.monthrange(jahr, nummer)[1]:
+            tag = date(jahr, nummer, tag_nr)
+            if not wann_.group(3) and tag < heute and jahr < 9999:
+                tag = date(jahr + 1, nummer, min(tag_nr, calendar.monthrange(jahr + 1, nummer)[1]))
+            name = next((n for d, n in feiertage(tag.year) if d == tag), "")
+            zusatz = f" ({name}, bundesweiter Feiertag)" if name else ""
+            abstand = (tag - heute).days
+            wann_text = ("heute" if abstand == 0 else in_tagen(abstand) if abstand > 0
+                         else f"vor {-abstand} Tagen")
+            return (f"Der {tag:%d.%m.%Y}{zusatz} ist ein **{WOCHENTAGE[tag.weekday()]}** – "
+                    f"{wann_text}.")
     wochen = re.search(r"\bwie\s*viele\s+(?:kalender)?wochen\s+hat\s+(?:das\s+jahr\s+)?(\d{4}|"
                        r"dieses\s+jahr|das\s+jahr)\b", kern)
     if wochen:
@@ -1345,13 +1400,23 @@ NICHT_WAHL = re.compile(
 def zufall(text: str, wuerfel: random.Random | None = None) -> str:
     rnd = wuerfel or random.SystemRandom()
     kern = falten(text)
-    if re.search(r"\bwuerf(el|le|eln)?\b", kern):
+    # 17.1.1: Fragen *ueber* Wuerfel oder Muenzen ("Was ist ein Würfel?", "Wie schwer ist eine
+    # 2-Euro-Münze?") sind kein Auftrag -- vorher kam ein Wurf.
+    nur_frage = bool(re.match(r"(?:was|wie|wer|wo|warum|wieso|weshalb|welche[rsmn]?|wann|ist|"
+                              r"sind|hat|haben|gibt|ich|mein|meine)\b", kern)) and not re.search(
+        r"\b(?:wuerfle|wuerfeln|wirf|werfen|kopf\s+oder\s+zahl)\b", kern)
+    zahlwort = {"zwei": 2, "drei": 3, "vier": 4, "fuenf": 5}
+    mal_ = re.search(r"\b(zwei|drei|vier|fuenf|[2-9]|10)\s*(?:mal|x)\b", kern)
+    if not nur_frage and re.search(r"\bwuerf(el|le|eln)?\b", kern):
         # "Würfle 3 Würfel" und "einen W20": vorher immer ein Würfel mit sechs Seiten.
         seiten_ = re.search(r"\b(?:w|d)(4|6|8|10|12|20|100)\b", kern)
         anzahl_ = re.search(r"\b([2-9]|10|zwei|drei|vier|fuenf)\s+(?:w|d)?(?:\d+\s+)?wuerfel", kern)
         seiten = int(seiten_.group(1)) if seiten_ else 6
         woerter = {"zwei": 2, "drei": 3, "vier": 4, "fuenf": 5}
         anzahl = (woerter.get(anzahl_.group(1)) or int(anzahl_.group(1))) if anzahl_ else 1
+        if mal_ and not anzahl_:
+            # 17.1.1: "Würfle zweimal" -- vorher ein Wurf.
+            anzahl = zahlwort.get(mal_.group(1)) or int(mal_.group(1))
         # 16.4.5: "Würfle 3W6", "2d20" -- vorher ein Wurf mit sechs Seiten.
         kombi = re.search(r"\b([1-9]|1\d|20)\s*[wd](4|6|8|10|12|20|100)\b", kern)
         if kombi:
@@ -1361,8 +1426,12 @@ def zufall(text: str, wuerfel: random.Random | None = None) -> str:
         if anzahl == 1:
             return f"🎲 Gewürfelt{art}: **{wuerfe[0]}**"
         return (f"🎲 Gewürfelt{art}: {' + '.join(str(w) for w in wuerfe)} = **{sum(wuerfe)}**")
-    if re.search(r"\b(muenze|kopf\s+oder\s+zahl)\b", kern):
-        return f"🪙 **{rnd.choice(('Kopf', 'Zahl'))}**"
+    if not nur_frage and re.search(r"\b(muenzen?|muenzwurf|kopf\s+oder\s+zahl)\b", kern):
+        # 17.1.1: "Wirf zwei Münzen", "Münzwurf" -- vorher "kann ich nicht".
+        viele = re.search(r"\b(zwei|drei|vier|fuenf|[2-9]|10)\s+muenzen\b", kern) or mal_
+        n = (zahlwort.get(viele.group(1)) or int(viele.group(1))) if viele else 1
+        muenz_seiten = [rnd.choice(("Kopf", "Zahl")) for _ in range(n)]
+        return "🪙 " + ", ".join(f"**{w}**" for w in muenz_seiten)
     # 16.4.5: "Nenn mir eine Zahl zwischen 10 und 5" kannte Standard vorher nicht.
     treffer = re.search(r"zufallszahl(?:\s+zwischen)?\s+(-?\d+)\s+(?:und|bis|-)\s+(-?\d+)|"
                         r"^(?:(?:nenn|gib|sag|zieh|waehl)\w*\s+(?:mir\s+)?)?(?:eine\s+)?zahl\s+"
@@ -2115,7 +2184,8 @@ def nachrichten(holen: Holen) -> str:
 # -- Wissen (Wikipedia) -------------------------------------------------------------------------
 
 WISSEN_VORN = re.compile(
-    r"^(?:und\s+)?(?:wer|was)\s+(?:ist|sind|war|waren)\s+|^erzaehl\s+(?:mir\s+)?(?:etwas\s+|was\s+)?"
+    r"^(?:und\s+)?(?:wer|was)\s+(?:ist|sind|war|waren)\s+|^erzaehl\s+(?:mir\s+)?(?:etwas\s+|wa"
+    r"s\s+)?"
     r"(?:ueber|von)\s+|^was\s+weisst\s+du\s+(?:ueber|von)\s+|^erklaer(?:e)?\s+(?:mir\s+)?|"
     r"^was\s+bedeutet\s+|^was\s+versteht\s+man\s+unter\s+|^(?:who|what)\s+(?:is|are|was)\s+|"
     # 16.4.5: weitere uebliche Formen
@@ -2858,9 +2928,12 @@ def _mehr_zahlen(kern: str) -> str:
             if treffer.group(1).startswith(("ggt", "groesste")):
                 return f"Der größte gemeinsame Teiler ist **{schoen(math.gcd(*ganze))}**."
             return f"Das kleinste gemeinsame Vielfache ist **{schoen(math.lcm(*ganze))}**."
-    treffer = re.search(r"\bprimfaktor(?:en|zerlegung)\s+(?:von\s+)?(\d{1,10})\b", kern)
+    treffer = re.search(r"\bprimfaktor(?:en|zerlegung)\s+(?:von\s+)?(\d{1,10})\b|"
+                        r"\b(?:zerleg\w*\s+)?(\d{1,10})\s+in\s+(?:seine\s+)?primfaktoren\b",
+                        kern)
     if treffer:
-        n = int(treffer.group(1))
+        # 17.1.1: auch "Zerlege 360 in Primfaktoren" -- vorher "kann ich nicht".
+        n = int(treffer.group(1) or treffer.group(2))
         if n < 2:
             return f"{n} hat keine Primfaktoren."
         faktoren, rest, t = [], n, 2
@@ -3364,9 +3437,13 @@ def gespraech(text: str, rnd: random.Random) -> str:
     if re.search(r"\bzungenbrecher\b", kern):
         return "Versuch den mal dreimal schnell hintereinander:\n\n" + rnd.choice(ZUNGENBRECHER)
     # "Mir ist nicht langweilig" bekam vorher Ideen gegen Langeweile (16.4.5).
-    if re.search(r"\b(langweilig|langeweile|bored|was\s+(?:soll|kann)\s+ich\s+(?:heute\s+)?"
-                 r"(?:machen|tun|unternehmen))\b", kern) and not re.search(
-                     r"\b(?:nicht|nie|keine)\s+(?:so\s+|mehr\s+)?(?:langweilig|langeweile)|not\s+bored",
+    # 17.1.1: "was kann ich tun" allein -- nach einer Schilderung ("Mein Chef hat mich beleidigt,
+    # was kann ich tun?") kamen vorher Ideen wie "Räum eine Schublade auf".
+    if re.search(r"\b(langweilig|langeweile|bored)\b|^(?:und\s+|also\s+)?was\s+(?:soll|kann)\s+"
+                 r"ich\s+"
+                 r"(?:heute\s+|jetzt\s+)?(?:machen|tun|unternehmen)$", kern) and not re.search(
+                     r"\b(?:nicht|nie|keine)\s+(?:so\s+|mehr\s+)?(?:langweilig|langeweile)|no"
+                     r"t\s+bored",
                      kern):
         ideen = rnd.sample(LANGEWEILE, 3)
         return ("Ich hab ein paar Ideen für dich:\n" + "\n".join(f"- {i}" for i in ideen)
@@ -3824,10 +3901,17 @@ def _antwort(frage: str, verlauf: list[dict[str, Any]] | None = None, *, secure:
     if hilfe_sprache:
         return hilfe_sprache
     sprache = welt_sprache(frage, verlauf)
+    if sprache == "de" and re.fullmatch(r"(?:hi|hey|hello)\s+there[\s!.?]*", frage.lower()):
+        sprache = ""  # 17.1.1: "Hi there" galt als deutsch und bekam die deutsche Absage.
     if not sprache and _klingt_englisch(frage):
         # 17.1.1: "Average of 1, 2, 3, 4", "100 euros in dollars", "I feel sad" bekamen vorher
         # deutsche Antworten -- die Erkennung braucht sonst typische Fragewoerter.
         sprache = "en"
+    if sprache == "en":
+        # 17.1.1: vor der allgemeinen Antwort -- die nannte bei "in 10 days" das Datum von heute.
+        text = englisch_vorab(falten(englische_zahlen(frage)), heute)
+        if text:
+            return text
     if sprache and sprache != "de":
         text = welt_antwort(frage, sprache, holen, jetzt, wohnort, verlauf)
         if text:
@@ -3837,7 +3921,8 @@ def _antwort(frage: str, verlauf: list[dict[str, Any]] | None = None, *, secure:
         # Tausendertrenner, der Punkt das Dezimalzeichen.
         frage = englische_zahlen(frage)
         kern = falten(frage)
-        text = englisch_kram(kern, heute) or englisch_mehr(frage, kern, holen, jetzt)
+        text = (englisch_kram(kern, heute) or englisch_mehr(frage, kern, holen, jetzt)
+                or englisch_alltag(frage, kern, heute, jetzt))
         if text:
             return text
 
@@ -4151,13 +4236,59 @@ def englisch_kram(kern: str, heute: date) -> str:
                     f"({ziel.isoformat()}).")
         return f"There {'is' if tage == 1 else 'are'} **{tage:,} day{'s' * (tage != 1)}** until " \
                f"{name} ({ziel.isoformat()})."
-    if re.fullmatch(r"(?:please\s+)?(?:roll|throw)\s+(?:a|one|the)\s+(?:dice|die)(?:\s+for\s+me)?|"
-                    r"(?:please\s+)?(?:flip|toss)\s+a\s+coin(?:\s+for\s+me)?", kern):
-        # 16.4.5: "Roll a dice", "Flip a coin" -- auf Deutsch ging es, auf Englisch "Sorry".
+    wurf = re.fullmatch(r"(?:please\s+)?(?:can\s+you\s+)?(?:roll|throw|flip|toss)\s+"
+                        r"(?:(a|an|one|the|two|three|four|five|[1-9]|10)\s+)?"
+                        r"(?:([1-9]|1\d|20)?d(4|6|8|10|12|20|100)|(dice|die|coins?))"
+                        r"(?:\s+(twice|three\s+times|(?:[2-9]|10)\s+times))?(?:\s+for\s+me)?",
+                        kern)
+    if wurf:
+        # 16.4.5: "Roll a dice", "Flip a coin". 17.1.1: auch "Roll two dice", "Roll a die
+        # twice", "Roll a d20", "Flip two coins" -- vorher "Sorry".
         rnd = random.SystemRandom()
-        if "coin" in kern:
-            return f"🪙 **{rnd.choice(('Heads', 'Tails'))}**"
-        return f"🎲 Rolled: **{rnd.randint(1, 6)}**"
+        zahlen_ = {"two": 2, "three": 3, "four": 4, "five": 5}
+        wort, viele_, seiten_, ding, mal = wurf.groups()
+        n = zahlen_.get(wort or "") or (int(wort) if (wort or "").isdigit() else 1)
+        n = int(viele_) if viele_ else n
+        if mal:
+            n *= 2 if mal == "twice" else 3 if mal.startswith("three") else int(mal.split()[0])
+        if ding and ding.startswith("coin"):
+            return "🪙 " + ", ".join(f"**{rnd.choice(('Heads', 'Tails'))}**" for _ in range(n))
+        seiten = int(seiten_ or 6)
+        wuerfe = [rnd.randint(1, seiten) for _ in range(n)]
+        art = f" (d{seiten})" if seiten != 6 else ""
+        if n == 1:
+            return f"🎲 Rolled{art}: **{wuerfe[0]}**"
+        return f"🎲 Rolled{art}: {' + '.join(map(str, wuerfe))} = **{sum(wuerfe)}**"
+    treffer = re.fullmatch(r"(?:what\s+(?:are|is)\s+)?(?:the\s+)?prime\s+(?:factors|"
+                           r"factori[sz]ation)\s+of\s+(\d{1,10})|factori[sz]e\s+(\d{1,10})", kern)
+    if treffer:
+        # 17.1.1: "Prime factors of 360" -- vorher eine deutsche Absage.
+        n = int(treffer.group(1) or treffer.group(2))
+        if n < 2:
+            return f"{n} has no prime factors."
+        faktoren_, rest_, t = [], n, 2
+        while t * t <= rest_:
+            while rest_ % t == 0:
+                faktoren_.append(t)
+                rest_ //= t
+            t += 1
+        if rest_ > 1:
+            faktoren_.append(rest_)
+        return f"{n:,} = **{' × '.join(map(str, faktoren_))}**"
+    if re.fullmatch(r"how\s+many\s+days\s+(?:are\s+(?:there\s+)?in|does)\s+(?:this|the)\s+"
+                    r"(?:current\s+)?year(?:\s+have)?", kern):
+        # 17.1.1: "How many days are in this year?" -- "How many days in 2028?" ging schon.
+        return (f"{heute.year} has **{366 if calendar.isleap(heute.year) else 365} days**.")
+    treffer = re.fullmatch(r"(?:what\s+is\s+|what'?s\s+)?(\d{1,3}(?:\.\d+)?)\s*%\s+off\s+"
+                           r"(?:of\s+)?(\$|€)?\s*(\d[\d,]*(?:\.\d+)?)\s*"
+                           r"(dollars?|euros?|usd|eur)?", kern)
+    if treffer:
+        # 17.1.1: "20% off 50 dollars" -- auf Deutsch ging "20 % Rabatt auf 50 €".
+        p_, g_ = float(treffer.group(1)), float(treffer.group(3).replace(",", ""))
+        zeichen = treffer.group(2) or treffer.group(4) or ""
+        e = (" €" if zeichen in ("€", "euro", "euros", "eur") else " $" if zeichen else "")
+        return _englisch(f"{schoen(p_)} % off {schoen(g_)}{e} is **{schoen(g_ * (1 - p_ / 100))}"
+                         f"{e}** (you save {schoen(g_ * p_ / 100)}{e}).")
     treffer = re.search(r"\bwhen\s+is\s+mother'?s\s+day(?:\s+(?:in\s+)?(\d{4}))?\b", kern)
     if treffer:
         # 16.4.5: Muttertag (zweiter Sonntag im Mai, in Deutschland und den USA) -- vorher "Sorry".
@@ -4295,6 +4426,206 @@ def _en_uhrzeit(text: str) -> tuple[int, int] | None:
     return (stunde, minute) if stunde < 24 and minute < 60 else None
 
 
+_FAKTEN_EN = ("Honey never really spoils – edible honey was found in ancient Egyptian tombs.",
+              "Octopuses have three hearts and blue blood.",
+              "Bananas are berries, but strawberries are not.",
+              "A day on Venus is longer than a year on Venus.",
+              "Sharks are older than trees.")
+_ZEICHEN_EN = {"Steinbock ♑": "Capricorn ♑", "Wassermann ♒": "Aquarius ♒",
+               "Fische ♓": "Pisces ♓",
+               "Widder ♈": "Aries ♈", "Stier ♉": "Taurus ♉", "Zwillinge ♊": "Gemini ♊",
+               "Krebs ♋": "Cancer ♋", "Löwe ♌": "Leo ♌", "Jungfrau ♍": "Virgo ♍",
+               "Waage ♎": "Libra ♎", "Skorpion ♏": "Scorpio ♏", "Schütze ♐": "Sagittarius ♐"}
+_ZAHLWOERTER_EN = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+                   "eight": 8, "nine": 9, "ten": 10, "a": 1, "an": 1}
+
+
+def _englisches_datum(tag: date) -> str:
+    return f"{WEEKDAYS[tag.weekday()]}, {MONTHS[tag.month - 1].title()} {tag.day}, {tag.year}"
+
+
+def englisch_vorab(kern: str, heute: date) -> str:
+    """17.1.1: Englische Fragen, die die allgemeine Weltsprachen-Antwort falsch beantwortete.
+
+    "What day is it in 10 days?" und "What date is it in 3 months?" bekamen das Datum von heute.
+    """
+    treffer = re.fullmatch(r"(?:what|which)\s+(?:day|date)\s+(?:is\s+it|will\s+it\s+be|is)\s+in\s+"
+                           r"(\d{1,4}|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+"
+                           r"(days?|weeks?|months?|years?)|(?:what|which)\s+(?:day|date)\s+"
+                           r"(?:was\s+it|was)\s+(\d{1,4}|a|an|one|two|three|four|five|six|seven|"
+                           r"eight|nine|ten)\s+(days?|weeks?|months?|years?)\s+ago|what\s+was\s"
+                           r"+the\s+"
+                           r"date\s+(\d{1,4}|a|an|one|two|three)\s+(days?|weeks?|months?|years?"
+                           r")\s+ago",
+                           kern)
+    if not treffer:
+        return ""
+    roh, art = next((a, b) for a, b in zip(treffer.groups()[::2], treffer.groups()[1::2],
+                                           strict=True) if a)
+    n = int(roh) if roh.isdigit() else _ZAHLWOERTER_EN[roh]
+    zurueck = "ago" in kern
+    if art.startswith(("month", "year")):
+        monate = n * (12 if art.startswith("year") else 1)
+        tag = _monate_spaeter(heute, -monate if zurueck else monate)
+    else:
+        tage = n * (7 if art.startswith("week") else 1)
+        try:
+            tag = heute + timedelta(days=-tage if zurueck else tage)
+        except OverflowError:
+            tag = None
+    if tag is None:
+        return "That date is outside the calendar I can handle (years 1 to 9999)."
+    einheit = f"{n} {art.rstrip('s')}{'s' * (n != 1)}"
+    if zurueck:
+        return f"{einheit} ago it was **{_englisches_datum(tag)}**."
+    return f"In {einheit} it will be **{_englisches_datum(tag)}**."
+
+
+def englisch_alltag(frage: str, kern: str, heute: date, jetzt: datetime) -> str:
+    """17.1.1: Rest, Runden, gerade, teilbar, Teiler, Buchstaben, Wahl -- vorher "Sorry"."""
+    rnd = random.SystemRandom()
+    treffer = (re.fullmatch(r"(?:what\s+is\s+)?(\d{1,12})\s+divided\s+by\s+(\d{1,12})\s+with\s+"
+                            r"(?:a\s+)?remainder", kern)
+               or re.fullmatch(r"(?:what\s+is\s+)?the\s+remainder\s+(?:of|when)\s+(\d{1,12})\s+"
+                               r"(?:is\s+)?divided\s+by\s+(\d{1,12})", kern))
+    if treffer:
+        a, b = int(treffer.group(1)), int(treffer.group(2))
+        if b == 0:
+            return "You can't divide by zero."
+        ganz, rest = divmod(a, b)
+        return (f"{a:,} ÷ {b:,} = **{ganz:,} remainder {rest:,}** "
+                f"({ganz:,} × {b:,} + {rest:,} = {a:,}).")
+    treffer = re.fullmatch(r"round\s+(-?\d+(?:\.\d+)?)\s+to\s+(?:the\s+nearest\s+)?(\d|one|two|"
+                           r"three|"
+                           r"four|five|whole\s+number|integer|ten|hundred|thousand)"
+                           r"(?:\s+decimal(?:\s+places?|s)?|\s+places?)?", kern)
+    if treffer:
+        wert, ziel = float(treffer.group(1)), treffer.group(2)
+        stellen = {"whole number": 0, "integer": 0, "ten": -1, "hundred": -2, "thousand": -3}.get(
+            re.sub(r"\s+", " ", ziel))
+        if stellen is None:
+            stellen = int(ziel) if ziel.isdigit() else _ZAHLWOERTER_EN[ziel]
+        from decimal import ROUND_HALF_UP, Decimal
+
+        gerundet = Decimal(treffer.group(1)).quantize(Decimal(1).scaleb(-stellen),
+                                                       rounding=ROUND_HALF_UP)
+        text = f"{gerundet:f}" if stellen > 0 else f"{int(gerundet):,}"
+        return f"Rounded: **{text}**" if wert == wert else ""
+    treffer = re.fullmatch(r"is\s+(-?\d{1,15})\s+(?:an?\s+)?(even|odd)(?:\s+number)?", kern)
+    if treffer:
+        n, art = int(treffer.group(1)), treffer.group(2)
+        gerade = n % 2 == 0
+        if (art == "even") == gerade:
+            return f"Yes, **{n:,}** is {art}."
+        return f"No, {n:,} is {'even' if gerade else 'odd'}."
+    treffer = re.fullmatch(r"is\s+(-?\d{1,15})\s+divisible\s+by\s+(-?\d{1,15})", kern)
+    if treffer:
+        a, b = int(treffer.group(1)), int(treffer.group(2))
+        if b == 0:
+            return "Nothing is divisible by zero."
+        if a % b == 0:
+            return f"Yes, {a:,} is divisible by {b:,} ({a:,} ÷ {b:,} = **{a // b:,}**)."
+        return f"No, {a:,} ÷ {b:,} leaves a remainder of **{a % b:,}**."
+    treffer = re.fullmatch(r"(?:what\s+are\s+)?(?:the\s+|all\s+)?(?:divisors|factors)\s+of\s+"
+                           r"(\d{1,9})", kern)
+    if treffer and int(treffer.group(1)) >= 1:
+        n = int(treffer.group(1))
+        teiler = sorted({t for i in range(1, math.isqrt(n) + 1) if n % i == 0
+                         for t in (i, n // i)})
+        return f"{n:,} has **{len(teiler)} divisors**: {', '.join(map(str, teiler))}."
+    treffer = re.fullmatch(r"how\s+many\s+vowels\s+(?:are\s+)?(?:in|does)\s+[\"'“]?([a-zäöüß]+)"
+                           r"[\"'”]?(?:\s+have)?", kern)
+    if treffer:
+        wort = treffer.group(1)
+        anzahl = sum(1 for c in wort if c in "aeiouäöü")
+        return f"“{wort}” has **{anzahl} vowel{'s' * (anzahl != 1)}**."
+    treffer = (re.fullmatch(r"count\s+(?:the\s+)?(?:letter\s+)?[\"']?([a-z])[\"']?s?\s+in\s+"
+                            r"[\"'“]?([a-z]+)[\"'”]?", kern)
+               or re.fullmatch(r"how\s+many\s+(?:times\s+(?:does\s+)?)?[\"']?([a-z])[\"']?s?\s+"
+                               r"(?:are\s+there\s+)?in\s+[\"'“]?([a-z]+)[\"'”]?(?:\s+app"
+                               r"ear)?", kern))
+    if treffer:
+        anzahl = treffer.group(2).count(treffer.group(1))
+        return (f"“{treffer.group(1)}” appears **{anzahl} time{'s' * (anzahl != 1)}** in "
+                f"“{treffer.group(2)}”.")
+    treffer = re.fullmatch(r"(?:what\s+is\s+|what'?s\s+)?(double|triple|twice)\s+(?:of\s+)?"
+                           r"(-?\d+(?:\.\d+)?)", kern)
+    if treffer:
+        faktor = 3 if treffer.group(1) == "triple" else 2
+        wert = float(treffer.group(2))
+        return _englisch(f"{treffer.group(1).capitalize()} {schoen(wert)} is "
+                         f"**{schoen(wert * faktor)}**.")
+    treffer = re.fullmatch(r"sort\s*:?\s*(.+)", kern)
+    if treffer and "," in treffer.group(1):
+        teile = [t.strip() for t in re.split(r",|\band\b", frage.split(":", 1)[-1]
+                                               if ":" in frage else treffer.group(1)) if t.strip()]
+        teile = [re.sub(r"^sort\s+", "", t, flags=re.IGNORECASE).strip(" .?!") for t in teile]
+        if len(teile) >= 2:
+            if all(re.fullmatch(r"-?\d+(?:\.\d+)?", t) for t in teile):
+                sortiert = sorted(teile, key=float)
+            else:
+                sortiert = sorted(teile, key=str.casefold)
+            return f"Sorted: **{', '.join(sortiert)}**"
+    # 17.1.1: Gruss, Dank und Lob -- "Hi there" bekam die deutsche Absage, "Thank you so much"
+    # und "You are great" ein "Sorry" ("Thanks" und "Du bist toll" gingen).
+    if re.fullmatch(r"(?:hi|hey|hello|hiya)(?:\s+(?:there|aquaticy|everyone|again))?", kern):
+        return welt_texte("en").get("intro", "")
+    if re.fullmatch(r"(?:thank\s+you|thanks|many\s+thanks|thx)(?:\s+(?:so|very)\s+much|\s+a\s+lot|"
+                    r"\s+a\s+million)?(?:\s+(?:aquaticy|for\s+your\s+help|for\s+the\s+he"
+                    r"lp))?", kern):
+        return "You're welcome!"
+    if re.fullmatch(r"(?:you(?:'re|\s+are)\s+(?:so\s+|really\s+|very\s+)?(?:great|awesome|amazing|"
+                    r"the\s+best|cool|smart|nice|helpful|brilliant)|i\s+(?:love|like)\s+you"
+                    r"(?:\s+aquaticy)?)", kern):
+        return "Thank you for the kind words! I'm here for you."
+    if re.fullmatch(r"(?:answer\s+)?yes\s+or\s+no", kern):
+        return f"My answer: **{rnd.choice(('Yes', 'No'))}**."
+    treffer = (re.fullmatch(r"(?:choose|pick|decide)\s+between\s+(.+?)\s+(?:and|or)\s+(.+)", kern)
+               or re.fullmatch(r"should\s+i\s+(?:\w+\s+)?(.+?)\s+or\s+(.+)", kern))
+    if treffer:
+        return f"I'd say: **{rnd.choice((treffer.group(1), treffer.group(2))).strip()}**."
+    if re.fullmatch(r"how\s+(?:long|many\s+(?:hours|minutes))\s+(?:is\s+it\s+)?(?:still\s+)?"
+                    r"(?:until|till|to)\s+midnight", kern):
+        minuten = 24 * 60 - (jetzt.hour * 60 + jetzt.minute)
+        std, rest = divmod(minuten, 60)
+        teile_ = ([f"{std} hour{'s' * (std != 1)}"] if std else []) + (
+            [f"{rest} minute{'s' * (rest != 1)}"] if rest else [])
+        return f"There are **{' and '.join(teile_) or '0 minutes'}** until midnight."
+    treffer = re.fullmatch(r"how\s+many\s+(?:working|work|business)\s+days\s+(?:are\s+)?(?:ther"
+                           r"e\s+)?"
+                           r"in\s+(" + "|".join(MONTHS) + r")(?:\s+(\d{4}))?", kern)
+    if treffer:
+        jahr = int(treffer.group(2) or heute.year)
+        nummer = MONTHS.index(treffer.group(1)) + 1
+        if 1 <= jahr <= 9999:
+            letzter = calendar.monthrange(jahr, nummer)[1]
+            anzahl = arbeitstage(date(jahr, nummer, 1), date(jahr, nummer, letzter))
+            return (f"{treffer.group(1).title()} {jahr} has **{anzahl} working days** (Monday to "
+                    "Friday, without nationwide public holidays in Germany).")
+    treffer = re.search(r"\b(?:zodiac|star)\s+sign\b.*?\b(" + "|".join(MONTHS)
+                        + r")\s+(\d{1,2})(?:st|nd|rd|th)?\b", kern)
+    if treffer:
+        monat, tag_ = MONTHS.index(treffer.group(1)) + 1, int(treffer.group(2))
+        if 1 <= tag_ <= calendar.monthrange(2024, monat)[1]:
+            name = next(n for (m, bis), n in STERNZEICHEN if (monat, tag_) <= (m, bis))
+            return (f"Someone born on {treffer.group(1).title()} {tag_} is a "
+                    f"**{_ZEICHEN_EN[name]}**.")
+    treffer = re.fullmatch(r"(?:what\s+is\s+)?(\d{1,2}(?:\.\d)?)\s*%\s+vat\s+(?:on|of|for)\s+"
+                           r"(\$|€)?"
+                           r"\s*(\d{1,9}(?:\.\d{1,2})?)\s*(dollars?|euros?|eur|usd)?", kern)
+    if treffer:
+        satz, netto = float(treffer.group(1)), float(treffer.group(3))
+        zeichen_ = treffer.group(2) or treffer.group(4) or ""
+        e = " €" if zeichen_ in ("€", "euro", "euros", "eur") else " $" if zeichen_ else ""
+        steuer = netto * satz / 100
+        return _englisch(f"{schoen(satz)} % VAT on {schoen(netto)}{e} is **{schoen(steuer)}{e}** "
+                         f"(gross {schoen(netto + steuer)}{e}).")
+    if re.search(r"\b(?:fun\s*fact|tell\s+me\s+(?:a|an|some)\s+(?:interesting\s+|random\s+)?fact|"
+                 r"random\s+fact|did\s+you\s+know)\b", kern):
+        return "Did you know? " + rnd.choice(_FAKTEN_EN)
+    return ""
+
+
 def englisch_mehr(frage: str, kern: str, holen: Holen, jetzt: datetime) -> str:
     """17.1.1: Englische Fragen, die auf Deutsch gingen -- vorher "Sorry" oder Wikipedia."""
     from zoneinfo import ZoneInfo
@@ -4307,6 +4638,51 @@ def englisch_mehr(frage: str, kern: str, holen: Holen, jetzt: datetime) -> str:
         return f"The greatest common divisor is **{math.gcd(*zahlen):,}**."
     if re.search(r"\bleast\s+common\s+multiple|\blcm\b", kern) and len(zahlen) >= 2:
         return f"The least common multiple is **{math.lcm(*zahlen):,}**."
+    # 17.1.1: Median, Bruch, Buchstaben, rueckwaerts, Quersumme und Trinkgeld gingen nur auf
+    # Deutsch -- auf Englisch kam "Sorry" oder sogar die deutsche Absage.
+    treffer = re.fullmatch(r"(?:what\s+is\s+|what'?s\s+)?(?:the\s+)?median\s+of\s+(.+)", kern)
+    werte_m = [float(z) for z in re.findall(r"-?\d+(?:\.\d+)?", treffer.group(1))] \
+        if treffer else []
+    if len(werte_m) >= 2:
+        return _englisch(f"The median is **{schoen(statistics.median(werte_m), 4)}**.")
+    treffer = re.fullmatch(r"(?:what\s+is\s+)?(-?\d+\.\d{1,9})\s+as\s+a\s+fraction", kern)
+    if treffer:
+        from fractions import Fraction
+
+        bruch_ = Fraction(treffer.group(1))
+        return f"{treffer.group(1)} as a fraction is **{bruch_.numerator}/{bruch_.denominator}**."
+    treffer = re.fullmatch(r"how\s+many\s+letters\s+(?:are\s+)?(?:in|does)\s+[\"'“]?([^\s\"'”]+)"
+                           r"[\"'”]?(?:\s+have)?", kern)
+    if treffer:
+        wort_ = re.search(r"[\"'“]?" + re.escape(treffer.group(1)) + r"[\"'”]?", frage,
+                          re.IGNORECASE)
+        stueck_ = wort_.group(0).strip("\"'“”") if wort_ else treffer.group(1)
+        anzahl_ = sum(1 for c in stueck_ if c.isalpha())
+        return f"“{stueck_}” has **{anzahl_} letter{'s' * (anzahl_ != 1)}**."
+    treffer = re.fullmatch(r"reverse\s+(?:the\s+word\s+)?(.+)|(?:write|spell)\s+(.+?)\s+backwards",
+                           kern)
+    if treffer:
+        stueck_ = (treffer.group(1) or treffer.group(2)).strip("\"'“” ")
+        im_text = re.search(re.escape(stueck_), frage, re.IGNORECASE)
+        stueck_ = im_text.group(0) if im_text else stueck_
+        return f"“{stueck_}” backwards is **{stueck_[::-1]}**."
+    treffer = re.fullmatch(r"(?:what\s+is\s+|what'?s\s+)?(?:the\s+)?(?:sum\s+of\s+(?:the\s+)?di"
+                           r"gits|"
+                           r"digit\s+sum)\s+(?:of|in)\s+(\d{1,30})", kern)
+    if treffer:
+        return (f"The digit sum of {treffer.group(1)} is "
+                f"**{sum(int(z) for z in treffer.group(1))}**.")
+    treffer = re.fullmatch(r"(?:what\s+is\s+(?:a\s+)?)?(?:tip|gratuity)\s+(?:of\s+)?(\d{1,2}(?"
+                           r":\.\d+)?)\s*%"
+                           r"\s+(?:on|of|for)\s+(\$|€)?\s*(\d{1,7}(?:\.\d{1,2})?)\s*"
+                           r"(dollars?|euros?|usd|eur)?", kern)
+    if treffer:
+        satz_, betrag_ = float(treffer.group(1)), float(treffer.group(3))
+        zeichen_ = treffer.group(2) or treffer.group(4) or ""
+        e = " €" if zeichen_ in ("€", "euro", "euros", "eur") else " $" if zeichen_ else ""
+        tg_ = betrag_ * satz_ / 100
+        return _englisch(f"A {schoen(satz_)} % tip on {schoen(betrag_)}{e} is **{schoen(tg_)}{e}** "
+                         f"– {schoen(betrag_ + tg_)}{e} in total.")
     treffer = re.search(r"\b(\d{1,15})\s+(?:in|to|into)\s+(binary|hex|hexadecimal|octal)\b", kern)
     if treffer:
         n = int(treffer.group(1))
@@ -4469,8 +4845,11 @@ def englisch_mehr(frage: str, kern: str, holen: Holen, jetzt: datetime) -> str:
         return f"{anzahl} {einheit} ago it was **{jetzt - schritt:%H:%M}**."
     if re.search(r"^i(?:'m|\s+am|\s+feel|\s+feel\s+so|\s+am\s+feeling)\s+"
                  r"(?:so\s+|really\s+|very\s+)?"
-                 r"(sad|down|unhappy|lonely|bored|tired|hungry|stressed)$", kern):
-        stimmung = re.search(r"(sad|down|unhappy|lonely|bored|tired|hungry|stressed)$", kern)
+                 r"(sad|down|unhappy|lonely|bored|tired|hungry|stressed|scared|afraid|anxious|"
+                 r"worried|nervous)$", kern):
+        # 17.1.1: auch "I am scared" -- vorher die deutsche Absage ("Ich habe Angst" ging).
+        stimmung = re.search(r"(sad|down|unhappy|lonely|bored|tired|hungry|stressed|scared|afraid|"
+                             r"anxious|worried|nervous)$", kern)
         art = stimmung.group(1) if stimmung else "sad"
         return {"sad": "I'm sorry to hear that. You don't have to achieve anything today – be kind "
                        "to yourself. A short walk or a glass of water can help a little.",
@@ -4485,7 +4864,17 @@ def englisch_mehr(frage: str, kern: str, holen: Holen, jetzt: datetime) -> str:
                          "early night today.",
                 "hungry": "How about pancakes, pasta with tomato sauce or a quick sandwich?",
                 "stressed": "Take a deep breath. Pick the one most important thing and do just "
-                            "that first."}[art]
+                            "that first.",
+                "scared": "I'm sorry you feel scared. You don't have to deal with it alone – talk "
+                          "to someone you trust. If you're in danger, call 112 (EU) or 911 (US).",
+                "afraid": "I'm sorry you feel afraid. You don't have to deal with it alone – talk "
+                          "to someone you trust. If you're in danger, call 112 (EU) or 911 (US).",
+                "anxious": "Take a slow, deep breath – in for four, out for six. Talking to "
+                           "someone you trust often helps.",
+                "worried": "That sounds hard. Writing the worry down or talking to someone you "
+                           "trust often makes it smaller.",
+                "nervous": "Take a slow, deep breath – in for four, out for six. You've got "
+                           "this."}[art]
     return ""
 
 
@@ -4560,6 +4949,10 @@ _EN_TEXT = (
     "until till since between convert calculate generate pick give tell show when where who "
     "which much many would should can could do does did please euros dollars factorial "
     "average mean square root percent password random number binary roman numerals joke "
+    "prime factors factorize factorise median fraction letters reverse backwards "
+    "digits digit sum tip remainder round even odd divisible divisors vowels count "
+    "double triple sort choose midnight working zodiac vat fact hours minutes seconds "
+    "thanks thank there great awesome love scared afraid anxious worried "
     "quote moon phase news sad happy tired hungry bored lonely today tomorrow yesterday "
     "weekend weather time it's its to into exchange pound pounds")
 _EN_WOERTER = frozenset(_EN_TEXT.split())
@@ -4584,8 +4977,10 @@ def _klingt_englisch(frage: str) -> bool:
     if re.fullmatch(r"\s*[\d.,]+\s*[a-z$€£¥]{1,12}\s+to\s+[a-z$€£¥]{1,12}\s*[?.!]?\s*",
                     frage.lower()):
         return True
+    # 17.1.1: "I am scared" -- das "am" nach "I" ist englisch, nicht "am Montag".
+    ich_bin = bool(re.search(r"\bi\s+am\b", frage.lower()))
     return bool(woerter) and any(w in _EN_WOERTER and w not in _EN_SCHWACH for w in woerter) and (
-        not any(w in _DE_WOERTER for w in woerter))
+        not any(w in _DE_WOERTER and not (ich_bin and w == "am") for w in woerter))
 
 
 def welt_sprache(frage: str, verlauf: list[dict[str, Any]] | None = None) -> str:

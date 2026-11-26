@@ -3975,7 +3975,7 @@ class Agent:
             return
         if result.error or self.stopped:
             return
-        from aquaticy.aiguard import ANSWER_REFUSAL, answer_problem
+        from aquaticy.aiguard import answer_problem, answer_refusal
 
         try:
             art = answer_problem(result.answer, self.settings, context=question)
@@ -3983,17 +3983,18 @@ class Agent:
             return
         if not art or self.stopped or not self._answer_check_enabled():
             return
+        ersatz = answer_refusal(question)
         self._emit("answer_reset", reason="antwort_geprueft")
-        self._emit("answer_chunk", text=ANSWER_REFUSAL)
+        self._emit("answer_chunk", text=ersatz)
         self._emit("note", text="Ai-guard hat die Antwort zurückgezogen (" + art + ").",
 
                    text_en="Ai-guard withdrew the answer"
                            + (" (insult)." if art == "Beleidigung" else "."))
-        result.answer = ANSWER_REFUSAL
+        result.answer = ersatz
 
         for nachricht in reversed(self.messages):
             if nachricht.get("role") == "assistant" and not nachricht.get("tool_calls"):
-                nachricht["content"] = ANSWER_REFUSAL
+                nachricht["content"] = ersatz
                 break
 
     def _finish(self, result: AgentResult, question: str = "") -> AgentResult:

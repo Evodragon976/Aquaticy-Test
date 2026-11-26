@@ -721,6 +721,10 @@ export function zufallAntwort(text, sprache = "de", zufall = Math.random) {
     const seitenRoh = (/\b[wd](4|6|8|10|12|20|100)\b|\b(4|6|8|10|12|20|100)-?seitig/.exec(t) || []);
     let seiten = Number(seitenRoh[1] || seitenRoh[2]) || 6;
     let wieOft = anzahl;
+    // 17.1.1: "Würfle zweimal", "Roll a die twice" -- vorher ein Wurf.
+    const mal = /\b(\d+|zwei|drei|vier|fuenf|two|three|four|five)\s*(?:mal|x|times)\b|\b(twice)\b/.exec(t);
+    const malZahl = { zwei: 2, drei: 3, vier: 4, fuenf: 5, two: 2, three: 3, four: 4, five: 5 };
+    if (mal && !anzahlRoh) wieOft = Math.min(10, mal[2] ? 2 : malZahl[mal[1]] || Number(mal[1]) || 1);
     // 16.4.5: "Würfle 3W6", "2d20" -- vorher ein Wurf.
     const kombi = /\b([1-9]|1\d|20)\s*[wd](4|6|8|10|12|20|100)\b/.exec(t);
     if (kombi) { wieOft = Number(kombi[1]); seiten = Number(kombi[2]); }
@@ -728,9 +732,16 @@ export function zufallAntwort(text, sprache = "de", zufall = Math.random) {
     const summe = wuerfe.reduce((a, b) => a + b, 0);
     return { text: `🎲 ${wuerfe.map((w) => `**${w}**`).join(" + ")}${wieOft > 1 ? ` = **${summe}**` : ""}` };
   }
-  if (/(?:wirf|werfe|wirfst|flip|toss)\s+(?:mal\s+)?(?:eine\s+|a\s+)?(?:muenze|coin)|kopf\s+oder\s+zahl|heads\s+or\s+tails|muenzwurf/.test(t)) {
-    const seite = zufall() < 0.5;
-    return { text: sp(sprache, `🪙 **${seite ? "Kopf" : "Zahl"}**!`, `🪙 **${seite ? "Heads" : "Tails"}**!`) };
+  const muenzen = /(?:wirf|werfe|wirfst|flip|toss)\s+(?:mal\s+)?(?:eine\s+|a\s+|(zwei|drei|vier|fuenf|two|three|four|five|[2-9]|10)\s+)?(?:muenzen?|coins?)|kopf\s+oder\s+zahl|heads\s+or\s+tails|muenzwurf/.exec(t);
+  if (muenzen) {
+    // 17.1.1: "Wirf zwei Münzen", "Flip two coins" -- vorher keine Antwort.
+    const viele = { zwei: 2, drei: 3, vier: 4, fuenf: 5, two: 2, three: 3, four: 4, five: 5 };
+    const n = muenzen[1] ? viele[muenzen[1]] || Number(muenzen[1]) : 1;
+    const seiten = Array.from({ length: n }, () => zufall() < 0.5);
+    if (n === 1) {
+      return { text: sp(sprache, `🪙 **${seiten[0] ? "Kopf" : "Zahl"}**!`, `🪙 **${seiten[0] ? "Heads" : "Tails"}**!`) };
+    }
+    return { text: "🪙 " + seiten.map((s) => `**${s ? sp(sprache, "Kopf", "Heads") : sp(sprache, "Zahl", "Tails")}**`).join(", ") };
   }
   // 16.4.5: "zahl zwischen" verbrauchte das "zwischen" -- die Grenzen galten dann nicht.
   let m = /(?:zufallszahl|zufaellige\s+zahl|random\s+number|zahl(?=\s+zwischen)|number(?=\s+between))(?:\s+(?:zwischen|von|between|from)\s+(-?\d+)\s+(?:und|bis|and|to)\s+(-?\d+))?/.exec(t);

@@ -444,6 +444,19 @@ export function rechneGanz(s) {
   }
 }
 
+// 17.1.1: Gleitkomma kennt nur etwa 15 gueltige Stellen. "1,5 * 10^30" zeigte vorher
+// "1.500.000.000.000.000.200.000.000.000.000", winzige Ergebnisse wurden 0.
+function rechenZahl(wert, sprache) {
+  const w = Number(wert);
+  if (w && Number.isFinite(w) && (Math.abs(w) >= 1e15 || Math.abs(w) < 5e-11)) {
+    const [m, e] = w.toExponential(6).split("e");
+    const mantisse = m.replace(/\.?0+$/, "").replace(".", sprache === "en" ? "." : ",");
+    const hoch = String(Number(e)).replace(/[0-9-]/g, (z) => "⁰¹²³⁴⁵⁶⁷⁸⁹"["0123456789".indexOf(z)] ?? "⁻");
+    return `${mantisse} · 10${hoch}`;
+  }
+  return zahl(w, sprache, 10);
+}
+
 function rechenAntwort(text, sprache) {
   const ausdruck = rechenAusdruck(text);
   if (!ausdruck) return null;
@@ -451,7 +464,7 @@ function rechenAntwort(text, sprache) {
     const ganz = rechneGanz(ausdruck);
     const ergebnis = ganz !== null && (ganz > BigInt(Number.MAX_SAFE_INTEGER) || ganz < -BigInt(Number.MAX_SAFE_INTEGER))
       ? ganz.toLocaleString(sprache === "en" ? "en-GB" : "de-DE")
-      : zahl(rechne(ausdruck), sprache, 10);
+      : rechenZahl(rechne(ausdruck), sprache);
     const schoen = ausdruck.replace(/\./g, sprache === "en" ? "." : ",")
       .replace(/\*/g, " × ").replace(/\//g, " : ").replace(/\+/g, " + ")
       .replace(/(?<=\d|\))-/g, " − ").replace(/\^/g, " ^ ")

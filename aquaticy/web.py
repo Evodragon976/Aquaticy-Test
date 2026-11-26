@@ -1141,7 +1141,7 @@ class ChatSession:
                 elif session._agent is not None:
                     session._agent.close()
 
-    def resolve_chat(self, chat_id: str = "") -> ChatSession:
+    def resolve_chat(self, chat_id: str = "", neu_erlaubt: bool = False) -> ChatSession:
         owner = self._owner
         with owner._chat_lock:
             if not chat_id:
@@ -1157,10 +1157,12 @@ class ChatSession:
                 # angelegt hat. Auf Vercel landet die erste Nachricht oft bei einer anderen
                 # (etwa nach einem Kaltstart). Vorher hiess es dort "Diesen Chat gibt es nicht
                 # mehr" -- auch fuer "Neuer Chat" und "Oeffnen", bis die Seite neu geladen war.
-                # Eine gueltige Kennung ohne Verlauf ist deshalb ein neuer Chat.
-                if not CHAT_KENNUNG.fullmatch(chat_id):
-                    raise BadRequest("Diesen Chat gibt es nicht mehr.")
-                return self._new_chat_session(chat_id, [])
+                # Beim Senden, "Neuer Chat", "Oeffnen" und der Chatliste gibt es deshalb einen
+                # frischen Chat mit einer NEUEN Kennung (die Seite uebernimmt sie). Eine fremde
+                # Kennung wird nie uebernommen; alle anderen Wege lehnen sie weiter ab.
+                if neu_erlaubt and CHAT_KENNUNG.fullmatch(chat_id):
+                    return self._new_chat_session()
+                raise BadRequest("Diesen Chat gibt es nicht mehr.")
             return self._new_chat_session(chat_id, entries)
 
     def _new_chat_session(self, chat_id: str = "", entries: list[Any] | None = None
@@ -3103,7 +3105,8 @@ class Handler(BaseHTTPRequestHandler):
                                   "/api/run", "/api/runstate", "/api/stop", "/api/answer",
                                   "/api/command", "/api/chat-edit", "/api/chatexport"}
             _REQUEST.session = base.resolve_chat(
-                self.headers.get("X-Aquaticy-Chat", "") if chat_route else "")
+                self.headers.get("X-Aquaticy-Chat", "") if chat_route else "",
+                neu_erlaubt=route in {"/api/chat", "/api/clear", "/api/open", "/api/chats"})
             handler()
         except (BrokenPipeError, ConnectionResetError):
             pass

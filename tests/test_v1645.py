@@ -354,7 +354,8 @@ def test_a_birth_year_in_the_future():
     ("19 % MwSt auf 50 €", "Auf 50,00 € kommen **9,50 €** Mehrwertsteuer"),
     ("Wie viel MwSt ist in 119 Euro?", "In 119,00 € stecken **19,00 €** Mehrwertsteuer"),
     ("80 € abzüglich 25 %", "80 minus 25 % sind **60**"),
-    ("Preis 80 Euro, 25 % Rabatt", "25 % Rabatt auf 80 sind **60**"),
+    # 17.1.1: mit Euro -- vorher fehlte die Waehrung (Fund 153).
+    ("Preis 80 Euro, 25 % Rabatt", "25 % Rabatt auf 80 € sind **60 €**"),
     ("What is 15% of 200?", "15 % of 200 is **30**."),
 ])
 def test_percent_questions_in_more_forms(frage, erwartet):

@@ -3772,7 +3772,8 @@ async function verfolge(hole, steps, bubble, text){
 
         step(steps, "[Ai-guard]", daten.code === "banned" ? "Konto gesperrt"
              : "Chat gesperrt", "err");
-        bubble.innerHTML = md(message);
+        // 17.1.1: Die Blase wird nie übersetzt -- die Meldung deshalb hier (vorher deutsch).
+        bubble.innerHTML = md(enOderDe(message));
         if (daten.code === "banned") zeigeSperre(daten.ban);
         throw Object.assign(new Error(message), { gezeigt: true });
       }
@@ -4830,6 +4831,41 @@ try {
 
 
 const EN = {
+"Der Ultra-Code stimmt nicht.": "The Ultra code is wrong.",
+"Mit diesem Gerät bzw. diesen Angaben gibt es hier schon ein Konto — melde dich mit dem vorhandenen an. Hältst du das für einen Irrtum (zum Beispiel zwei Personen im selben Haushalt), wende dich an den Betreiber dieser Installation.": "There's already an account here with this device or these details — sign in with that one. If you think this is a mistake (for example two people in the same household), contact whoever runs this installation.",
+"Das sieht nicht nach einem API-Schlüssel aus (8 bis 400 Zeichen, ohne Leerzeichen).": "That doesn't look like an API key (8 to 400 characters, no spaces).",
+"Bitte einen Schlüssel einfügen.": "Paste a key.",
+"Der Einrichtungscode stimmt nicht. Er steht im Terminal, in dem Aquaticy läuft.": "The setup code is wrong. You'll find it in the terminal where Aquaticy is running.",
+"Auf diesem Rechner gibt es schon ein Konto. Melde dich damit an. Weitere Konten gibt es nur mit dem Kontensystem (aquaticy setup).": "There's already an account on this computer. Sign in with it. More accounts are only possible with the account system (aquaticy setup).",
+"Nutzername oder Passwort stimmt nicht.": "Username or password is wrong.",
+"Bitte gib eine gültige E-Mail-Adresse ein.": "Enter a valid email address.",
+"Das Passwort darf höchstens 128 Zeichen lang sein.": "The password can be at most 128 characters long.",
+"Wähle ein normales, ein Pro- oder ein Ultra-Konto.": "Choose a Normal, Pro or Ultra account.",
+"Der Pro-Code stimmt nicht.": "The Pro code is wrong.",
+"Mit diesen Angaben lässt sich kein neues Konto anlegen. Hast du schon eins? Dann melde dich an — sonst wähle einen anderen Nutzernamen.": "No new account can be created with these details. Already have one? Then sign in — otherwise choose a different username.",
+"Das bisherige Passwort stimmt nicht.": "Your current password is wrong.",
+"Der Nutzername braucht 2 bis 40 sichtbare Zeichen.": "The username needs 2 to 40 visible characters.",
+"Dieses Konto ist gesperrt. Ai-guard hat einen schweren Verstoß gegen die Nutzungsregeln erkannt. Oben links unter der Versionsnummer steht unter „Info“, warum und wie lange. Wenn du das für einen Irrtum hältst, wende dich an den Betreiber dieser Installation.": "This account is blocked. Ai-guard found a serious breach of the terms of use. Under “Info” below the version number at the top left you can see why and for how long. If you think this is a mistake, contact the operator of this installation.",
+"In diesem Chat kannst du nicht mehr schreiben — Ai-guard hat ihn wegen unangemessener Sprache gesperrt. Du kannst einen neuen Chat beginnen.": "You can't write in this chat anymore — Ai-guard blocked it because of inappropriate language. You can start a new chat.",
+"Dabei hilft Aquaticy nicht: andere beleidigen, runtermachen oder bloßstellen. Ai-guard hat diesen Chat deshalb gesperrt. Ein Zitat allein ist in Ordnung — du kannst einen neuen Chat beginnen und zum Beispiel fragen, wie du ruhig und bestimmt darauf antwortest.": "Aquaticy doesn't help with insulting, putting down or exposing others. That's why Ai-guard blocked this chat. A quote alone is fine — you can start a new chat and ask, for example, how to reply calmly and firmly.",
+"Warte, bis die Sperre abläuft — danach geht alles wieder wie vorher. Hältst du die Sperre für einen Irrtum, wende dich an den Betreiber dieser Installation; er kann sie im Terminal aufheben (aquaticy unban).": "Wait until the block ends — then everything works as before. If you think the block is a mistake, contact the operator of this installation; they can lift it in the terminal (aquaticy unban).",
+"Dauerhaft": "Permanent",
+"schwere Beleidigung": "serious insult",
+"wiederholte schwere Beleidigung": "repeated serious insults",
+"Versuch, Schadsoftware zu erstellen": "attempt to create malware",
+"Versuch, Schadsoftware zu bauen und auszuführen": "attempt to build and run malware",
+"wiederholter Bau von Schadsoftware": "repeatedly building malware",
+"wiederholte Angriffsversuche": "repeated attack attempts",
+"wiederholte schwere Rechtsverstöße": "repeated serious breaches of the law",
+"wiederholte Versuche, die Schutzregeln auszuhebeln": "repeated attempts to get around the safety rules",
+"Auftrag, jemanden zu beleidigen oder herabzusetzen": "request to insult or put someone down",
+"(gesetzt)": "(set)",
+"Produkt": "Product",
+"Aktuelle Sitzung": "Current session",
+"5-Stunden-Fenster, beginnt mit deiner ersten Nachricht": "5-hour window, starts with your first message",
+"Diese Woche": "This week",
+"beginnt mit deiner nächsten Nachricht": "starts with your next message",
+"E-Mail, Nutzername oder Passwort stimmt nicht.": "Email, username or password is wrong.",
 "Ohne Anmeldung fortfahren": "Continue without signing in",
 "Ohne Konto gilt alles nur in diesem Tab. Schließt du ihn, löscht Aquaticy nach wenigen Minuten deine Chats und Einstellungen.": "Without an account, everything only lasts in this tab. Close it and Aquaticy deletes your chats and settings within a few minutes.",
 "Stimm zuerst der Datenschutzerklärung und den Nutzungsbedingungen zu.": "First agree to the privacy policy and the terms of use.",
@@ -5656,6 +5692,23 @@ const schluessel = text => text.replace(/\s+/g, " ").trim();
 
 
 const EN_MUSTER = [
+  // 17.1.1: Sperre von Ai-guard -- Dauer, Grund und Rest (vorher deutsch in der englischen Seite).
+  [/^noch (\d+) Tag\(e\)(?:, (\d+) Std\.)?(?: \(bis (.+?), (\d\d:\d\d) Uhr\))?$/,
+   (m, t, h, d, u) => `${t} day(s)` + (h ? `, ${h} h` : "") + (d ? ` left (until ${d}, ${u})` : " left")],
+  [/^noch (\d+) (Std|Min)\.(?: \(bis (.+?), (\d\d:\d\d) Uhr\))?$/,
+   (m, n, e, d, u) => `${n} ${e === "Std" ? "h" : "min"}` + (d ? ` left (until ${d}, ${u})` : " left")],
+  [/^(.+) \(für (\d+) Tag\(e\)\)$/, (m, g, n) => `${enOder(g)} (for ${n} day(s))`],
+  [/^(.+) \(für immer\)$/, (m, g) => `${enOder(g)} (permanently)`],
+  [/^(\d+) Anhaltspunkte für Missbrauch \(zuletzt: (.+)\)$/, "$1 signs of misuse (last: $2)"],
+  [/^Das Passwort braucht mindestens (\d+) Zeichen\.$/, "The password needs at least $1 characters."],
+  // 17.1.1: Nutzung -- Anteil und Hinweis zur Woche (vorher deutsch).
+  [/^(\d+) % genutzt$/, "$1 % used"],
+  [/^(.+): (\d+) % genutzt$/, (m, l, n) => `${enOder(l)}: ${n} % used`],
+  [/^setzt sich jeden (\w+) um (\d\d:\d\d) zurück \(Zeit deiner Kontoerstellung\)$/,
+   (m, t, u) => `resets every ${({Montag: "Monday", Dienstag: "Tuesday", Mittwoch: "Wednesday",
+     Donnerstag: "Thursday", Freitag: "Friday", Samstag: "Saturday", Sonntag: "Sunday"})[t] || t} `
+     + `at ${u} (the time you created your account)`],
+  [/^Tippe zur Bestätigung (\S+) ein\.$/, "Type $1 to confirm."],
   // 16.5.7: Bestaetigung in zwei Schritten
   [/^Wir haben dir einen Code an (.+) geschickt\. Gib ihn hier ein\.$/,
    "We sent a code to $1. Enter it here."],
@@ -5770,7 +5823,14 @@ const EN_MUSTER = [
   [/^Das hat nicht geklappt: (.+)$/s, (m, a) => "That didn't work: " + enOder(a)],
   [/^Deinen (.+)-Schlüssel entfernen\?$/, "Remove your $1 key?"],
   [/^(.+): Schlüssel$/, "$1: key"],
-  [/^Setzt sich (.+) zurück$/, "Resets $1"],
+  // 17.1.1: auch die Zeit selbst -- vorher "Resets in 3 Std. 20 Min. (um 18:19)".
+  [/^Setzt sich (.+) zurück$/, (m, z) => "Resets " + String(z)
+    .replace(/^in (?:(\d+) Std\.)?\s*(?:(\d+) Min\.)?\s*\(um (\d\d:\d\d)\)$/, (x, h, mi, u) => "in "
+      + [h ? `${h} h` : "", mi ? `${mi} min` : ""].filter(Boolean).join(" ") + ` (at ${u})`)
+    .replace(/^morgen um (\d\d:\d\d)$/, "tomorrow at $1")
+    .replace(/^(\w+), (\d\d\.\d\d\.) um (\d\d:\d\d)$/, (x, t, d, u) => `${({Montag: "Monday",
+      Dienstag: "Tuesday", Mittwoch: "Wednesday", Donnerstag: "Thursday", Freitag: "Friday",
+      Samstag: "Saturday", Sonntag: "Sunday"})[t] || t}, ${d} at ${u}`)],
   [/^1 Datei$/, "1 file"], [/^(\d+) Dateien$/, "$1 files"],
   [/^1 Eintrag$/, "1 entry"], [/^(\d+) Einträge$/, "$1 entries"],
   [/^1 Notiz$/, "1 note"], [/^(\d+) Notizen$/, "$1 notes"],

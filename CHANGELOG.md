@@ -8,7 +8,8 @@ Zurück zur [README](README.md).
 - **Schreiben auf Vercel:** Als Gast kam oft „Diesen Chat gibt es nicht mehr.“ oder „Der Chat ließ
   sich gerade nicht öffnen.“ – auch bei „Neuer Chat“, bis die Seite neu geladen war. Grund: Ein
   neuer, noch leerer Chat war nur der Instanz bekannt, die ihn angelegt hatte. Nach einem
-  Kaltstart landete die erste Nachricht bei einer anderen. Jetzt gilt der neue Chat überall.
+  Kaltstart landete die erste Nachricht bei einer anderen.
+  Jetzt geht es dort mit einem frischen Chat weiter.
   „Neuer Chat“ und „Öffnen“ versuchen es nach einem kurzen Fehler beim Start noch einmal.
 - **Zwei Instanzen auf Vercel:** Eine Instanz, die eben erst nachgesehen hatte, konnte ihren alten
   Stand über eine neuere Nachricht einer anderen Instanz speichern. Die Nachricht war dann weg.
@@ -42,6 +43,28 @@ Zurück zur [README](README.md).
   New York und in Tokio“, „die nächsten 7 Tage“, „in 3 Tagen“, „Wie spät ist es in 3 Stunden?“,
   „5 Euro 50 in Dollar“ und „5 feet 10 inches“ gingen nicht. Englische Feiertage wie „Good Friday“
   fehlten. Die Tippfehler-Korrektur machte aus „show“ „snow“ und aus „next“ „nett“.
+- **Englische Seite:** Viele Meldungen blieben deutsch: falsches bisheriges Passwort, zu kurzes
+  Passwort, „Tippe LÖSCHEN ein“, ein Schlüssel in falscher Form, die Sperre von Ai-guard samt Grund
+  und Restdauer sowie die Nutzungsanzeige („Setzt sich in 3 Std. … zurück“). Jetzt englisch.
+- **Zurückgezogene Antwort:** Zog Ai-guard eine Antwort zurück, kam der Ersatzsatz immer deutsch.
+  Auf eine englische Frage kommt er jetzt englisch.
+- **Aquaticy Standard – Würfel und Münzen:** „Was ist ein Würfel?“ oder „Wie schwer ist eine
+  2-Euro-Münze?“ würfelten bzw. warfen eine Münze. „Würfle zweimal“ würfelte nur einmal. Mehrere
+  Münzen und „Münzwurf“ gingen nicht.
+- **Aquaticy Standard – Rechnen:** „Zerlege 360 in Primfaktoren“ ging nicht. „20 % Rabatt auf 50 €“
+  nannte das Ergebnis ohne Euro. „Wie viele Minuten sind 1 Stunde 20 Minuten?“ rechnete nur die
+  Stunde.
+- **Aquaticy Standard – Englisch:** „What day is it in 10 days?“ nannte das Datum von heute. Viele
+  Fragen, die auf Deutsch gingen, bekamen „Sorry“ oder sogar eine deutsche Absage: Median, Bruch,
+  Rest, Runden, gerade, teilbar, Teiler, Primzahl, Vokale, Buchstaben, rückwärts, Quersumme,
+  sortieren, Trinkgeld, Rabatt, MwSt, Arbeitstage, Sternzeichen, Würfel, Münzen, „Hi there“,
+  „Thank you so much“, „You are great“ und „I am scared“. 16 tablespoons sind jetzt 1 cup.
+- **Aquaticy Standard – Langeweile:** „Mein Chef hat mich beleidigt, was kann ich tun?“ bekam Ideen
+  wie „Räum eine Schublade auf“.
+- **Bestätigung in zwei Schritten:** Der richtige Code mit persischen, arabischen oder breiten
+  Ziffern galt als falsch und kostete Versuche.
+- **Antworten ohne Schlüssel (Worker):** „Würfle zweimal“ würfelte einmal, „Wirf zwei Münzen“ ging
+  nicht, und „1,5 * 10^30“ zeigte erfundene Ziffern.
 
 **Neu in 17.1.0:** Nur Fehler behoben.
 

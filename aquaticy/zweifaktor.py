@@ -31,6 +31,7 @@ import secrets
 import sqlite3
 import threading
 import time
+import unicodedata
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -636,7 +637,11 @@ class ZweiFaktor:
         """Prueft einen Code. Returns: das Konto. Raises: ZweiFaktorFehler."""
         abgelaufen = ZweiFaktorFehler("Der Code ist abgelaufen oder wurde zu oft falsch "
                                       "eingegeben. Melde dich neu an.", 401, neu_anmelden=True)
-        eingabe = "".join(z for z in str(code or "") if z.isdigit())
+        # 17.1.1: Ziffern aus jeder Schrift ("۱۲۳", "١٢٣", "１２３") als 0 bis 9 -- vorher
+        # galt der richtige Code von einer persischen Tastatur als falsch und kostete
+        # Versuche.
+        eingabe = "".join(str(unicodedata.decimal(z)) for z in str(code or "")
+                          if z.isdecimal())
         kennung = self._hash("kennung", str(token or ""))
         jetzt = self.uhr()
         versuch = self.ablage.versuch(kennung, jetzt)

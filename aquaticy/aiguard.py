@@ -1815,6 +1815,20 @@ ANSWER_REFUSAL = (
     "Dabei kann ich nicht helfen. Dieser Inhalt ist nicht angemessen, deshalb habe ich "
     "meine Antwort zurückgezogen. Bei etwas anderem helfe ich gern weiter."
 )
+#: 17.1.1: Auf eine englische Frage kam vorher der deutsche Satz.
+ANSWER_REFUSAL_EN = (
+    "I can't help with that. This content isn't appropriate, so I withdrew my answer. "
+    "I'm happy to help with something else."
+)
+
+
+def answer_refusal(question: str = "") -> str:
+    """Der Satz statt einer zurueckgezogenen Antwort -- englisch nur auf eine englische Frage."""
+    from aquaticy import weltsprachen
+
+    frage = str(question or "")
+    englisch = bool(frage.strip()) and weltsprachen.sprache_von(frage) == "en"
+    return ANSWER_REFUSAL_EN if englisch else ANSWER_REFUSAL
 
 
 _ANTWORT_STICHWORTE = re.compile(
@@ -2390,7 +2404,7 @@ def chat_locked_message(grund: str = "") -> str:
     """Der Satz fuer einen gesperrten Chat -- mit dem richtigen Grund (9.5.28)."""
     if grund == DEMEANING_REASON:
         return ("Dabei hilft Aquaticy nicht: andere beleidigen, runtermachen oder "
-                "blossstellen. Ai-guard hat diesen Chat deshalb gesperrt. Ein Zitat allein "
+                "bloßstellen. Ai-guard hat diesen Chat deshalb gesperrt. Ein Zitat allein "
                 "ist in Ordnung — du kannst einen neuen Chat beginnen und zum Beispiel "
                 "fragen, wie du ruhig und bestimmt darauf antwortest.")
     return CHAT_LOCKED_MESSAGE
