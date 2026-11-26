@@ -1,4 +1,4 @@
-# Aquaticy AI 17.1.0
+# Aquaticy AI 17.1.1
 
 **Aquaticy** recherchiert für dich. Du fragst, Aquaticy sucht im Web, liest die passenden
 Seiten und fasst zusammen. Zu jeder Angabe steht die Quelle. Es läuft im Terminal, im Browser,
@@ -113,7 +113,7 @@ Was sich in jeder Fassung geändert hat, steht im [CHANGELOG.md](CHANGELOG.md).
 git clone --branch Aquaticy-ai --single-branch https://github.com/Evodragon976/Aquaticy-Test.git
 cd Aquaticy-Test
 uv tool install --force --reinstall .
-aquaticy --version            # 17.1.0
+aquaticy --version            # 17.1.1
 
 # 2. Ollama automatisch prüfen/einrichten, dann Modell und Suche
 aquaticy setup

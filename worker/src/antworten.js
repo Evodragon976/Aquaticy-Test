@@ -12,7 +12,7 @@ import { erlaubteFehler, abstand, falten, musterFalten, woerter, woerterAusMuste
 import { ABSCHLUSS, EINSTIEG, besterSatz, eine, inhaltsWoerter, kernSaetze, saetze }
   from "./stil.js";
 import { seiteAbrufen } from "./abruf.js";
-import { datumAus, datumAntwort, einheitenAntwort, gespraechMehr, prozentAntwort, sonneAntwort,
+import { datumAus, datumAntwort, einheitenAntwort, gespraechMehr, ostern, prozentAntwort, sonneAntwort,
   uebersetzenAntwort, ungueltigText, weltzeitAntwort, zufallAntwort } from "./mehr.js";
 
 // -- Feste Antworten ----------------------------------------------------------
@@ -127,7 +127,7 @@ const STICH = { __proto__: null,
   feiertage: ["feiertag", "feiertage", "feiertagen", "holiday", "holidays", "ostern",
     "weihnachten", "pfingsten", "karfreitag", "ostermontag", "pfingstmontag", "himmelfahrt",
     "fronleichnam", "neujahr", "reformationstag", "allerheiligen", "christmas", "easter",
-    "einheit", "buss", "bettag"],
+    "einheit", "buss", "bettag", "ascension", "whit", "pentecost"],
   kurse: ["kurs", "wechselkurs", "umrechnen", "exchange", "rate", "waehrung", "currency"],
 };
 
@@ -141,7 +141,11 @@ const WETTER_SATZ = /\bfriert\s+es\b|\bes\s+friert\b|\b(?:need|bring|take)\s+an?
 // Echte Woerter, die einem Stichwort aehneln, aber etwas anderes meinen.
 const KEIN_TIPPFEHLER = new Set(["wetten", "wette", "vetter", "kurz", "kurze", "kurzem",
   "kuss", "kurse", "uhren", "date", "datei", "dateien", "news", "regel", "regeln", "rat",
-  "rate", "raten", "regal", "neuen", "neues", "time", "times", "seen"]);
+  "rate", "raten", "regal", "neuen", "neues", "time", "times", "seen",
+  // 17.1.1: englische Woerter, die vorher "verbessert" wurden ("next" -> "nett", "show" -> "snow",
+  // "root" -> "robot", "moon" -> "moin", "tonight" -> "to night").
+  "next", "these", "tonight", "will", "must", "root", "moon", "feeling", "tell", "show", "prime",
+  "tall", "coat", "those"]);
 
 const FRAGEWOERTER = ["was", "wer", "wie", "wo", "wann", "warum", "wieso", "weshalb", "welche",
   "welcher", "welches", "woher", "wohin", "wieviel", "wieviele", "viel", "viele", "ist", "sind",
@@ -293,6 +297,8 @@ export function rechenAusdruck(text) {
   // "!" am Ende bleibt, wenn es direkt an einer Zahl haengt: "5!" ist die Fakultaet
   let t = falten(text).trim().replace(/(?:[?=]|(?<!\d)!)+\s*$/, "").trim();
   t = t.replace(RECHEN_VORN, "");
+  // 17.1.1: "20 percent of 250 dollars", "15% of $80" -- vorher keine Antwort.
+  t = t.replace(/[$€£]\s*(?=\d)/g, "").replace(/(\d)\s*(?:euros?|eur|dollars?|usd|pounds?)\b/g, "$1");
   // "15 % von 80": eigenes Zeichen, damit die Antwort es wieder so zeigen kann
   t = t.replace(/(\d+(?:[.,]\d+)?)\s*(?:%|prozent|percent)\s*(?:von|of)\s*(\d+(?:[.,]\d+)?)/g,
     "$1%$2");
@@ -468,9 +474,12 @@ function rechenAntwort(text, sprache) {
 function zeitAntwort(w, kern, sprache, { jetzt, zeitzone, original }) {
   const fragtZeit = /wie\s*spaet|wie\s*viel\s+uhr|wieviel\s+uhr|uhrzeit|what\s+time|current\s+time/
     .test(kern) || (enthaelt(w, ["uhrzeit"]) && w.length <= 6);
-  const fragtDatum = /welche[rns]?\s+(?:tag|datum|wochentag)|welches\s+datum|den\s+wievielten|der\s+wievielte|datum\s+(?:ist\s+)?heute|heutige[sn]?\s+datum|what\s+(?:day|date)|what(?:\s+is|'s)\s+the\s+date|was\s+fuer\s+ein\s+tag|today'?s\s+date|welches\s+jahr|what\s+year|kalenderwoche|which\s+(?:day|date)\s+(?:is|was)\s+(?:it\s+)?(?:today|tomorrow|yesterday|the\s+day)|(?:tomorrow|yesterday)(?:'?s)?\s+date/.test(kern)
+  const fragtDatum = /(?:what|which)\s+week\b|\bweek\s+number|\bcalendar\s+week|welche[rns]?\s+(?:tag|datum|wochentag)|welches\s+datum|den\s+wievielten|der\s+wievielte|datum\s+(?:ist\s+)?heute|heutige[sn]?\s+datum|what\s+(?:day|date)|what(?:\s+is|'s)\s+the\s+date|was\s+fuer\s+ein\s+tag|today'?s\s+date|welches\s+jahr|what\s+year|kalenderwoche|which\s+(?:day|date)\s+(?:is|was)\s+(?:it\s+)?(?:today|tomorrow|yesterday|the\s+day)|(?:tomorrow|yesterday)(?:'?s)?\s+date/.test(kern)
     || (enthaelt(w, ["datum", "wochentag"]) && w.length <= 6);
   if (!fragtZeit && !fragtDatum) return null;
+  // 17.1.1: "What time is sunrise in Madrid tomorrow?" bekam die Uhrzeit von hier.
+  if (/sonnen(?:aufgang|untergang)|sunrise|sunset|sun\s+(?:rise|set)|sonne\s+(?:auf|unter)/
+    .test(kern)) return null;
   // 16.5.7: "What day will it rain in Berlin?" ist eine Wetterfrage -- vorher kam das Datum.
   if (enthaelt(w, STICH.wetter) || w.some((x) => WETTER_GENAU.has(x))) return null;
   const zone = zeitzone || "Europe/Berlin";
@@ -505,17 +514,46 @@ function zeitAntwort(w, kern, sprache, { jetzt, zeitzone, original }) {
       "-2": "The day before yesterday was" };
     return { text: sp(sprache, `${de[versatz]} **${anderer}**.`, `${en[versatz]} **${anderer}**.`) };
   }
+  // 17.1.1: "Wie spät ist es in 3 Stunden?", "vor 90 Minuten", "in 3 hours" -- vorher die
+  // Uhrzeit von jetzt (oder ein Ort "3 Stunden").
+  const dauer = /\bin\s+(\d{1,4}|einer|einem|an?|one)\s+(stunden?|minuten?|hours?|minutes?)\b|\bvor\s+(\d{1,4}|einer|einem)\s+(stunden?|minuten?)\b|\b(\d{1,4}|an?|one)\s+(hours?|minutes?)\s+ago\b/
+    .exec(kern);
+  if (fragtZeit && dauer) {
+    const n = Number(dauer[1] || dauer[3] || dauer[5]) || 1;
+    const einheit = dauer[2] || dauer[4] || dauer[6];
+    const stunden = /^(?:stunde|hour)/.test(einheit);
+    const zurueck = Boolean(dauer[3] || dauer[5]);
+    const ziel = new Date(jetzt.getTime() + (zurueck ? -1 : 1) * n * (stunden ? 60 : 1) * 60000);
+    let zielUhr, zielTag;
+    try {
+      zielUhr = ziel.toLocaleTimeString(loc, { timeZone: zone, hour: "2-digit", minute: "2-digit" });
+      zielTag = ziel.toLocaleDateString(loc, { timeZone: zone, weekday: "long", day: "numeric",
+        month: "long" });
+    } catch {
+      return null;
+    }
+    const andererTag = tagInZone(ziel, zone).getTime() !== heute.getTime() ? ` (${zielTag})` : "";
+    const de = `${n === 1 ? (stunden ? "einer Stunde" : "einer Minute")
+      : `${n} ${stunden ? "Stunden" : "Minuten"}`}`;
+    const en = `${n} ${stunden ? "hour" : "minute"}${n === 1 ? "" : "s"}`;
+    return { text: sp(sprache,
+      `${zurueck ? "Vor" : "In"} ${de} ${zurueck ? "war" : "ist"} es **${zielUhr} Uhr**${andererTag}.`,
+      zurueck ? `${en} ago it was **${zielUhr}**${andererTag}.`
+        : `In ${en} it will be **${zielUhr}**${andererTag}.`) };
+  }
   if (fragtZeit && !fragtDatum) {
     return { text: sp(sprache, `Gerade ist es **${uhr} Uhr** (Zeitzone ${ort}).`,
       `It's **${uhr}** right now (time zone ${ort}).`) };
   }
-  if (/kalenderwoche/.test(kern)) {
+  if (/kalenderwoche|(?:what|which)\s+week\b|\bweek\s+number|\bcalendar\s+week/.test(kern)) {
     // 17.1.0: "Welche Kalenderwoche ist der 1.1.2027?" nannte vorher die Woche von heute -- und
     // die Woche hing am Tag in UTC, nicht am Tag in der Zeitzone (Sonntag 23:30 UTC ist in Berlin
     // schon Montag).
     const gefunden = datumAus(falten(original || kern), heute.getUTCFullYear());
     if (gefunden?.ungueltig) return { text: ungueltigText(gefunden.ungueltig, sprache) };
-    const ziel = gefunden?.datum ?? (versatz ? new Date(heute.getTime() + versatz * 86400000) : null);
+    // 17.1.1: "In welcher Kalenderwoche ist Weihnachten?" nannte vorher die Woche von heute.
+    const ziel = gefunden?.datum ?? festtag(kern, heute)
+      ?? (versatz ? new Date(heute.getTime() + versatz * 86400000) : null);
     if (ziel) {
       const zeig = ziel.toLocaleDateString(loc, { weekday: "long", day: "numeric", month: "long",
         year: "numeric", timeZone: "UTC" });
@@ -529,6 +567,26 @@ function zeitAntwort(w, kern, sprache, { jetzt, zeitzone, original }) {
   }
   return { text: sp(sprache, `Heute ist **${tag}**. Gerade ist es ${uhr} Uhr (Zeitzone ${ort}).`,
     `Today is **${tag}**. It's ${uhr} right now (time zone ${ort}).`) };
+}
+
+/** 17.1.1: Ein Festtag mit festem Datum (oder Ostern) -- der naechste ab *heute*, sonst null. */
+function festtag(kern, heute) {
+  const jahrText = /\b(1[6-9]\d\d|[2-9]\d\d\d)\b/.exec(kern);
+  const jahr = jahrText ? Number(jahrText[1]) : heute.getUTCFullYear();
+  const feste = [[/heilig\s*abend|christmas\s+eve/, 12, 24], [/weihnacht|christmas/, 12, 25],
+    [/silvester|new\s+year'?s\s+eve/, 12, 31], [/neujahr|new\s+year/, 1, 1],
+    [/halloween/, 10, 31], [/valentin/, 2, 14], [/nikolaus/, 12, 6],
+    [/tag\s+der\s+deutschen\s+einheit|german\s+unity\s+day/, 10, 3]];
+  for (const [muster, monat, tag] of feste) {
+    if (!muster.test(kern)) continue;
+    const d = new Date(Date.UTC(jahr, monat - 1, tag));
+    return !jahrText && d < heute ? new Date(Date.UTC(jahr + 1, monat - 1, tag)) : d;
+  }
+  if (/\bostern\b|\beaster\b/.test(kern)) {
+    const d = ostern(jahr);
+    return !jahrText && d < heute ? ostern(jahr + 1) : d;
+  }
+  return null;
 }
 
 /** Der Donnerstag der Woche (ISO 8601): Sein Jahr ist das Jahr der Kalenderwoche. */
@@ -579,7 +637,10 @@ const ORT_STOP = new Set([...FRAGEWOERTER, ...STICH.wetter, "wie", "wird", "ist"
 
 /** Der Ort in einer Wetterfrage -- aus dem Originaltext, damit Umlaute bleiben. */
 export function ortAus(text) {
-  const t = String(text || "").replace(/[?!.]+\s*$/, "");
+  // 17.1.1: "für die nächsten 7 Tage in Berlin", "in 3 Tagen in Berlin" -- die Zeit war Teil des Orts.
+  const t = String(text || "").replace(/[?!.]+\s*$/, "")
+    .replace(/\s*(?:\b(?:für|fuer|for|over)\s+)?(?:\b(?:die|the)\s+)?\b(?:nächsten|naechsten|kommenden|next|coming)\s+(?:\d{1,2}|zwei|drei|vier|fünf|sieben|two|three|four|five|seven)\s+(?:tage|days)\b/giu, " ")
+    .replace(/\s*\bin\s+\d{1,2}\s+(?:tagen|days)\b/giu, " ").replace(/\s+/g, " ").trim();
   const m = /(?:^|\s)(?:in|für|fuer|bei|um|nahe|around|for|at)\s+([\p{L}][\p{L}\p{N} .'-]{1,60})$/iu
     // 16.4.5: nur echte Tage -- "am Main" schnitt vorher "Frankfurt am Main" zu "Frankfurt".
     .exec(t.replace(/\s+(?:heute|morgen|übermorgen|uebermorgen|today|tomorrow|am\s+(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|wochenende)|on\s+\p{L}+day|diese\s+woche|this\s+week|next\s+week|nächste\s+woche|naechste\s+woche|jetzt|gerade|now)\b/giu, ""));
@@ -601,8 +662,19 @@ export function ortAus(text) {
   return rest.length && rest.length <= 3 ? rest.join(" ") : "";
 }
 
+const ZAHLWORT = { __proto__: null, zwei: 2, drei: 3, vier: 4, fuenf: 5, sieben: 7, two: 2,
+  three: 3, four: 4, five: 5, seven: 7 };
+
 function welcheTage(kern, heute, anzahl) {
   if (/uebermorgen|day\s+after\s+tomorrow/.test(kern)) return [2];
+  // 17.1.1: "Wetter in 3 Tagen" zeigte heute, "die nächsten 3 Tage" sieben Tage.
+  const inTagen = /\bin\s+(\d{1,2})\s+(?:tagen|days)\b/.exec(kern);
+  if (inTagen) return [Number(inTagen[1])];
+  const naechste = /\b(?:naechsten|kommenden|next|coming)\s+(\d{1,2}|zwei|drei|vier|fuenf|sieben|two|three|four|five|seven)\s+(?:tage|days)\b/.exec(kern);
+  if (naechste) {
+    const n = Number(naechste[1]) || ZAHLWORT[naechste[1]];
+    return [...Array(Math.min(n, anzahl)).keys()];
+  }
   if (/morgen|tomorrow/.test(kern) && !/guten\s+morgen|good\s+morning|heute\s+morgen/.test(kern)) {
     return [1];
   }
@@ -637,6 +709,25 @@ async function wetterAntwort(text, w, kern, sprache, kontext) {
   }
   let name = ortAus(text);
   let naeherung = false;
+  // 17.1.1: "Wetter in New York und in Tokio" suchte einen Ort "New York und in Tokio".
+  const teile = name.split(/\s+(?:und|and|sowie|&)\s+(?:in\s+)?|\s*,\s*/i).map((x) => x.trim())
+    .filter(Boolean);
+  if (!kontext.einzeln && teile.length > 1 && teile.length <= 3 && teile.every((x) => x.length >= 2)) {
+    const texte = [];
+    let schritt;
+    for (const teil of teile) {
+      const einzeln = await wetterAntwort(text.replace(name, teil), w, kern, sprache,
+        { ...kontext, einzeln: true });
+      if (!einzeln) continue;
+      schritt = schritt || einzeln.schritt;
+      texte.push(einzeln.text.replace(/\n\n(?:Quelle|Source): \[Open-Meteo\][^\n]*$/, ""));
+    }
+    if (texte.length) {
+      return { schritt, text: texte.join("\n\n") + "\n\n" + sp(sprache,
+        "Quelle: [Open-Meteo](https://open-meteo.com) (Daten u. a. vom DWD)",
+        "Source: [Open-Meteo](https://open-meteo.com)") };
+    }
+  }
   if (!name && kontext.stadt) { name = kontext.stadt; naeherung = true; }
   if (!name) {
     return { text: sp(sprache, "Für welchen Ort? Schreib zum Beispiel: **Wetter in Hamburg**.",
@@ -660,6 +751,11 @@ async function wetterAntwort(text, w, kern, sprache, kontext) {
   }
   const heute = new Date(`${daten.tage[0]?.datum || ""}T12:00:00Z`).getUTCDay();
   const tage = welcheTage(kern, Number.isNaN(heute) ? 0 : heute, daten.tage.length);
+  if (tage.length === 1 && tage[0] >= daten.tage.length) {
+    return { schritt, text: sp(sprache, `So weit reicht die Vorhersage nicht – ich sehe höchstens `
+      + `${daten.tage.length} Tage voraus.`, `The forecast doesn't reach that far – I can look `
+      + `${daten.tage.length} days ahead.`) };
+  }
   const loc = sprache === "en" ? "en-GB" : "de-DE";
   const wo = naeherung
     ? sp(sprache, `in deiner Nähe (**${platz.name}** – geschätzt aus deiner Verbindung)`,
@@ -791,6 +887,10 @@ export function waehrungenIn(kern) {
 
 /** Der Betrag einer Frage: deutscher Tausenderpunkt, Dezimalkomma, Mio/Mrd/Tsd -- sonst 1. */
 export function betragAus(text) {
+  // 17.1.1: "5 Euro 50 in Dollar" rechnete vorher mit 5 Euro.
+  const cent = /(\d+)\s*(?:€|euros?|eur|dollars?|\$|pfund|pounds?|franken|francs?)\s+(?:und\s+|and\s+)?(\d{1,2})(?:\s*(?:cent|cents|ct|rappen|pence))?(?![\d.,])(?=\s|$|[?!.])/i
+    .exec(String(text || ""));
+  if (cent) return Number(cent[1]) + Number(cent[2]) / 100;
   const m = /(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)(?:\s*(mio|millionen?|mrd|milliarden?|tsd|tausend)\b)?/i
     .exec(String(text || ""));
   if (!m) return 1;
@@ -823,14 +923,27 @@ async function kursAntwort(w, kern, sprache, kontext) {
       `I don't have a rate for ${von} → ${nach} right now. The ECB lists about 30 currencies.`) };
   }
   const ergebnis = betrag * daten.kurs;
-  const name = (code) => (WAEHRUNGSNAME[code] ? sp(sprache, WAEHRUNGSNAME[code][0],
-    WAEHRUNGSNAME[code][1]) : code);
+  // 17.1.1: Geld mit Cent zeigt zwei Stellen ("5,50 Euro", vorher "5,5 Euro").
+  const betragText = Number.isInteger(betrag) ? zahl(betrag, sprache)
+    : betrag.toLocaleString(sprache === "en" ? "en-GB" : "de-DE", { minimumFractionDigits: 2,
+      maximumFractionDigits: 2 });
+  // 17.1.1: "**1 euros**" -- bei genau 1 die Einzahl.
+  const EINS_DE = { "Britische Pfund": "Britisches Pfund", "Kanadische Dollar": "Kanadischer Dollar",
+    "Australische Dollar": "Australischer Dollar", "Indische Rupien": "Indische Rupie" };
+  const name = (code, menge) => {
+    if (!WAEHRUNGSNAME[code]) return code;
+    const [de, en] = WAEHRUNGSNAME[code];
+    if (menge !== 1) return sp(sprache, de, en);
+    return sp(sprache, EINS_DE[de] || de.replace(/Kronen$/, "Krone"),
+      en.replace(/kronor$/, "krona").replace(/kroner$/, "krone").replace(/korunas$/, "koruna")
+        .replace(/(?<=[a-z])s$/, ""));
+  };
   return { schritt, text: sp(sprache,
-    `Für **${zahl(betrag, sprache)} ${name(von)}** bekommst du gerade etwa `
-      + `**${zahl(ergebnis, sprache)} ${name(nach)}**.`,
-    `**${zahl(betrag, sprache)} ${name(von)}** is currently about `
-      + `**${zahl(ergebnis, sprache)} ${name(nach)}**.`)
-    + `\n\n${zahl(betrag, sprache)} ${von} = ${zahl(ergebnis, sprache)} ${nach}`
+    `Für **${betragText} ${name(von, betrag)}** bekommst du gerade etwa `
+      + `**${zahl(ergebnis, sprache)} ${name(nach, Number(zahl(ergebnis, "en").replace(/,/g, "")))}**.`,
+    `**${betragText} ${name(von, betrag)}** is currently about `
+      + `**${zahl(ergebnis, sprache)} ${name(nach, Number(zahl(ergebnis, "en").replace(/,/g, "")))}**.`)
+    + `\n\n${betragText} ${von} = ${zahl(ergebnis, sprache)} ${nach}`
     + sp(sprache, ` · 1 ${von} = ${zahl(daten.kurs, sprache, 4)} ${nach} (Referenzkurs der EZB, `
       + `Stand ${daten.stand}). Deine Bank rechnet meist mit einem etwas anderen Kurs.`,
     ` · 1 ${von} = ${zahl(daten.kurs, sprache, 4)} ${nach} (ECB reference rate, as of `
@@ -844,14 +957,71 @@ const LAENDER = { __proto__: null,
   spanien: "ES", spain: "ES", niederlande: "NL", netherlands: "NL", polen: "PL", poland: "PL",
   usa: "US", amerika: "US", england: "GB", grossbritannien: "GB", uk: "GB" };
 
+// 17.1.1: Englische Namen aus mehreren Woertern ("When is Good Friday?") kamen vorher nicht an.
+const FEIERTAGE_EN = [[/\bgood\s+friday\b/, "good friday"], [/\beaster\s+monday\b/, "easter monday"],
+  [/\bwhit\s*monday\b/, "whit"], [/\bcorpus\s+christi\b/, "corpus christi"],
+  [/\breformation\s+day\b/, "reformation"], [/\ball\s+saints\b/, "all saints"],
+  [/\bnew\s+year'?s?\s+day\b/, "new year"], [/\b(?:german\s+)?unity\s+day\b/, "unity"],
+  [/\blabou?r\s+day\b|\bmay\s+day\b/, "labour"], [/\bboxing\s+day\b|\bst\.?\s+stephen/, "stephen"],
+  [/\bepiphany\b/, "epiphany"], [/\bassumption\s+day\b/, "assumption"],
+  [/\brepentance\s+and\s+prayer\b/, "repentance"]];
+
 async function feiertagAntwort(w, kern, sprache, kontext) {
-  const stich = enthaelt(w, STICH.feiertage);
+  const stich = FEIERTAGE_EN.find(([muster]) => muster.test(kern))?.[1]
+    || enthaelt(w, STICH.feiertage);
   if (!stich) return null;
   if (stich === "einheit" && !/tag\s+der\s+(?:deutschen\s+)?einheit/.test(kern)) return null;
   if ((stich === "buss" || stich === "bettag") && !/buss-?\s*und\s+bettag/.test(kern)) return null;
+  // 17.1.1: "Wann ist chinesisches Neujahr?" bekam vorher den 1. Januar -- das kennt die Liste nicht.
+  if (/chinesisch\w*\s+neujahr|chinese\s+new\s+year|lunar\s+new\s+year|neujahrsfest/.test(kern)) return null;
   const jahrText = /\b(19[9]\d|20\d\d|2100)\b/.exec(kern);
   const jetztJahr = kontext.jetzt.getUTCFullYear();
   const jahr = jahrText ? Number(jahrText[1]) : jetztJahr;
+  const loc_ = sprache === "en" ? "en-GB" : "de-DE";
+  const lang_ = (d) => d.toLocaleDateString(loc_, { weekday: "long", day: "numeric", month: "long",
+    year: "numeric", timeZone: "UTC" });
+  const fremdesJahr = !jahrText && /(?<![\d.,])(\d{4})(?![\d.,])/.exec(kern);
+  // 17.1.1: "Wann ist Ostern?" nannte vorher den Ostermontag (Ostersonntag ist kein Feiertag),
+  // und ein Jahr ausserhalb 1990 bis 2100 wurde still zum aktuellen Jahr.
+  const pfingsten = (stich === "pfingsten" || stich === "pentecost")
+    && !/pfingstmontag|whit\s*monday/.test(kern);
+  if (pfingsten || ((stich === "ostern" || stich === "easter")
+      && !/ostermontag|easter\s+monday|karfreitag|good\s+friday/.test(kern))) {
+    const gewollt = fremdesJahr ? Number(fremdesJahr[1]) : jahr;
+    if (gewollt < 1583 || gewollt > 9999) {
+      return { text: sp(sprache, "Ostern rechne ich für die Jahre 1583 bis 9999 aus – ab 1583 gilt "
+        + "der gregorianische Kalender.", "I can work out Easter for the years 1583 to 9999 – the "
+        + "Gregorian calendar starts in 1583.") };
+    }
+    const versatz = pfingsten ? 49 * 86400000 : 0;
+    const sonntagIm = (j) => new Date(ostern(j).getTime() + versatz);
+    let sonntag = sonntagIm(gewollt);
+    const heuteUtc = Date.UTC(kontext.jetzt.getUTCFullYear(), kontext.jetzt.getUTCMonth(),
+      kontext.jetzt.getUTCDate());
+    // "Wann war Ostern?" (ohne Jahr) meint das letzte Ostern, sonst das naechste.
+    const zurueck = /\bwar\b|\bwas\b/.test(kern);
+    if (!jahrText && !fremdesJahr && zurueck && sonntag.getTime() > heuteUtc) {
+      sonntag = sonntagIm(gewollt - 1);
+    } else if (!jahrText && !fremdesJahr && !zurueck && sonntag.getTime() < heuteUtc) {
+      sonntag = sonntagIm(gewollt + 1);
+    }
+    const vorbei = sonntag.getTime() < heuteUtc;
+    const plus = (n) => lang_(new Date(sonntag.getTime() + n * 86400000));
+    if (pfingsten) {
+      return { text: sp(sprache, `**Pfingstsonntag** ${vorbei ? "war" : "ist"} am `
+        + `**${lang_(sonntag)}**. Feiertag ist Pfingstmontag (${plus(1)}).`,
+        `**Whit Sunday (Pentecost)** ${vorbei ? "was" : "is"} on **${lang_(sonntag)}**. The public `
+        + `holiday is Whit Monday (${plus(1)}).`) };
+    }
+    return { text: sp(sprache, `**Ostersonntag** ${vorbei ? "war" : "ist"} am **${lang_(sonntag)}**. `
+      + `Feiertage sind Karfreitag (${plus(-2)}) und Ostermontag (${plus(1)}).`,
+      `**Easter Sunday** ${vorbei ? "was" : "is"} on **${lang_(sonntag)}**. The public holidays are `
+      + `Good Friday (${plus(-2)}) and Easter Monday (${plus(1)}).`) };
+  }
+  if (fremdesJahr) {
+    return { text: sp(sprache, "Feiertage schlage ich für die Jahre 1990 bis 2100 nach.",
+      "I can look up public holidays for the years 1990 to 2100.") };
+  }
   let land = "DE";
   for (const [name, code] of Object.entries(LAENDER)) if (w.includes(name)) land = code;
   const schritt = { type: "search", query: sp(sprache, `Feiertage ${land} ${jahr}`,
@@ -927,7 +1097,12 @@ async function feiertagAntwort(w, kern, sprache, kontext) {
     const vorbei = iso < kontext.jetzt.toISOString().slice(0, 10);
     const tag = datum(iso);
     const welcher = /\bwelche[rs]?\b|\bwhich\b/.test(kern);
-    const text = treffer.length
+    // 17.1.1: Ein regionaler Feiertag ist kein "Ja" fuer alle -- vorher fehlte der Hinweis.
+    const regional = treffer.length && !treffer[0].bundesweit;
+    const text = regional
+      ? sp(sprache, `${welcher ? "" : "In einigen Bundesländern ja: "}Der ${tag} ${vorbei ? "war" : "ist"} **${treffer[0].name}** (nicht bundesweit).`,
+        `${welcher ? "" : "In some regions, yes: "}${tag} ${vorbei ? "was" : "is"} **${treffer[0].name_en}** (not nationwide).`)
+      : treffer.length
       ? sp(sprache, `${welcher ? "" : "Ja, "}${welcher ? "D" : "d"}er ${tag} ${vorbei ? "war" : "ist"} **${treffer[0].name}**.`,
         `${welcher ? "" : "Yes, "}${tag} ${vorbei ? "was" : "is"} **${treffer[0].name_en}**.`)
       : sp(sprache, `Nein, der ${tag} ${vorbei ? "war" : "ist"} kein gesetzlicher Feiertag (${land}).`,
@@ -955,8 +1130,25 @@ async function feiertagAntwort(w, kern, sprache, kontext) {
     const gesucht = { ostern: ["ostersonntag", "ostermontag", "easter"], easter: ["easter"],
       weihnachten: ["weihnachtstag", "christmas"], christmas: ["christmas"],
       pfingsten: ["pfingstmontag", "whit"], einheit: ["einheit", "unity"],
-      buss: ["buss"], bettag: ["buss"] }[stich] || [stich];
+      buss: ["buss"], bettag: ["buss"], whit: ["pfingstmontag", "whit"],
+      pentecost: ["pfingstmontag", "whit"],
+      // 17.1.1: "Mariä Himmelfahrt" bekam vorher zuerst "Christi Himmelfahrt".
+      himmelfahrt: /mariae?\s+himmelfahrt/.test(kern) ? ["mariae himmelfahrt", "assumption"]
+        : /christi\s+himmelfahrt/.test(kern) ? ["christi himmelfahrt", "ascension"]
+          : ["himmelfahrt"] }[stich] || [stich];
     const heuteIso = kontext.jetzt.toISOString().slice(0, 10);
+    if (/\bseit\b|\bsince\b/.test(kern) && /wie\s*(?:viele|lange)|how\s+(?:many|long)/.test(kern)) {
+      // 17.1.1: "Wie viele Tage sind seit Neujahr vergangen?" nannte vorher das naechste Neujahr.
+      const vorher = await dienste.feiertage(jahr - 1, land, kontext.holen) || [];
+      const vergangen = [...vorher, ...liste].filter((f) => f.datum <= heuteIso && gesucht.some(
+        (g) => falten(f.name).includes(g) || falten(f.name_en).includes(g))).at(-1);
+      if (vergangen) {
+        const tage = Math.round((Date.parse(heuteIso) - Date.parse(vergangen.datum)) / 86400000);
+        return { schritt, text: sp(sprache, `Seit ${vergangen.name} (${datum(vergangen.datum)}) sind `
+          + `**${tage} Tage** vergangen.`, `**${tage} days** have passed since ${vergangen.name_en} `
+          + `(${datum(vergangen.datum)}).`) + QUELLE_NAGER(sprache) };
+      }
+    }
     let treffer = liste.filter((f) => gesucht.some((g) => falten(f.name).includes(g)
       || falten(f.name_en).includes(g)) && (jahrText || f.datum >= heuteIso));
     if (!treffer.length && !jahrText) {

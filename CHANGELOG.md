@@ -3,6 +3,46 @@
 Was sich in den einzelnen Fassungen von Aquaticy geändert hat, die neueste zuerst.
 Zurück zur [README](README.md).
 
+**Neu in 17.1.1:** Nur Fehler behoben. Jeder Fehler ist nachgestellt und hat einen Test.
+
+- **Schreiben auf Vercel:** Als Gast kam oft „Diesen Chat gibt es nicht mehr.“ oder „Der Chat ließ
+  sich gerade nicht öffnen.“ – auch bei „Neuer Chat“, bis die Seite neu geladen war. Grund: Ein
+  neuer, noch leerer Chat war nur der Instanz bekannt, die ihn angelegt hatte. Nach einem
+  Kaltstart landete die erste Nachricht bei einer anderen. Jetzt gilt der neue Chat überall.
+  „Neuer Chat“ und „Öffnen“ versuchen es nach einem kurzen Fehler beim Start noch einmal.
+- **Zwei Instanzen auf Vercel:** Eine Instanz, die eben erst nachgesehen hatte, konnte ihren alten
+  Stand über eine neuere Nachricht einer anderen Instanz speichern. Die Nachricht war dann weg.
+  Jetzt holt jede Anfrage, die speichert, zuerst den neuesten Stand. Außerdem schreibt eine
+  normale Chat-Nachricht nicht mehr jedes Mal „zuletzt gesehen“ in die Kontendaten. Offen
+  bleibt: Speichern zwei Instanzen genau gleichzeitig, gewinnt die spätere.
+- **Begrüßung für Gäste:** Statt „Hallo, Gast-4FE682.“ steht nur noch die Begrüßung ohne Namen.
+- **Aquaticy Standard – Rechnen und Einheiten:** Der „größte gemeinsame Teiler“ von 12 und 18
+  nannte alle Teiler von 12. „3! + 4!“, „pi mal 2“, „sin(30)“, „der Logarithmus von 100“, „Rest
+  von 17 durch 5“, „Runde 2,5“ und „Runde 1234 auf Hunderter“ gingen nicht. „1000 Wattstunden in
+  Watt“ rechnete Energie in Leistung um. Neu sind Tasse, Esslöffel, Acre, Bit und Byte, bar und
+  Energie.
+  „1,5 * 10^30“ zeigte erfundene Ziffern und „1/7000000“ ergab 0. Jetzt steht dort
+  „1,5 · 10³⁰“ bzw. „1,428571 · 10⁻⁷“.
+- **Aquaticy Standard – Datum und Zeit:** „Welches Datum ist in einem Monat?“, „der 100. Tag des
+  Jahres“, „Arbeitstage zwischen …“ und die Kalenderwoche von Weihnachten waren falsch. Ostern vor
+  1583 und nach 9999 gab es nicht. Kathmandu (UTC+5:45) bekam eine falsche Zeitverschiebung. Neu
+  sind 2. und 3. Advent, Allerheiligen, Buß- und Bettag, Totensonntag, Erntedank und mehr.
+  Auch „Ist morgen Montag?“, „Welche Zeitzone hat Tokio?“ und „Und in Tokio?“ gehen jetzt.
+- **Aquaticy Standard – Wetter:** „in der Türkei“ statt „in Türkei“. Wind, UV-Index und „Ist es in
+  Dubai heiß?“ gehen jetzt. Englische Fragen nach dem Wochenende, 7 Tagen, Kleidung, Schirm und
+  Sonne bekamen das Wetter von heute oder keinen Rat.
+- **Aquaticy Standard – Englisch:** Kurze englische Fragen wie „100 euros in dollars“ oder „5
+  factorial“ bekamen eine deutsche Antwort. Witz, Zitat, Nachrichten, Mondphase, Stimmung, Alter,
+  Passwort und Feiertage gehen jetzt auch auf Englisch.
+- **Smalltalk mit einem Sprachmodell:** Auf „Thanks“ kam „Keine Ursache!“. Jetzt antwortet Aquaticy
+  kurz auf Englisch. In anderen Sprachen antwortet das Modell selbst.
+- **Antworten ohne Schlüssel (Worker):** „Wann ist Ostern?“ nannte den Ostermontag, „Ostern 3000“
+  das Jahr 2027 und „Mariä Himmelfahrt“ zuerst Christi Himmelfahrt. „Ist der 31. Oktober ein
+  Feiertag?“ sagte „Ja“ ohne den Hinweis, dass das nur in einigen Bundesländern gilt. „Wetter in
+  New York und in Tokio“, „die nächsten 7 Tage“, „in 3 Tagen“, „Wie spät ist es in 3 Stunden?“,
+  „5 Euro 50 in Dollar“ und „5 feet 10 inches“ gingen nicht. Englische Feiertage wie „Good Friday“
+  fehlten. Die Tippfehler-Korrektur machte aus „show“ „snow“ und aus „next“ „nett“.
+
 **Neu in 17.1.0:** Nur Fehler behoben.
 
 - **Gastzugang auf Vercel:** Löschte das Aufräumen abgelaufene Gäste bei einer Statusabfrage,

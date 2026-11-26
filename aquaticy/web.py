@@ -1153,7 +1153,14 @@ class ChatSession:
             cache = Cache(self.settings().db_path, self.settings().cache_ttl_hours)
             entries = cache.chat_history(chat_id)
             if not entries:
-                raise BadRequest("Diesen Chat gibt es nicht mehr.")
+                # 17.1.1: Ein neuer, noch leerer Chat lebt nur im Speicher der Instanz, die ihn
+                # angelegt hat. Auf Vercel landet die erste Nachricht oft bei einer anderen
+                # (etwa nach einem Kaltstart). Vorher hiess es dort "Diesen Chat gibt es nicht
+                # mehr" -- auch fuer "Neuer Chat" und "Oeffnen", bis die Seite neu geladen war.
+                # Eine gueltige Kennung ohne Verlauf ist deshalb ein neuer Chat.
+                if not CHAT_KENNUNG.fullmatch(chat_id):
+                    raise BadRequest("Diesen Chat gibt es nicht mehr.")
+                return self._new_chat_session(chat_id, [])
             return self._new_chat_session(chat_id, entries)
 
     def _new_chat_session(self, chat_id: str = "", entries: list[Any] | None = None
@@ -1961,6 +1968,10 @@ def resolve_image(target: Path) -> Path:
 
 DEFAULT_SESSION = ChatSession()
 _REQUEST = threading.local()
+
+
+#: 17.1.1: So sieht die Kennung eines Chats aus (agent.new_session_id: Sekunden-Bindestrich-8 hex).
+CHAT_KENNUNG = re.compile(r"\d{9,12}-[0-9a-f]{8}")
 
 
 class SessionRegistry:

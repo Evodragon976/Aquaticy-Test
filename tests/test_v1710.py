@@ -130,7 +130,9 @@ def test_vercel_brings_the_schema_up_after_loading_a_foreign_copy(tmp_path: Path
         spalten = {zeile[1] for zeile in conn.execute("PRAGMA table_info(users)")}
     assert "guest" in spalten
     quelle = (ROOT / "aquaticy" / "vercel.py").read_text(encoding="utf-8")
-    assert "if verbund.auffrischen():" in quelle and "web.AUTH.ensure_schema()" in quelle
+    # 17.1.1: Vor einer speichernden Anfrage frischt die Instanz ohne Pause auf.
+    assert ("if verbund.auffrischen(sofort=speichern):" in quelle
+            and "web.AUTH.ensure_schema()" in quelle)
     assert "(speichern or _gaeste_geloescht())" in quelle
 
 

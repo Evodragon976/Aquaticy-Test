@@ -472,19 +472,20 @@ def app(environ: dict[str, Any],
         return _plain(start_response, "413 Content Too Large", "Die Anfrage ist zu groß.")
     body = environ["wsgi.input"].read(laenge) if laenge else b""
     methode = str(environ.get("REQUEST_METHOD") or "GET").upper()
+    speichern = methode in ("POST", "DELETE") or (
+        methode == "GET" and str(environ.get("PATH_INFO") or "") in SAVE_AFTER_GET)
     verbund = _STATE.get("verbund")
     if verbund is not None and _STATE["aktiv"] == 0:
         # Nur wenn gerade keine andere Anfrage laeuft: holen, was andere Instanzen aenderten.
+        # 17.1.1: Vor einer Anfrage, die speichert, immer (nicht nur alle paar Sekunden).
         with contextlib.suppress(Exception), _SAVE_LOCK:
-            if verbund.auffrischen():
+            if verbund.auffrischen(sofort=speichern):
                 # 17.1.0: Eine fremde Fassung (etwa von einer alten Instanz waehrend eines Deploys)
                 # kann neue Spalten noch nicht haben -- nachziehen, bevor jemand sie liest.
                 from aquaticy import web
 
                 if web.AUTH is not None:
                     web.AUTH.ensure_schema()
-    speichern = methode in ("POST", "DELETE") or (
-        methode == "GET" and str(environ.get("PATH_INFO") or "") in SAVE_AFTER_GET)
     return _relay(_raw_request(environ, body), ip, speichern, start_response)
 
 

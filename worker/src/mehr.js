@@ -155,7 +155,9 @@ const EINHEIT = String.raw`(?:grad\s+)?[a-z°µ²³/]+(?:\s+(?:celsius|fahrenhei
 export function einheitenAntwort(text, sprache = "de") {
   // 16.4.5: "3 Fuß 6 Zoll in cm" rechnete vorher nur die 6 Zoll; "ein Zoll in cm" ging nicht.
   const t = glatt(text).replace(/\bpro\s+stunde\b/g, "/h").replace(/km\s*\/\s*h/g, "km/h")
-    .replace(/(\d+(?:[.,]\d+)?)\s*(?:fuss|ft|')\s*(\d+(?:[.,]\d+)?)\s*(?:zoll|inch|inches|")/g,
+    // 17.1.1: auch "degrees" und "5 feet 10 inches" (vorher nur die 10 Zoll).
+    .replace(/\bdegrees?\s+(?=celsius|fahrenheit|kelvin|c\b|f\b)/g, "grad ")
+    .replace(/(\d+(?:[.,]\d+)?)\s*(?:fuss|feet|foot|ft|')\s*(\d+(?:[.,]\d+)?)\s*(?:zoll|inches|inch|")/g,
       (_, a, b) => String(Number(a.replace(",", ".")) * 12 + Number(b.replace(",", "."))).replace(".", ",") + " zoll")
     .replace(/^(?:wie\s*viel\s+(?:ist|sind)\s+)?ein(?:e|en|em)?\s+(?=\S+\s+(?:in|nach|zu|to)\s)/, "1 ");
   // 16.4.5: "Wie viele Gramm sind ein Pfund?", "How many feet in a mile?" -- die Frage nach
@@ -345,17 +347,42 @@ export function datumAntwort(text, sprache = "de", jetzt = new Date()) {
     year: "numeric", timeZone: "UTC" });
   const heute = new Date(Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth(), jetzt.getUTCDate()));
   // 16.4.5: "Welches Datum war vor 100 Tagen?" nannte vorher das Datum von heute.
-  const v = /\b(in|vor)\s+(\d{1,4})\s+(tag|tagen|woche|wochen|days?|weeks?)\b|\b(\d{1,4})\s+(days?|weeks?)\s+ago\b/
+  // 17.1.1: auch Monate und Jahre ("in einem Monat", "in one year") -- vorher das Datum von heute.
+  const v = /\b(in|vor)\s+(\d{1,4}|einem|einer|einen|zwei|drei|a|an|one|two|three)\s+(tag|tagen|woche|wochen|monat|monaten|jahr|jahren|days?|weeks?|months?|years?)\b|\b(\d{1,4}|a|an|one|two|three)\s+(days?|weeks?|months?|years?)\s+ago\b/
     .exec(t);
   if (v && /\b(?:datum|tag|wochentag|date|day)\b/.test(t.replace(v[0], " "))) {
-    const n = Number(v[2] || v[4]);
+    const wort = v[2] || v[4];
+    const n = Number(wort) || { zwei: 2, drei: 3, two: 2, three: 3 }[wort] || 1;
     const einheit = v[3] || v[5];
     const zurueck = v[1] === "vor" || v[4] !== undefined;
-    const tage = n * (/^w/.test(einheit) ? 7 : 1) * (zurueck ? -1 : 1);
-    const d = new Date(heute.getTime() + tage * 86400000);
-    const deWort = { tag: "Tag", tagen: "Tagen", woche: "Woche", wochen: "Wochen" }[einheit] || einheit;
-    return { text: sp(sprache, `${zurueck ? "Vor" : "In"} ${n} ${deWort} ${zurueck ? "war" : "ist"} **${zeig(d)}**.`,
-      zurueck ? `${n} ${einheit} ago it was **${zeig(d)}**.` : `In ${n} ${einheit} it will be **${zeig(d)}**.`) };
+    const richtung = zurueck ? -1 : 1;
+    let d;
+    if (/^(?:monat|month|jahr|year)/.test(einheit)) {
+      const monate = n * (/^(?:jahr|year)/.test(einheit) ? 12 : 1) * richtung;
+      const ziel = new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth() + monate, 1));
+      const letzter = new Date(Date.UTC(ziel.getUTCFullYear(), ziel.getUTCMonth() + 1, 0)).getUTCDate();
+      d = new Date(Date.UTC(ziel.getUTCFullYear(), ziel.getUTCMonth(), Math.min(heute.getUTCDate(), letzter)));
+    } else {
+      d = new Date(heute.getTime() + n * (/^w/.test(einheit) ? 7 : 1) * richtung * 86400000);
+    }
+    const deWort = { tag: "Tag", tagen: "Tagen", woche: "Woche", wochen: "Wochen", monat: "Monat",
+      monaten: "Monaten", jahr: "Jahr", jahren: "Jahren" }[einheit] || einheit;
+    return { text: sp(sprache, `${zurueck ? "Vor" : "In"} ${wort} ${deWort} ${zurueck ? "war" : "ist"} **${zeig(d)}**.`,
+      zurueck ? `${wort} ${einheit} ago it was **${zeig(d)}**.` : `In ${wort} ${einheit} it will be **${zeig(d)}**.`) };
+  }
+  // 17.1.1: "Welches Datum ist der 100. Tag des Jahres?" -- vorher das Datum von heute.
+  const nter = /\b(?:der\s+)?(\d{1,3})\.?\s*tag\s+(?:des|im)\s+jahr(?:es)?(?:\s+(\d{4}))?|\bthe\s+(\d{1,3})(?:st|nd|rd|th)\s+day\s+of\s+(?:the\s+year|(\d{4}))/
+    .exec(t);
+  if (nter) {
+    const n = Number(nter[1] || nter[3]);
+    const jahr = Number(nter[2] || nter[4]) || heute.getUTCFullYear();
+    const laenge = (Date.UTC(jahr + 1, 0, 1) - Date.UTC(jahr, 0, 1)) / 86400000;
+    if (n < 1 || n > laenge) {
+      return { text: sp(sprache, `Das Jahr ${jahr} hat ${laenge} Tage.`, `${jahr} has ${laenge} days.`) };
+    }
+    const d = new Date(Date.UTC(jahr, 0, n));
+    return { text: sp(sprache, `Der ${n}. Tag des Jahres ${jahr} ist **${zeig(d)}**.`,
+      `Day ${n} of ${jahr} is **${zeig(d)}**.`) };
   }
   // Countdown: "wie viele Tage bis Weihnachten", "wie lange noch bis zum 1. mai"
   // 16.4.6: auch "How many weeks until Christmas?" (vorher die Liste der Feiertage).
@@ -467,9 +494,54 @@ function zeitTeile(datum, zone) {
 // 16.4.5: "Wenn es in Berlin 9 Uhr ist, wie spät ist es dann in Tokio?" nannte vorher die Zeit von
 // hier, "Wie spät ist es in New York, wenn es bei uns 18 Uhr ist?" suchte einen Ort "wenn es bei
 // uns 18 Uhr ist".
+async function weltzeitWennEn(roh, kontext) {
+  // 17.1.1: "If it's 3 pm here, what time is it in New York?" nannte die Zeit von jetzt.
+  const frage = String.raw`what\s+time\s+(?:is\s+it|will\s+it\s+be)\s+(?:then\s+)?in\s+`;
+  const bedingung = String.raw`if\s+it(?:'s|\s+is)\s+(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?\s+(?:here|in\s+(.+?))`;
+  let stunde, minute, halb, von, nach;
+  const vorn = new RegExp(`^${bedingung}\\s*,?\\s+${frage}(.+)$`, "iu").exec(roh);
+  const hinten = new RegExp(`^${frage}(.+?)\\s*,?\\s+${bedingung}$`, "iu").exec(roh);
+  if (vorn) [, stunde, minute, halb, von, nach] = vorn;
+  else if (hinten) [, nach, stunde, minute, halb, von] = hinten;
+  else return null;
+  let h = Number(stunde);
+  if (h > 24 || Number(minute || 0) > 59 || (halb && (h < 1 || h > 12))) return null;
+  if (halb && /^p/i.test(halb) && h < 12) h += 12;
+  if (halb && /^a/i.test(halb) && h === 12) h = 0;
+  const schritt = { type: "search", query: `time ${nach}` };
+  let zoneVon = kontext.zeitzone || "Europe/Berlin";
+  if (von) {
+    const platzVon = await dienste.ort(von, "en", kontext.holen);
+    if (platzVon?.fehler) return { schritt, text: DIENST_WEG("en") };
+    if (!platzVon?.zeitzone) return { schritt, text: `I can't find a place called “${von}” right now.` };
+    zoneVon = platzVon.zeitzone;
+  }
+  const platz = await dienste.ort(nach, "en", kontext.holen);
+  if (platz?.fehler) return { schritt, text: DIENST_WEG("en") };
+  if (!platz?.zeitzone) return { schritt, text: `I can't find a place called “${nach}” right now.` };
+  const jetzt = kontext.jetzt || new Date();
+  try {
+    const hier = zeitTeile(jetzt, zoneVon);
+    const lokal = Date.UTC(hier.j, hier.m - 1, hier.t, h, Number(minute || 0));
+    const versatz = Date.UTC(hier.j, hier.m - 1, hier.t, hier.h, hier.min)
+      - Math.floor(jetzt.getTime() / 60000) * 60000;
+    const dort = zeitTeile(new Date(lokal - versatz), platz.zeitzone);
+    const tage = Math.round((Date.UTC(dort.j, dort.m - 1, dort.t) - Date.UTC(hier.j, hier.m - 1, hier.t))
+      / 86400000);
+    const zwei = (n) => String(n).padStart(2, "0");
+    const tagText = tage === 1 ? " – the next day" : tage === -1 ? " – the day before" : "";
+    return { schritt, text: `If it's ${zwei(h)}:${zwei(Number(minute || 0))} ${von ? `in ${von}` : "where you are"}, `
+      + `it's **${zwei(dort.h)}:${zwei(dort.min)}** in **${platz.name}**${tagText}.` };
+  } catch {
+    return null;
+  }
+}
+
 async function weltzeitWenn(text, sprache, kontext) {
-  if (sprache === "en") return null;
   const roh = String(text).trim().replace(/[?!.]+$/, "");
+  if (sprache === "en" || /^if\s+it|what\s+time\s+(?:is\s+it|will\s+it\s+be)\s+(?:then\s+)?in\s+.+\bif\s+it/i.test(roh)) {
+    return weltzeitWennEn(roh, kontext);
+  }
   const frage = String.raw`(?:wie\s*sp(?:ä|ae)t|wie\s*viel\s+uhr)\s+ist\s+es\s+(?:dann\s+)?(?:in|auf)\s+`;
   const bedingung = String.raw`wenn\s+es\s+(?:bei\s+uns|hier|in\s+(.+?))\s+(\d{1,2})(?:[:.](\d{2}))?\s*uhr\s+ist`;
   let von, stunde, minute, nach;
@@ -554,6 +626,8 @@ export async function weltzeitAntwort(text, sprache, kontext) {
   const t = glatt(text);
   const m = /(?:wie\s*spaet\s+ist\s+es|wie\s*viel\s+uhr\s+ist\s+es|uhrzeit|what\s+time\s+is\s+it|time)\s+(?:gerade\s+|jetzt\s+)?(?:in|im|auf|bei|in\s+der|in\s+den)\s+(.{2,80})$/.exec(t);
   if (!m) return null;
+  // 17.1.1: "Wie spät ist es in 3 Stunden?" suchte einen Ort "3 Stunden".
+  if (/^(?:\d{1,4}|einer|einem|an?|one)\s+(?:stunden?|minuten?|hours?|minutes?)\b/.test(m[1])) return null;
   const roh = String(text).trim().replace(/[?!.]+$/, "").split(/\s+/);
   const ganz = roh.slice(roh.length - m[1].split(/\s+/).length).join(" ").replace(ORT_ENDE, "");
   // 16.4.5: "in der Türkei" suchte "der Türkei", "in Tokio und in London" einen Ort

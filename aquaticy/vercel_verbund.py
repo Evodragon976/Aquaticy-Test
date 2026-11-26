@@ -559,15 +559,20 @@ class Verbund:
                 self.offen.discard(teil)
         return gespeichert
 
-    def auffrischen(self, jetzt: float | None = None) -> int:
+    def auffrischen(self, jetzt: float | None = None, sofort: bool = False) -> int:
         """Holt, was eine andere Instanz geaendert hat. Returns: Zahl der neu geladenen Teile.
 
         Eigene Aenderungen, die noch nicht gespeichert werden konnten (``offen``), gehen vor.
         Sonst gilt die neuere Fassung der Datenbank: Was hier seit dem letzten Speichern nur
         nebenbei anfiel (etwa "zuletzt gesehen"), wiegt weniger als ein fremder Schreibvorgang.
+
+        Args:
+            sofort: 17.1.1: ohne die Pause von PRUEF_ABSTAND -- vor einer Anfrage, die
+                speichert. Sonst schrieb eine Instanz, die eben erst nachgesehen hatte, ihren
+                alten Stand ueber die neuere Fassung einer anderen (die Nachricht war weg).
         """
         jetzt = time.monotonic() if jetzt is None else jetzt
-        if jetzt - self._geprueft < PRUEF_ABSTAND:
+        if not sofort and jetzt - self._geprueft < PRUEF_ABSTAND:
             return 0
         geladen = 0
         with self._sperre:

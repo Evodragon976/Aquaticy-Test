@@ -250,6 +250,8 @@ def normalize_email(email: str) -> str:
 
 
 MIN_PASSWORD = 12
+#: 17.1.1: So oft haelt note_seen() dieselbe Adresse hoechstens fest (Sekunden).
+SEEN_INTERVAL = 600
 
 
 def validate_password(password: str) -> None:
@@ -1455,9 +1457,18 @@ class AuthStore:
         adresse = _norm_ip(str(ip or "").strip()[:64])
         if not adresse:
             return
+        schluessel = self.ip_key(adresse)
         with suppress(sqlite3.Error), self._lock, self._connect() as conn:
+            # 17.1.1: Dieselbe Adresse vor weniger als SEEN_INTERVAL: nichts schreiben. Auf
+            # Vercel machte sonst jede Chat-Nachricht den Teil "kern" neu -- und eine zweite
+            # Instanz ueberschrieb damit, was eine andere dort eben gespeichert hatte.
+            zeile = conn.execute("SELECT last_ip, last_seen FROM users WHERE id=?",
+                                 (str(user_id),)).fetchone()
+            if (zeile is not None and str(zeile[0] or "") == schluessel
+                    and 0 <= time.time() - float(zeile[1] or 0) < SEEN_INTERVAL):
+                return
             conn.execute("UPDATE users SET last_ip=?, last_ip_enc=?, last_seen=? WHERE id=?",
-                         (self.ip_key(adresse), self._secrets.seal(adresse, "users.last_ip"),
+                         (schluessel, self._secrets.seal(adresse, "users.last_ip"),
                           time.time(), str(user_id)))
 
     def account_by_name(self, name: str) -> Account | None:

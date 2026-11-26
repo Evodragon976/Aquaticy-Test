@@ -205,7 +205,11 @@ test("Feiertage: naechste, bestimmte, Jahr", async () => {
   const b = await festeAntwort("wann ist weihnachten", { holen, jetzt: JETZT });
   assert.match(b.text, /Erster Weihnachtstag/);
   const c = await festeAntwort("wann ist ostern", { holen, jetzt: JETZT });
-  assert.match(c.text, /2027/);
+  // 17.1.1: Ostern wird ohne Netz berechnet und nennt den Ostersonntag (vorher den Ostermontag
+  // aus der Liste). Den Blick ins naechste Jahr prueft jetzt der Ostermontag, der schon vorbei ist.
+  assert.match(c.text, /\*\*Ostersonntag\*\* ist am \*\*Sonntag, 28\. März 2027\*\*/);
+  assert.ok(!anfragen.some((u) => u.includes("2027")));
+  await festeAntwort("wann ist ostermontag", { holen, jetzt: JETZT });
   assert.ok(anfragen.some((u) => u.includes("2027")));
   const d = await festeAntwort("feiertage 2026", { holen, jetzt: JETZT });
   assert.match(d.text, /Feiertage 2026 \(DE\)/);
